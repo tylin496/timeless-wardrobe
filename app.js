@@ -127,6 +127,8 @@
   const SEASON_NAV_STORAGE_KEY = "timeless-wardrobe-season-nav-v1";
   /** Same-tab return from `item.html` → restore main list scroll (short TTL avoids stale jumps). */
   const ARCHIVE_SCROLL_RESTORE_KEY = "timeless-wardrobe-archive-scroll-v1";
+  /** Same-tab return → restore category / season / type / search (same TTL as scroll). */
+  const ARCHIVE_BROWSE_RESTORE_KEY = "timeless-wardrobe-archive-browse-v1";
   const ARCHIVE_SCROLL_TTL_MS = 20 * 60 * 1000;
 
   /** Seed / Supabase rows only — merged with `loadCustomItems()` into `items`. */
@@ -3352,6 +3354,62 @@
     }
   }
 
+  function persistArchiveBrowseStateForReturn() {
+    if (!document.getElementById("grid")) return;
+    try {
+      sessionStorage.setItem(
+        ARCHIVE_BROWSE_RESTORE_KEY,
+        JSON.stringify({
+          t: Date.now(),
+          seasonNav: seasonNavFilter,
+          category: String(categoryNavFilter ?? ""),
+          subcategory: String(subcategoryFilter ?? "").trim(),
+          search: String(els.search?.value ?? "").trim(),
+        })
+      );
+    } catch {
+      /* private mode / disabled storage */
+    }
+  }
+
+  /** Apply category / season / drill / search after a full reload when returning from `item.html`. */
+  function consumeArchiveBrowseStateForReturn() {
+    if (!document.getElementById("grid")) return;
+    let raw = null;
+    try {
+      raw = sessionStorage.getItem(ARCHIVE_BROWSE_RESTORE_KEY);
+      if (raw) sessionStorage.removeItem(ARCHIVE_BROWSE_RESTORE_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    let o = null;
+    try {
+      o = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const t = Number(o?.t);
+    if (!Number.isFinite(t) || Date.now() - t > ARCHIVE_SCROLL_TTL_MS) return;
+
+    const nav = String(o?.seasonNav ?? "").trim();
+    if (nav === "All" || nav === "S/S" || nav === "A/W") seasonNavFilter = nav;
+
+    const cat = String(o?.category ?? "").trim();
+    if (!cat) categoryNavFilter = "";
+    else if (SLOT_OPTIONS.includes(cat)) categoryNavFilter = cat;
+
+    subcategoryFilter = String(o?.subcategory ?? "").trim();
+    const q = String(o?.search ?? "").trim();
+    if (els.search && q) els.search.value = q.slice(0, 500);
+
+    try {
+      persistSeasonNav();
+    } catch {
+      /* ignore */
+    }
+  }
+
   function consumeAndRestoreArchiveListScroll() {
     if (!document.getElementById("grid")) return;
     let raw = null;
@@ -3411,6 +3469,7 @@
       return;
     }
     persistArchiveListScrollForReturn();
+    persistArchiveBrowseStateForReturn();
     globalThis.location.assign(url);
   }
 
@@ -3855,6 +3914,7 @@
       return;
     }
 
+    consumeArchiveBrowseStateForReturn();
     initFilters();
     wireEvents();
     syncOutfitSaveButtonLabel();
