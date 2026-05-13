@@ -469,7 +469,7 @@ const WARDROBE_ITEMS = [
     color: "Ice blue",
     fabric: "Knit",
     weight: "",
-    image: "images/ZARA Dusty Ice Blue Ribbed Knit Polo Shirt.png",
+    image: "images/ZARA RIB KNIT POLO SHIRT.png",
     notes: "",
   },
   {

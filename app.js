@@ -2510,13 +2510,28 @@
     currentOutfitSlots = currentOutfitSlots.filter((s) => s.itemId !== sid);
 
     if (isCustom) {
-      const next = loadCustomItems().filter((x) => x.id !== sid);
+      const prevCloud = cloudBackedCustomItems.slice();
+      cloudBackedCustomItems = cloudBackedCustomItems.filter((x) => String(x.id) !== sid);
+      const next = loadCustomItems().filter((x) => String(x.id) !== sid);
       try {
         await commitCustomItems(next);
       } catch (e) {
+        cloudBackedCustomItems = prevCloud;
         console.warn(e);
         showToast("Could not update storage.");
         return;
+      }
+      if (isSupabaseReady()) {
+        try {
+          const { error } = await supabaseClient.from(WARDROBE_TABLE).delete().eq("id", sid);
+          if (error) {
+            console.warn("Supabase wardrobe_items delete:", error);
+            showToast("Removed locally; cloud delete failed — piece may reappear after refresh.");
+          }
+        } catch (e) {
+          console.warn(e);
+          showToast("Removed locally; cloud delete failed — piece may reappear after refresh.");
+        }
       }
     } else {
       const hidden = loadArchiveHiddenIds();
