@@ -28,8 +28,8 @@
       if (!key || !image) continue;
       out.push({
         key,
-        label: String(v.label ?? v.color ?? key).trim() || key,
-        color: String(v.color ?? "").trim(),
+        label: String(v.label ?? v.colour ?? key).trim() || key,
+        color: String(v.colour ?? "").trim(),
         image,
         gallery: Array.isArray(v.gallery) ? v.gallery.map((x) => String(x ?? "").trim()).filter(Boolean) : [],
         notes: v.notes != null ? String(v.notes) : "",
@@ -40,7 +40,7 @@
 
   /** First `#rgb` / `#rrggbb` in `color` or `label` for grid swatches. */
   function extractSwatchHexFromVariant(v) {
-    const pools = [String(v?.color ?? "").trim(), String(v?.label ?? "").trim()];
+    const pools = [String(v?.colour ?? "").trim(), String(v?.label ?? "").trim()];
     for (const p of pools) {
       const m = p.match(/#([0-9a-fA-F]{6})\b|#([0-9a-fA-F]{3})\b/);
       if (!m) continue;
@@ -67,8 +67,8 @@
     variants.forEach((v, idx) => {
       const el = document.createElement("span");
       el.className = "card__swatch";
-      const lbl = String(v.label ?? v.color ?? "").trim() || `Colour ${idx + 1}`;
-      const colorText = String(v.color ?? "").trim();
+      const lbl = String(v.label ?? v.colour ?? "").trim() || `Colour ${idx + 1}`;
+      const colorText = String(v.colour ?? "").trim();
       const vu = String(v.image ?? "").trim();
       const hex = extractSwatchHexFromVariant(v);
       el.title = [lbl, colorText].filter(Boolean).join(" · ");
@@ -98,7 +98,7 @@
     return {
       ...item,
       image: v.image,
-      color: v.color || item.color,
+      color: v.color || item.colour,
       gallery: v.gallery.length ? v.gallery : item.gallery,
       __coverCacheKey: `${baseId}::${slot.colorKey}`,
     };
@@ -167,19 +167,26 @@
   const ARCHIVE_BROWSE_RESTORE_KEY = "timeless-wardrobe-archive-browse-v1";
   const ARCHIVE_SCROLL_TTL_MS = 20 * 60 * 1000;
 
+
   /** Seed / Supabase rows only — merged with local + file custom rows into `items`. */
   /** @type {object[]} */
   let wardrobeBase = [];
+
+
+  /** Custom rows loaded from Supabase `wardrobe_items`. */
+  /** @type {object[]} */
+  let cloudBackedCustomItems = [];
 
   /** Custom rows from `data/custom-items.json` (same shape as localStorage custom list). */
   /** @type {object[]} */
   let fileBackedCustomItems = [];
 
+
   /** Top-level archive category (filter + add-item). */
   const SLOT_CLOTHING = "Clothing";
   const SLOT_ACCESSORIES = "Accessories";
   const SLOT_SHOES = "Shoes";
-  const SLOT_JEWELRY = "Jewelry";
+  const SLOT_JEWELRY = "Jewellery";
   const SLOT_WATCHES = "Watches";
   const SLOT_FRAGRANCE = "Fragrance";
 
@@ -211,7 +218,7 @@
     "Unspecified accessories": SLOT_ACCESSORIES,
     "Unspecified footwear": SLOT_SHOES,
     "Unspecified watches": SLOT_WATCHES,
-    "Unspecified jewelry": SLOT_JEWELRY,
+    "Unspecified Jewellery": SLOT_JEWELRY,
     "Unspecified perfume": SLOT_FRAGRANCE,
   };
 
@@ -271,7 +278,7 @@
     lines.push(`Browse category: ${categoryDisplayLabel(itemSlot(item))}`);
     lines.push(`Record category: ${recordCategoryForDrill(item, itemSlot(item))}`);
     lines.push(`Season: ${seasonUiLabel(item.season)}`);
-    lines.push(`Color: ${String(item.color ?? "").trim()}`);
+    lines.push(`Color: ${String(item.colour ?? "").trim()}`);
     lines.push(`Fabric: ${String(item.fabric ?? "").trim()}`);
     lines.push(`Weight / specs: ${String(item.weight ?? "").trim()}`);
     lines.push(`Size: ${String(item.size ?? "").trim()}`);
@@ -369,7 +376,7 @@
     if (cat === "Fragrance") return SLOT_FRAGRANCE;
     if (
       cat === "Jewellery" ||
-      cat === "Jewelry" ||
+      cat === "Jewellery" ||
       cat === "Necklace" ||
       cat === "Bracelet" ||
       cat === "Ring" ||
@@ -418,7 +425,7 @@
     if (rawCat === "Fragrance") return SLOT_FRAGRANCE;
     if (
       rawCat === "Jewellery" ||
-      rawCat === "Jewelry" ||
+      rawCat === "Jewellery" ||
       rawCat === "Necklace" ||
       rawCat === "Bracelet" ||
       rawCat === "Ring" ||
@@ -556,6 +563,151 @@
   /** @type {any} */
   let supabaseClient = null;
 
+  function initSupabaseClientFromConfig() {
+    const cfg = globalThis.APP_CONFIG || {};
+    const url = String(cfg.SUPABASE_URL || "").trim();
+    const key = String(cfg.SUPABASE_ANON_KEY || "").trim();
+
+    if (!url || !key) {
+      console.info("Supabase config not found — running local-only mode.");
+      return null;
+    }
+
+    if (!globalThis.supabase?.createClient) {
+      console.warn("Supabase JS SDK not loaded. Add the Supabase CDN script before app.js.");
+      return null;
+    }
+
+    try {
+      return globalThis.supabase.createClient(url, key);
+    } catch (err) {
+      console.warn("Could not initialize Supabase client.", err);
+      return null;
+    }
+  }
+
+  supabaseClient = initSupabaseClientFromConfig();
+
+  const WARDROBE_TABLE = "wardrobe_items";
+  const WARDROBE_IMAGE_BUCKET = "wardrobe-images";
+
+  function isSupabaseReady() {
+    return Boolean(supabaseClient?.from && supabaseClient?.storage?.from);
+  }
+
+  function normalizeCloudItemRow(row) {
+    if (!row || typeof row !== "object") return null;
+    const id = String(row.id ?? "").trim();
+    const brand = String(row.brand ?? "").trim();
+    const name = String(row.name ?? "").trim();
+    if (!id || !brand || !name) return null;
+    return {
+      ...row,
+      id,
+      brand,
+      name,
+      category: String(row.category ?? "").trim(),
+      season: String(row.season ?? "").trim(),
+      colour: String(row.colour ?? row.color ?? "").trim(),
+      fabric: String(row.fabric ?? "").trim(),
+      weight: String(row.weight ?? "").trim(),
+      size: String(row.size ?? "").trim(),
+      measuredDimensions: String(row.measured_dimensions ?? row.measuredDimensions ?? "").trim(),
+      purchaseDate: String(row.purchase_date ?? row.purchaseDate ?? "").trim(),
+      image: String(row.image ?? "").trim(),
+      gallery: Array.isArray(row.gallery) ? row.gallery : [],
+      notes: String(row.notes ?? ""),
+      metadata: row.metadata ?? null,
+      __source: "supabase",
+    };
+  }
+
+  function itemToCloudRow(item) {
+    return {
+      id: String(item.id ?? "").trim(),
+      pillar: String(item.pillar ?? "").trim(),
+      section: String(item.section ?? "").trim(),
+      category: String(item.category ?? "").trim(),
+      brand: String(item.brand ?? "").trim(),
+      name: String(item.name ?? "").trim(),
+      season: String(item.season ?? "").trim(),
+      color: String(item.colour ?? item.color ?? "").trim(),
+      fabric: String(item.fabric ?? "").trim(),
+      weight: String(item.weight ?? "").trim(),
+      size: String(item.size ?? "").trim(),
+      measured_dimensions: String(item.measuredDimensions ?? item.measured_dimensions ?? "").trim(),
+      purchase_date: String(item.purchaseDate ?? item.purchase_date ?? "").trim(),
+      image: String(item.image ?? "").trim(),
+      gallery: Array.isArray(item.gallery) ? item.gallery : [],
+      notes: String(item.notes ?? ""),
+      metadata: item.metadata ?? null,
+    };
+  }
+
+  function safeStorageSegment(value, fallback = "item") {
+    const cleaned = String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+    return cleaned || fallback;
+  }
+
+  function fileExtensionFromFile(file) {
+    const name = String(file?.name ?? "").trim();
+    const m = name.match(/\.([a-z0-9]+)$/i);
+    if (m) return m[1].toLowerCase();
+    const type = String(file?.type ?? "").toLowerCase();
+    if (type.includes("png")) return "png";
+    if (type.includes("webp")) return "webp";
+    if (type.includes("gif")) return "gif";
+    return "jpg";
+  }
+
+  async function uploadWardrobeImageFileToCloud(file, itemId, label = "cover") {
+    if (!isSupabaseReady()) throw new Error("Supabase is not ready.");
+    if (!file) return "";
+    const ext = fileExtensionFromFile(file);
+    const path = `${safeStorageSegment(itemId)}/${Date.now()}-${safeStorageSegment(label, "image")}.${ext}`;
+
+    const { error } = await supabaseClient.storage.from(WARDROBE_IMAGE_BUCKET).upload(path, file, {
+      cacheControl: "31536000",
+      upsert: false,
+      contentType: file.type || `image/${ext}`,
+    });
+    if (error) throw error;
+
+    const { data } = supabaseClient.storage.from(WARDROBE_IMAGE_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || "";
+  }
+
+  async function saveWardrobeItemToCloud(item) {
+    if (!isSupabaseReady()) throw new Error("Supabase is not ready.");
+    const { data, error } = await supabaseClient
+      .from(WARDROBE_TABLE)
+      .upsert(itemToCloudRow(item), { onConflict: "id" })
+      .select()
+      .single();
+    if (error) throw error;
+    return normalizeCloudItemRow(data) || item;
+  }
+
+  async function loadWardrobeItemsFromCloud() {
+    if (!isSupabaseReady()) return [];
+    const { data, error } = await supabaseClient
+      .from(WARDROBE_TABLE)
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.warn("Could not load Supabase wardrobe items.", error);
+      return [];
+    }
+    return (data || []).map(normalizeCloudItemRow).filter(Boolean);
+  }
+
   /** @type {object[]} */
   let items = [];
 
@@ -593,7 +745,7 @@
       .map((x) => ({ ...x, image: String(x.image ?? "").trim() }));
   }
 
-  function loadCustomItems() {
+  function loadLocalStorageCustomOnly() {
     try {
       const raw = localStorage.getItem(CUSTOM_ITEMS_KEY);
       if (!raw) return [];
@@ -603,15 +755,43 @@
     }
   }
 
-  async function loadFileBackedCustomItems() {
+  /** Full custom list: localStorage rows first, then file-backed rows, then cloud-backed rows whose ids are not already present. */
+  function loadCustomItems() {
+    const fromLs = loadLocalStorageCustomOnly();
+    const localIds = new Set(fromLs.map((r) => String(r.id)));
+
+    const fileOnly = fileBackedCustomItems.filter(
+      (r) => r && r.id != null && !localIds.has(String(r.id))
+    );
+
+    const idsAfterFile = new Set([...localIds, ...fileOnly.map((r) => String(r.id))]);
+
+    const cloudOnly = cloudBackedCustomItems.filter(
+      (r) => r && r.id != null && !idsAfterFile.has(String(r.id))
+    );
+
+    return [...fromLs, ...fileOnly, ...cloudOnly];
+  }
+
+  async function syncCustomItemsToProjectFile(rows) {
     try {
-      const res = await fetch("data/custom-items.json", { cache: "no-store" });
-      if (!res.ok) return [];
-      return normalizeCustomItemRows(await res.json());
-    } catch (e) {
-      console.warn("data/custom-items.json", e);
-      return [];
+      const res = await fetch("/api/custom-items", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rows),
+      });
+      if (!res.ok) return false;
+      fileBackedCustomItems = normalizeCustomItemRows(rows);
+      return true;
+    } catch {
+      return false;
     }
+  }
+
+  /** Persist custom rows to localStorage and, when served via `npm run dev`, to `data/custom-items.json`. */
+  async function commitCustomItems(rows) {
+    localStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(rows));
+    return await syncCustomItemsToProjectFile(rows);
   }
 
   function downloadCustomItemsJsonForRepo() {
@@ -627,8 +807,28 @@
     showToast("Save as data/custom-items.json in the project to version custom pieces.");
   }
 
-  function saveCustomItems(arr) {
-    localStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(arr));
+  /** Push merged custom rows (browser + file) into `data/custom-items.json` when `npm run dev` is running. */
+  async function pullBrowserCustomItemsIntoProjectFile() {
+    const rows = loadCustomItems();
+    let synced = false;
+    try {
+      synced = await commitCustomItems(rows);
+    } catch (e) {
+      console.warn(e);
+      showToast("Could not update browser storage — check space or privacy settings.");
+      return;
+    }
+    if (synced) {
+      mergeWardrobeFromSources();
+      if (document.getElementById("grid")) {
+        initFilters();
+        onOutfitChange();
+        renderGrid();
+      }
+      showToast("Browser custom pieces are now saved in data/custom-items.json.");
+    } else {
+      showToast("Start the app with npm run dev from the project folder, then try again.");
+    }
   }
 
   function loadPersistedSeasonNav() {
@@ -700,10 +900,7 @@
         return { ...base, __archiveOrdinal: idx };
       });
     slotRecordFallbackCategory = computeSlotRecordFallbackCategories(mergedBase);
-    const localCustom = loadCustomItems();
-    const localIds = new Set(localCustom.map((r) => String(r.id)));
-    const fileOnly = fileBackedCustomItems.filter((r) => r && r.id != null && !localIds.has(String(r.id)));
-    const mergedList = [...localCustom, ...fileOnly, ...mergedBase];
+    const mergedList = [...loadCustomItems(), ...mergedBase];
     items = mergedList.map((row) => {
       let row2 = row;
       let cat = String(row2.category ?? "").trim();
@@ -837,14 +1034,14 @@
       item.category,
       friendlyRecordCategory(String(item.category ?? "")),
       item.season,
-      item.color,
+      item.colour,
       item.fabric,
       item.weight,
       item.size,
       item.measuredDimensions,
       item.purchaseDate,
       item.notes,
-      ...(getItemColorVariants(item)?.map((v) => [v.label, v.color, v.key].filter(Boolean).join(" ")) ?? []),
+      ...(getItemColorVariants(item)?.map((v) => [v.label, v.colour, v.key].filter(Boolean).join(" ")) ?? []),
     ]
       .filter(Boolean)
       .join(" ")
@@ -975,7 +1172,7 @@
   function mapJewelleryFutureToConcreteDrillKey(raw) {
     const r = String(raw ?? "").trim();
     if (r === "Future") return "Ring";
-    if (r === "Jewellery" || r === "Jewelry") return "Necklace";
+    if (r === "Jewellery" || r === "Jewellery") return "Necklace";
     return r;
   }
 
@@ -1051,7 +1248,7 @@
     const knownExtra = KNOWN_RECORD_TYPES_BY_SLOT[slot];
     if (knownExtra?.length) keys = sortRecordTypeKeysForSlot(slot, [...keys, ...knownExtra]);
     if (slot === SLOT_JEWELRY) {
-      keys = keys.filter((k) => k && !["Jewellery", "Jewelry", "Future"].includes(k));
+      keys = keys.filter((k) => k && !["Jewellery", "Jewellery", "Future"].includes(k));
     }
     if (slot === SLOT_WATCHES) {
       keys = keys.filter((k) => k && !["Everyday", "Watches"].includes(k));
@@ -1093,7 +1290,7 @@
         sub = j;
       }
     }
-    if (categoryNavFilter === SLOT_JEWELRY && sub === "Jewelry") {
+    if (categoryNavFilter === SLOT_JEWELRY && sub === "Jewellery") {
       subcategoryFilter = "Necklace";
       return;
     }
@@ -1190,7 +1387,7 @@
    */
   function displayNameWithoutLeadingColor(item) {
     const name = String(item?.name ?? "").trim();
-    const col = String(item?.color ?? "").trim();
+    const col = String(item?.colour ?? "").trim();
     if (!name || !col) return name;
     const re = new RegExp("^" + escapeRegExp(col) + "\\s+", "i");
     const stripped = name.replace(re, "").trim();
@@ -1216,7 +1413,7 @@
 
   function imageAltForItem(item) {
     const dn = displayNameWithoutLeadingColor(item);
-    const col = String(item?.color ?? "").trim();
+    const col = String(item?.colour ?? "").trim();
     if (col) return `${item.brand} — ${dn} (${col})`;
     return `${item.brand} — ${dn}`;
   }
@@ -1226,8 +1423,8 @@
     const vars = getItemColorVariants(item);
     if (vars?.length) {
       parts.push(`${vars.length} colours: ${vars.map((v) => v.label).join(", ")}`);
-    } else if (item.color) {
-      parts.push(item.color);
+    } else if (item.colour) {
+      parts.push(item.colour);
     }
     if (item.fabric) parts.push(item.fabric);
     if (item.weight) parts.push(item.weight);
@@ -1305,6 +1502,9 @@
   }
 
   const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".PNG", ".JPG", ".JPEG", ".WEBP", ".GIF"];
+
+  /** Keep missing image handling quiet: one declared URL only, then use the interface to upload/fix covers later. */
+  const MANUAL_IMAGE_UPLOAD_MODE = true;
 
   /** Too generic for cross-file image matching — would map many rows to one photo. */
   const IMAGE_MATCH_STOPWORDS = new Set([
@@ -1540,8 +1740,16 @@
       return out;
     }
 
+    const normalizedPrimary = primary.replace(/\\/g, "/");
+    const primaryExistsInArchive = archiveImagePathList.includes(normalizedPrimary);
+
+    if (MANUAL_IMAGE_UPLOAD_MODE && !isBlobOrAbsoluteUrl(primary) && !primaryExistsInArchive) {
+      return [];
+    }
+
     add(primary);
     if (isBlobOrAbsoluteUrl(primary)) return out;
+    if (MANUAL_IMAGE_UPLOAD_MODE) return out;
 
     const { dir, file } = splitDirFile(primary);
     const { stem, ext } = stemAndExt(file);
@@ -2294,7 +2502,7 @@
    * Remove a piece from this browser’s wardrobe view: custom rows are dropped;
    * archive / Supabase rows are hidden locally and any override for that id is cleared.
    */
-  function deleteWardrobePieceFromBrowser(id) {
+  async function deleteWardrobePieceFromBrowser(id) {
     const sid = String(id);
     if (!sid) return;
     const isCustom = sid.startsWith("custom-");
@@ -2303,7 +2511,13 @@
 
     if (isCustom) {
       const next = loadCustomItems().filter((x) => x.id !== sid);
-      saveCustomItems(next);
+      try {
+        await commitCustomItems(next);
+      } catch (e) {
+        console.warn(e);
+        showToast("Could not update storage.");
+        return;
+      }
     } else {
       const hidden = loadArchiveHiddenIds();
       hidden.add(sid);
@@ -2326,7 +2540,7 @@
       onOutfitChange();
     }
 
-    showToast("Piece removed from this browser.");
+    showToast(isCustom ? "Piece removed." : "Piece removed from this browser.");
 
     if (!document.getElementById("grid") && String(detailItemId) === sid) {
       globalThis.location.href = "index.html";
@@ -2371,7 +2585,9 @@
     let dataUrl = "";
     if (file) {
       try {
-        dataUrl = await fileToStorageDataUrl(file);
+        dataUrl = isSupabaseReady()
+          ? await uploadWardrobeImageFileToCloud(file, `custom-${Date.now()}`, "cover")
+          : await fileToStorageDataUrl(file);
       } catch (err) {
         console.warn(err);
         showAddItemFormMsg("Could not process this image. Try another image file.", true);
@@ -2383,7 +2599,11 @@
     const galleryUrls = [];
     for (const gf of galleryFiles.slice(0, MAX_GALLERY)) {
       try {
-        galleryUrls.push(await fileToStorageDataUrl(gf, { preferJpeg: true }));
+        galleryUrls.push(
+          isSupabaseReady()
+            ? await uploadWardrobeImageFileToCloud(gf, `custom-${Date.now()}`, `gallery-${galleryUrls.length + 1}`)
+            : await fileToStorageDataUrl(gf, { preferJpeg: true })
+        );
       } catch (err) {
         console.warn(err);
         showAddItemFormMsg("One gallery image could not be processed and was skipped.", true);
@@ -2414,10 +2634,34 @@
       pillar: "",
     };
 
+    if (isSupabaseReady()) {
+      try {
+        const savedCloudItem = await saveWardrobeItemToCloud(newItem);
+        cloudBackedCustomItems = [
+          savedCloudItem,
+          ...cloudBackedCustomItems.filter((x) => String(x.id) !== String(savedCloudItem.id)),
+        ];
+
+        mergeWardrobeFromSources();
+        initFilters();
+        renderGrid();
+        form.reset();
+        showAddItemFormMsg("Saved to Supabase.", false);
+        showToast("Saved to cloud.");
+        document.getElementById("add-item-dialog")?.close();
+        return;
+      } catch (err) {
+        console.warn(err);
+        showAddItemFormMsg("Supabase save failed.", true);
+        return;
+      }
+    }
+
     const list = loadCustomItems();
     list.unshift(newItem);
+    let synced = false;
     try {
-      saveCustomItems(list);
+      synced = await commitCustomItems(list);
     } catch (e) {
       const err = /** @type {any} */ (e);
       const quota = err && (err.name === "QuotaExceededError" || err.code === 22);
@@ -2428,7 +2672,7 @@
       showAddItemFormMsg("Storage almost full — compressing photos once more…", false);
       try {
         list[0] = await shrinkCustomItemRowForQuota(newItem);
-        saveCustomItems(list);
+        synced = await commitCustomItems(list);
       } catch (e2) {
         console.warn(e2);
         showAddItemFormMsg(STORAGE_QUOTA_USER_HINT, true);
@@ -2449,7 +2693,11 @@
       prev.removeAttribute("src");
     }
     showAddItemFormMsg("Added to wardrobe.", false);
-    showToast("Custom piece saved.");
+    showToast(
+      synced
+        ? "Saved to wardrobe and data/custom-items.json."
+        : "Saved in this browser. Run npm run dev to also write data/custom-items.json."
+    );
     document.getElementById("add-item-dialog")?.close();
   }
 
@@ -2527,6 +2775,9 @@
 
     document.getElementById("add-item-export-custom-json")?.addEventListener("click", () => {
       downloadCustomItemsJsonForRepo();
+    });
+    document.getElementById("add-item-sync-custom-to-project")?.addEventListener("click", () => {
+      void pullBrowserCustomItemsIntoProjectFile();
     });
   }
 
@@ -2975,7 +3226,7 @@
   function appendVariantEditorRow(listEl, data) {
     const key = String(data.key ?? "").trim() || newEditorVariantKey();
     const label = String(data.label ?? "").trim();
-    const color = String(data.color ?? "").trim();
+    const color = String(data.colour ?? "").trim();
     const image = String(data.image ?? "").trim();
     const notes = data.notes != null ? String(data.notes) : "";
     const fs = document.createElement("fieldset");
@@ -3205,7 +3456,7 @@
 
     const color =
       variantsMode && colorVariantsBuilt?.length
-        ? String(colorVariantsBuilt[0].color ?? colorVariantsBuilt[0].label ?? "").trim()
+        ? String(colorVariantsBuilt[0].colour ?? colorVariantsBuilt[0].label ?? "").trim()
         : form.querySelector("#item-edit-color")?.value?.trim() || "";
 
     if (!brand || !name || !browseSlot) {
@@ -3295,6 +3546,9 @@
       delete updated.colorVariants;
     }
 
+    /** When saving a custom piece, whether `data/custom-items.json` was updated (npm run dev). */
+    let customProjectSynced = true;
+
     if (isCustom) {
       const list = loadCustomItems();
       const idx = list.findIndex((x) => x.id === id);
@@ -3303,8 +3557,9 @@
         return;
       }
       list[idx] = updated;
+      let synced = false;
       try {
-        saveCustomItems(list);
+        synced = await commitCustomItems(list);
       } catch (e) {
         const err = /** @type {any} */ (e);
         const quota = err && (err.name === "QuotaExceededError" || err.code === 22);
@@ -3315,13 +3570,14 @@
         setMsg("Storage almost full — compressing photos once more…", false);
         try {
           list[idx] = await shrinkCustomItemRowForQuota(updated);
-          saveCustomItems(list);
+          synced = await commitCustomItems(list);
         } catch (e2) {
           console.warn(e2);
           setMsg(STORAGE_QUOTA_USER_HINT, true);
           return;
         }
       }
+      customProjectSynced = synced;
     } else {
       const patch = {
         brand,
@@ -3366,7 +3622,13 @@
     const mount = itemDetailMountRoot();
     if (next && mount) renderItemDetailContent(mount, next, { edit: false });
     replaceItemPageUrl(id, false);
-    showToast(isCustom ? "Saved changes." : "Saved changes for this browser (archive override).");
+    showToast(
+      isCustom
+        ? customProjectSynced
+          ? "Saved changes (and project file)."
+          : "Saved changes. Run npm run dev to mirror to data/custom-items.json."
+        : "Saved changes for this browser (archive override)."
+    );
   }
 
   function renderItemDetailContent(root, item, opts = {}) {
@@ -3499,7 +3761,7 @@
         colorIn.type = "text";
         colorIn.id = "item-edit-color";
         colorIn.maxLength = 80;
-        colorIn.value = String(item.color ?? "");
+        colorIn.value = String(item.colour ?? "");
         const colorLab = document.createElement("label");
         colorLab.className = "field";
         const cspan = document.createElement("span");
@@ -3557,7 +3819,7 @@
           appendVariantEditorRow(listEl, {
             key: v.key,
             label: v.label,
-            color: v.color,
+            color: v.colour,
             image: v.image,
             gallery: v.gallery,
             notes: v.notes,
@@ -4109,7 +4371,7 @@
             ? "Delete this piece from this browser? Its fields and images are removed and cannot be restored."
             : "Remove this piece from your wardrobe in this browser? It disappears from the grid here; seed files and cloud data are not changed.";
           if (!confirm(msg)) return;
-          deleteWardrobePieceFromBrowser(it.id);
+          void deleteWardrobePieceFromBrowser(it.id);
           return;
         }
         if (t?.closest("#item-detail-cancel-edit")) {
@@ -4449,6 +4711,28 @@
       : [];
   }
 
+  async function loadFileBackedCustomItems() {
+    try {
+      const res = await fetch("data/custom-items.json", { cache: "no-store" });
+      if (!res.ok) return [];
+      return normalizeCustomItemRows(await res.json());
+    } catch (e) {
+      console.warn("data/custom-items.json", e);
+      return [];
+    }
+  }
+
+  async function refreshCloudBackedCustomItems() {
+    cloudBackedCustomItems = await loadWardrobeItemsFromCloud();
+    mergeWardrobeFromSources();
+    if (document.getElementById("grid")) {
+      initFilters();
+      onOutfitChange();
+      renderGrid();
+    }
+    return cloudBackedCustomItems;
+  }
+
   async function bootstrap() {
     const url = globalThis.__TW_SUPABASE_URL__;
     const key = globalThis.__TW_SUPABASE_ANON_KEY__;
@@ -4505,6 +4789,7 @@
     }
 
     fileBackedCustomItems = await loadFileBackedCustomItems();
+    cloudBackedCustomItems = await loadWardrobeItemsFromCloud();
     mergeWardrobeFromSources();
     await loadArchiveImageManifest();
     if (!items.length) {

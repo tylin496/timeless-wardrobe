@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Timeless Wardrobe</title>
+    <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -158,9 +159,9 @@
                   class="category-nav__tab"
                   role="tab"
                   aria-selected="false"
-                  data-category-filter="Jewelry"
+                  data-category-filter="Jewellery"
                 >
-                  Jewelry
+                  Jewellery
                 </button>
               </li>
               <li role="presentation">
@@ -275,7 +276,7 @@
             <h2 id="add-item-heading" class="add-item-panel__title">Add a piece</h2>
             <p class="add-item-panel__hint">
               Required: <strong>brand</strong>, <strong>name</strong>, <strong>section</strong>, and <strong>record type</strong>. Cover photo is optional (one image only; you can add more later under gallery when editing). Optional fields and extra photos
-              help later when you search or edit. New pieces stay in <strong>this browser</strong> until you export them to <code>data/custom-items.json</code> (or use cloud sync).
+              help later when you search or edit. Run <code>npm run dev</code> and open the app from that server so new pieces are written straight to <code>data/custom-items.json</code> in the project (and still cached in the browser). Plain static hosting only keeps a browser copy unless you use cloud sync or export JSON.
             </p>
           </div>
           <form id="add-item-form" class="add-item-form">
@@ -305,7 +306,7 @@
                 </select>
               </label>
               <label class="field">
-                <span class="field__label">Color (optional)</span>
+                <span class="field__label">Colour (optional)</span>
                 <input id="add-item-color" name="color" type="text" maxlength="80" autocomplete="off" />
               </label>
               <label class="field">
@@ -358,6 +359,9 @@
               <button type="button" class="btn btn--ghost" id="add-item-export-custom-json">
                 Export custom JSON…
               </button>
+              <button type="button" class="btn btn--ghost" id="add-item-sync-custom-to-project">
+                Save browser customs to project file…
+              </button>
             </div>
           </form>
         </section>
@@ -387,6 +391,7 @@
 
     <script src="data/wardrobe.js"></script>
     <script src="js/tw-supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>
 </html>
