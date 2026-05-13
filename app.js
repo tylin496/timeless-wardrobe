@@ -763,21 +763,47 @@
     }
   }
 
-  /** Full custom list: localStorage rows first, then file-backed rows, then cloud-backed rows whose ids are not already present. */
+  /** Remove custom rows with these ids from `localStorage` only (does not change `cloudBackedCustomItems`). */
+  function stripCustomIdsFromLocalStorage(ids) {
+    const drop = new Set((ids || []).map((x) => String(x ?? "").trim()).filter(Boolean));
+    if (!drop.size) return false;
+    try {
+      const cur = loadLocalStorageCustomOnly();
+      const next = cur.filter((r) => r && !drop.has(String(r.id)));
+      if (next.length === cur.length) return false;
+      localStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(next));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Write only browser-local custom rows to `data/custom-items.json` when dev API is up (no cloud dump). */
+  async function mirrorLocalCustomItemsToProjectFile() {
+    return await syncCustomItemsToProjectFile(loadLocalStorageCustomOnly());
+  }
+
+  /**
+   * Full custom list. When Supabase is ready, cloud rows win and are listed first; localStorage
+   * duplicates for the same id are ignored so we do not keep redundant image payloads locally.
+   */
   function loadCustomItems() {
+    const cloudRows = Array.isArray(cloudBackedCustomItems) ? cloudBackedCustomItems : [];
     const fromLs = loadLocalStorageCustomOnly();
+    const fileRows = fileBackedCustomItems;
+
+    if (isSupabaseReady()) {
+      const seen = new Set(cloudRows.map((r) => String(r?.id ?? "")));
+      const restLs = fromLs.filter((r) => r && !seen.has(String(r.id)));
+      for (const r of restLs) seen.add(String(r.id));
+      const restFile = fileRows.filter((r) => r && !seen.has(String(r.id)));
+      return [...cloudRows, ...restLs, ...restFile];
+    }
+
     const localIds = new Set(fromLs.map((r) => String(r.id)));
-
-    const fileOnly = fileBackedCustomItems.filter(
-      (r) => r && r.id != null && !localIds.has(String(r.id))
-    );
-
+    const fileOnly = fileRows.filter((r) => r && r.id != null && !localIds.has(String(r.id)));
     const idsAfterFile = new Set([...localIds, ...fileOnly.map((r) => String(r.id))]);
-
-    const cloudOnly = cloudBackedCustomItems.filter(
-      (r) => r && r.id != null && !idsAfterFile.has(String(r.id))
-    );
-
+    const cloudOnly = cloudRows.filter((r) => r && r.id != null && !idsAfterFile.has(String(r.id)));
     return [...fromLs, ...fileOnly, ...cloudOnly];
   }
 
@@ -817,7 +843,7 @@
 
   /** Push merged custom rows (browser + file) into `data/custom-items.json` when `npm run dev` is running. */
   async function pullBrowserCustomItemsIntoProjectFile() {
-    const rows = loadCustomItems();
+    const rows = isSupabaseReady() ? loadLocalStorageCustomOnly() : loadCustomItems();
     let synced = false;
     try {
       synced = await commitCustomItems(rows);
@@ -2558,25 +2584,28 @@
     if (isCustom) {
       const prevCloud = cloudBackedCustomItems.slice();
       cloudBackedCustomItems = cloudBackedCustomItems.filter((x) => String(x.id) !== sid);
-      const next = loadCustomItems().filter((x) => String(x.id) !== sid);
-      try {
-        await commitCustomItems(next);
-      } catch (e) {
-        cloudBackedCustomItems = prevCloud;
-        console.warn(e);
-        showToast("Could not update storage.");
-        return;
-      }
+
       if (isSupabaseReady()) {
         try {
           const { error } = await supabaseClient.from(WARDROBE_TABLE).delete().eq("id", sid);
-          if (error) {
-            console.warn("Supabase wardrobe_items delete:", error);
-            showToast("Removed locally; cloud delete failed — piece may reappear after refresh.");
-          }
+          if (error) throw error;
         } catch (e) {
+          cloudBackedCustomItems = prevCloud;
           console.warn(e);
-          showToast("Removed locally; cloud delete failed — piece may reappear after refresh.");
+          showToast("Cloud delete failed — piece not removed.");
+          return;
+        }
+        stripCustomIdsFromLocalStorage([sid]);
+        await mirrorLocalCustomItemsToProjectFile();
+      } else {
+        const next = loadCustomItems().filter((x) => String(x.id) !== sid);
+        try {
+          await commitCustomItems(next);
+        } catch (e) {
+          cloudBackedCustomItems = prevCloud;
+          console.warn(e);
+          showToast("Could not update storage.");
+          return;
         }
       }
     } else {
@@ -3648,34 +3677,12 @@
     let customCloudSynced = false;
 
     if (isCustom) {
-      const list = loadCustomItems();
-      const idx = list.findIndex((x) => x.id === id);
-      if (idx < 0) {
+      const inWardrobe = loadCustomItems().some((x) => String(x.id) === id);
+      if (!inWardrobe) {
         setMsg("This piece is no longer in your wardrobe.", true);
         return;
       }
-      list[idx] = updated;
-      let synced = false;
-      try {
-        synced = await commitCustomItems(list);
-      } catch (e) {
-        const err = /** @type {any} */ (e);
-        const quota = err && (err.name === "QuotaExceededError" || err.code === 22);
-        if (!quota) {
-          setMsg("Save failed. Try again.", true);
-          return;
-        }
-        setMsg("Storage almost full — one-time resize to fit browser storage (~5MB)…", false);
-        try {
-          list[idx] = await shrinkCustomItemRowForQuota(updated);
-          synced = await commitCustomItems(list);
-        } catch (e2) {
-          console.warn(e2);
-          setMsg(STORAGE_QUOTA_USER_HINT, true);
-          return;
-        }
-      }
-      customProjectSynced = synced;
+
       if (isSupabaseReady()) {
         try {
           const saved = await saveWardrobeItemToCloud(updated);
@@ -3683,11 +3690,44 @@
             saved,
             ...cloudBackedCustomItems.filter((x) => String(x.id) !== String(saved.id)),
           ];
+          stripCustomIdsFromLocalStorage([id]);
+          await mirrorLocalCustomItemsToProjectFile();
           customCloudSynced = true;
+          customProjectSynced = false;
         } catch (e) {
           console.warn(e);
-          setMsg("Saved locally; Supabase sync failed. Check network and RLS policies.", true);
+          setMsg("Supabase save failed. Check network and RLS policies.", true);
+          return;
         }
+      } else {
+        const list = loadCustomItems();
+        const idx = list.findIndex((x) => x.id === id);
+        if (idx < 0) {
+          setMsg("This piece is no longer in your wardrobe.", true);
+          return;
+        }
+        list[idx] = updated;
+        let synced = false;
+        try {
+          synced = await commitCustomItems(list);
+        } catch (e) {
+          const err = /** @type {any} */ (e);
+          const quota = err && (err.name === "QuotaExceededError" || err.code === 22);
+          if (!quota) {
+            setMsg("Save failed. Try again.", true);
+            return;
+          }
+          setMsg("Storage almost full — one-time resize to fit browser storage (~5MB)…", false);
+          try {
+            list[idx] = await shrinkCustomItemRowForQuota(updated);
+            synced = await commitCustomItems(list);
+          } catch (e2) {
+            console.warn(e2);
+            setMsg(STORAGE_QUOTA_USER_HINT, true);
+            return;
+          }
+        }
+        customProjectSynced = synced;
       }
     } else {
       const patch = {
@@ -3738,12 +3778,10 @@
     showToast(
       isCustom
         ? customCloudSynced
-          ? "Saved to Supabase and this browser."
-          : isSupabaseReady() && !customCloudSynced
-            ? "Saved in this browser. Supabase update failed — check the message above."
-            : customProjectSynced
-              ? "Saved changes (and project file)."
-              : "Saved changes. Run npm run dev to mirror to data/custom-items.json."
+          ? "Saved to Supabase."
+          : customProjectSynced
+            ? "Saved changes (and project file)."
+            : "Saved changes. Run npm run dev to mirror to data/custom-items.json."
         : "Saved changes for this browser (archive override)."
     );
   }
@@ -4841,6 +4879,10 @@
 
   async function refreshCloudBackedCustomItems() {
     cloudBackedCustomItems = await loadWardrobeItemsFromCloud();
+    if (isSupabaseReady() && cloudBackedCustomItems.length) {
+      stripCustomIdsFromLocalStorage(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
+      await mirrorLocalCustomItemsToProjectFile();
+    }
     mergeWardrobeFromSources();
     if (document.getElementById("grid")) {
       initFilters();
@@ -4907,6 +4949,10 @@
 
     fileBackedCustomItems = await loadFileBackedCustomItems();
     cloudBackedCustomItems = await loadWardrobeItemsFromCloud();
+    if (isSupabaseReady() && cloudBackedCustomItems.length) {
+      stripCustomIdsFromLocalStorage(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
+      await mirrorLocalCustomItemsToProjectFile();
+    }
     mergeWardrobeFromSources();
     await loadArchiveImageManifest();
     if (!items.length) {
