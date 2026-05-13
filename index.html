@@ -275,7 +275,7 @@
             <h2 id="add-item-heading" class="add-item-panel__title">Add a piece</h2>
             <p class="add-item-panel__hint">
               Required: <strong>brand</strong>, <strong>name</strong>, <strong>section</strong>, and <strong>record type</strong>. Cover photo is optional (one image only; you can add more later under gallery when editing). Optional fields and extra photos
-              help later when you search or edit. Saved only in <strong>this browser</strong> unless you use cloud sync.
+              help later when you search or edit. New pieces stay in <strong>this browser</strong> until you export them to <code>data/custom-items.json</code> (or use cloud sync).
             </p>
           </div>
           <form id="add-item-form" class="add-item-form">
@@ -355,6 +355,9 @@
             <div class="add-item-form__actions">
               <button type="submit" class="btn" id="add-item-submit">Add to wardrobe</button>
               <button type="reset" class="btn btn--ghost" id="add-item-reset">Reset form</button>
+              <button type="button" class="btn btn--ghost" id="add-item-export-custom-json">
+                Export custom JSON…
+              </button>
             </div>
           </form>
         </section>

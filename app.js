@@ -167,9 +167,13 @@
   const ARCHIVE_BROWSE_RESTORE_KEY = "timeless-wardrobe-archive-browse-v1";
   const ARCHIVE_SCROLL_TTL_MS = 20 * 60 * 1000;
 
-  /** Seed / Supabase rows only — merged with `loadCustomItems()` into `items`. */
+  /** Seed / Supabase rows only — merged with local + file custom rows into `items`. */
   /** @type {object[]} */
   let wardrobeBase = [];
+
+  /** Custom rows from `data/custom-items.json` (same shape as localStorage custom list). */
+  /** @type {object[]} */
+  let fileBackedCustomItems = [];
 
   /** Top-level archive category (filter + add-item). */
   const SLOT_CLOTHING = "Clothing";
@@ -575,25 +579,52 @@
     for (const i of items) itemById.set(i.id, i);
   }
 
+  function normalizeCustomItemRows(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter(
+        (x) =>
+          x &&
+          typeof x.id === "string" &&
+          typeof x.brand === "string" &&
+          typeof x.name === "string" &&
+          (x.image == null || typeof x.image === "string")
+      )
+      .map((x) => ({ ...x, image: String(x.image ?? "").trim() }));
+  }
+
   function loadCustomItems() {
     try {
       const raw = localStorage.getItem(CUSTOM_ITEMS_KEY);
       if (!raw) return [];
-      const arr = JSON.parse(raw);
-      if (!Array.isArray(arr)) return [];
-      return arr
-        .filter(
-          (x) =>
-            x &&
-            typeof x.id === "string" &&
-            typeof x.brand === "string" &&
-            typeof x.name === "string" &&
-            (x.image == null || typeof x.image === "string")
-        )
-        .map((x) => ({ ...x, image: String(x.image ?? "").trim() }));
+      return normalizeCustomItemRows(JSON.parse(raw));
     } catch {
       return [];
     }
+  }
+
+  async function loadFileBackedCustomItems() {
+    try {
+      const res = await fetch("data/custom-items.json", { cache: "no-store" });
+      if (!res.ok) return [];
+      return normalizeCustomItemRows(await res.json());
+    } catch (e) {
+      console.warn("data/custom-items.json", e);
+      return [];
+    }
+  }
+
+  function downloadCustomItemsJsonForRepo() {
+    const rows = loadCustomItems();
+    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json;charset=utf-8" });
+    const a = document.createElement("a");
+    const u = URL.createObjectURL(blob);
+    a.href = u;
+    a.download = "custom-items.json";
+    a.rel = "noopener";
+    a.click();
+    URL.revokeObjectURL(u);
+    showToast("Save as data/custom-items.json in the project to version custom pieces.");
   }
 
   function saveCustomItems(arr) {
@@ -669,7 +700,10 @@
         return { ...base, __archiveOrdinal: idx };
       });
     slotRecordFallbackCategory = computeSlotRecordFallbackCategories(mergedBase);
-    const mergedList = [...loadCustomItems(), ...mergedBase];
+    const localCustom = loadCustomItems();
+    const localIds = new Set(localCustom.map((r) => String(r.id)));
+    const fileOnly = fileBackedCustomItems.filter((r) => r && r.id != null && !localIds.has(String(r.id)));
+    const mergedList = [...localCustom, ...fileOnly, ...mergedBase];
     items = mergedList.map((row) => {
       let row2 = row;
       let cat = String(row2.category ?? "").trim();
@@ -2489,6 +2523,10 @@
     closeAdd?.addEventListener("click", () => addDlg?.close());
     addDlg?.addEventListener("click", (e) => {
       if (e.target === addDlg) addDlg.close();
+    });
+
+    document.getElementById("add-item-export-custom-json")?.addEventListener("click", () => {
+      downloadCustomItemsJsonForRepo();
     });
   }
 
@@ -4466,6 +4504,7 @@
       savedOutfits = loadSavedOutfitsFromStorage();
     }
 
+    fileBackedCustomItems = await loadFileBackedCustomItems();
     mergeWardrobeFromSources();
     await loadArchiveImageManifest();
     if (!items.length) {
