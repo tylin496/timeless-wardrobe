@@ -600,6 +600,10 @@ body.archive-ui--nav-folded .site-header {
     animation: none !important;
   }
 
+  .filters__spend-total {
+    transition: none !important;
+  }
+
   .filters,
   .card,
   .btn,
@@ -1017,6 +1021,16 @@ input[type="search"]:focus-visible,
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
   color: var(--ink-muted);
+}
+
+.filters__spend-total {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .btn {

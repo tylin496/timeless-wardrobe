@@ -832,28 +832,6 @@
     return total;
   }
 
-  /**
-   * Update category tabs with spend totals (current season scope, current display currency).
-   * Example: "Clothing · $1,240".
-   */
-  function updateCategorySpendBadges() {
-    const nav = document.getElementById("category-nav");
-    if (!nav) return;
-    const seasonal = items.filter((it) => itemPassesSeasonNav(it, seasonNavFilter));
-    const totalAll = sumPriceInDisplayCurrency(seasonal);
-
-    nav.querySelectorAll(".category-nav__tab").forEach((tab) => {
-      const cat = String(tab?.dataset?.categoryFilter ?? "");
-      const baseLabel = String(tab.dataset.baseLabel ?? tab.textContent ?? "").trim() || "All";
-      if (!tab.dataset.baseLabel) tab.dataset.baseLabel = baseLabel;
-      const pool = cat ? seasonal.filter((it) => itemSlot(it) === cat) : seasonal;
-      const total = cat ? sumPriceInDisplayCurrency(pool) : totalAll;
-      const money = formatMoneyInCurrency(total, archiveDisplayCurrency);
-      tab.textContent = `${baseLabel} · ${money}`;
-      tab.title = `${baseLabel} total spend (${seasonNavFilter}): ${money}`;
-    });
-  }
-
   /** Seed / Supabase rows only — merged with local + file custom rows into `items`. */
   /** @type {object[]} */
   let wardrobeBase = [];
@@ -2348,6 +2326,9 @@
 
   /** @type {boolean} */
   let useCloudOutfits = false;
+  let spendTotalAnimRaf = 0;
+  let spendTotalAnimToken = 0;
+  let spendTotalCurrentValue = 0;
 
   /** Active category tab value (matches `itemSlot()`; empty string = all). */
   let categoryNavFilter = "";
@@ -2376,6 +2357,7 @@
     outfitToast: document.getElementById("outfit-toast"),
     savedList: document.getElementById("saved-outfits-list"),
     savedEmpty: document.getElementById("saved-outfits-empty"),
+    spendTotal: document.getElementById("filter-spend-total"),
   };
 
   let itemDetailDelegatesInstalled = false;
@@ -4597,7 +4579,7 @@
     if (!els.grid) return;
     const filtered = applyFilters(items);
     const sorted = [...filtered].sort(compareGridItems);
-    updateCategorySpendBadges();
+    updateFilterSpendTotal(filtered);
     els.grid.innerHTML = "";
     for (const item of sorted) {
       els.grid.appendChild(createCard(item));
@@ -4634,6 +4616,47 @@
     if (els.emptyReset) els.emptyReset.hidden = !narrowingFiltersActive();
     if (els.emptyWrap) els.emptyWrap.hidden = n > 0;
     els.grid.hidden = n === 0;
+  }
+
+  function updateFilterSpendTotal(filteredItems) {
+    const el = els.spendTotal;
+    if (!el) return;
+    const total = sumPriceInDisplayCurrency(filteredItems);
+    const prefix = narrowingFiltersActive() ? "Filtered spend" : "Visible spend";
+    const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+
+    if (!Number.isFinite(total)) {
+      el.textContent = `${prefix}: ${formatMoneyInCurrency(0, archiveDisplayCurrency)}`;
+      return;
+    }
+
+    const token = ++spendTotalAnimToken;
+    if (spendTotalAnimRaf) cancelAnimationFrame(spendTotalAnimRaf);
+
+    if (reduce) {
+      spendTotalCurrentValue = total;
+      el.textContent = `${prefix}: ${formatMoneyInCurrency(total, archiveDisplayCurrency)}`;
+      return;
+    }
+
+    const start = spendTotalCurrentValue;
+    const delta = total - start;
+    const duration = 420;
+    const t0 = performance.now();
+    function step(now) {
+      if (token !== spendTotalAnimToken) return;
+      const p = Math.min(1, (now - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const next = start + delta * eased;
+      el.textContent = `${prefix}: ${formatMoneyInCurrency(next, archiveDisplayCurrency)}`;
+      if (p < 1) {
+        spendTotalAnimRaf = requestAnimationFrame(step);
+      } else {
+        spendTotalCurrentValue = total;
+        spendTotalAnimRaf = 0;
+      }
+    }
+    spendTotalAnimRaf = requestAnimationFrame(step);
   }
 
   /** Search box: avoid rebuilding the whole grid on every keystroke (main-thread jank). */
