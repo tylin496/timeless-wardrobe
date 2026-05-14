@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f1eb" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f6" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161514" />
     <title>Timeless Wardrobe</title>
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -25,73 +25,58 @@
     <a class="skip-link" href="#saved-outfits-heading">Skip to saved outfits</a>
     <header class="site-header">
       <div class="site-header__inner">
-        <div class="site-header__row">
-          <div class="site-header__intro">
-            <p class="site-eyebrow">Archive</p>
-            <h1 class="site-title">Timeless Wardrobe</h1>
-            <p class="site-tagline">
-              <strong>English Heritage × Mediterranean Leisure</strong> — one wardrobe, two moods: country
-              classics and warm-weather ease.
-            </p>
-            <details class="site-meta-details">
-              <summary>How data loads</summary>
-              <p class="site-meta-details__body">
-                Pieces can load from this site’s seed list, your browser (custom items &amp; edits), or Supabase when
-                configured. Archive photos use public <code>https://</code> URLs (e.g. Supabase Storage).
-              </p>
-            </details>
-          </div>
-          <div class="site-header__aside">
-            <button type="button" class="btn btn--ghost site-header__add" id="add-item-open">
-              Add a piece
-            </button>
-            <div class="season-strip season-strip--header" id="season-nav" aria-label="Season">
-              <p class="season-strip__label">Season</p>
-              <ul class="season-strip__list" role="tablist">
-                <li role="presentation">
-                  <button
-                    type="button"
-                    class="season-strip__tab is-active"
-                    role="tab"
-                    aria-selected="true"
-                    data-season-filter="All"
-                    id="season-tab-all"
-                  >
-                    All
-                  </button>
-                </li>
-                <li role="presentation">
-                  <button
-                    type="button"
-                    class="season-strip__tab"
-                    role="tab"
-                    aria-selected="false"
-                    data-season-filter="S/S"
-                    id="season-tab-ss"
-                  >
-                    S/S
-                  </button>
-                </li>
-                <li role="presentation">
-                  <button
-                    type="button"
-                    class="season-strip__tab"
-                    role="tab"
-                    aria-selected="false"
-                    data-season-filter="A/W"
-                    id="season-tab-aw"
-                  >
-                    A/W
-                  </button>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
+        <h1 class="site-title">
+          <span class="site-title__primary">Timeless Wardrobe</span>
+          <span class="site-title__territory">
+            <strong>English Heritage × Mediterranean Leisure</strong>
+          </span>
+        </h1>
       </div>
     </header>
 
     <nav id="filters-nav" class="filters" aria-label="Filter wardrobe">
+      <div class="filters__head">
+        <div class="filters__season season-strip" id="season-nav" aria-label="Season">
+        <p class="season-strip__label">Season</p>
+        <ul class="season-strip__list" role="tablist">
+          <li role="presentation">
+            <button
+              type="button"
+              class="season-strip__tab is-active"
+              role="tab"
+              aria-selected="true"
+              data-season-filter="All"
+              id="season-tab-all"
+            >
+              All
+            </button>
+          </li>
+          <li role="presentation">
+            <button
+              type="button"
+              class="season-strip__tab"
+              role="tab"
+              aria-selected="false"
+              data-season-filter="S/S"
+              id="season-tab-ss"
+            >
+              S/S
+            </button>
+          </li>
+          <li role="presentation">
+            <button
+              type="button"
+              class="season-strip__tab"
+              role="tab"
+              aria-selected="false"
+              data-season-filter="A/W"
+              id="season-tab-aw"
+            >
+              A/W
+            </button>
+          </li>
+        </ul>
+      </div>
       <div class="filters__quick-search" id="filters-quick-search">
         <label class="category-nav__search field field--grow">
           <span class="field__label">Search</span>
@@ -108,6 +93,7 @@
             title="Search wardrobe by brand, name, category, season, colour, notes…"
           />
         </label>
+      </div>
       </div>
       <button
         type="button"
@@ -214,14 +200,55 @@
           hidden
         >
           <div id="category-drill-grid" class="category-drill__grid"></div>
-          <button type="button" id="category-drill-clear-all" class="category-drill__clear-all">
-            Clear all
-          </button>
         </section>
+        <div class="filters__browse-tools" id="filters-browse-tools">
+          <label class="filters__browse-field" for="archive-sort">
+            <span class="filters__browse-label">Sort by</span>
+            <select id="archive-sort" class="filters__browse-select">
+              <option value="archive">Archive order</option>
+              <option value="price-asc">Price · low to high</option>
+              <option value="price-desc">Price · high to low</option>
+              <option value="date-asc">Purchase date · oldest first</option>
+              <option value="date-desc">Purchase date · newest first</option>
+            </select>
+          </label>
+          <label class="filters__browse-field" for="archive-display-currency">
+            <span class="filters__browse-label">Show prices in</span>
+            <select id="archive-display-currency" class="filters__browse-select">
+              <option value="TWD">TWD</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="JPY">JPY</option>
+              <option value="CNY">CNY</option>
+              <option value="HKD">HKD</option>
+            </select>
+          </label>
+        </div>
         <p class="filters__meta" id="filter-count" aria-live="polite"></p>
         </div>
       </div>
     </nav>
+
+    <aside
+      id="local-data-risk-banner"
+      class="local-data-risk-banner"
+      hidden
+      aria-label="Browser-only storage reminder"
+    >
+      <div class="local-data-risk-banner__inner">
+        <p class="local-data-risk-banner__text">
+          <strong>Browser-only mode</strong> — Without Supabase (<code>js/tw-supabase-config.js</code>), everything you
+          change in your wardrobe (pieces you added yourself <em>and</em> edits to any catalogue piece), plus hidden rows
+          and saved outfits, stays in this browser + site origin (domain/protocol/port). Clearing site data, private
+          browsing, switching devices, or changing local dev port can make that data unavailable.
+        </p>
+        <div class="local-data-risk-banner__actions">
+          <button type="button" class="btn btn--small" id="local-data-backup-json">Download backup JSON</button>
+          <button type="button" class="btn btn--small btn--ghost" id="local-data-risk-dismiss">Dismiss</button>
+        </div>
+      </div>
+    </aside>
 
     <section id="outfit-dock" class="outfit-dock" aria-labelledby="outfit-heading">
       <div class="outfit-dock__builder">
@@ -273,6 +300,52 @@
         </button>
       </div>
     </main>
+
+    <section class="archive-actions" aria-label="Archive actions">
+      <button type="button" class="btn btn--ghost archive-actions__add" id="add-item-open">Add a piece</button>
+    </section>
+
+    <section class="data-load-note" aria-label="Where this data comes from">
+      <h2 class="data-load-note__title">Where this data comes from</h2>
+      <p class="data-load-note__lead">
+        Each reload builds one merged wardrobe list: rows you added are merged first, then the catalogue (from
+        Supabase or the bundled seed), with per-piece edits applied the same way whether the piece started as seed or
+        custom. Cover and gallery URLs are plain strings on each row (often <code>https://…</code> public object URLs).
+      </p>
+      <ul class="data-load-note__list">
+        <li>
+          <strong>Catalogue source</strong> — With <code>js/tw-supabase-config.js</code> and a non-empty
+          <code>wardrobe_items</code> fetch, that table is the catalogue. Otherwise the app uses
+          <code>data/wardrobe.js</code> (<code>WARDROBE_ITEMS</code>).
+        </li>
+        <li>
+          <strong>Your wardrobe in the browser</strong> — Extra rows and any edits not yet in the cloud live under
+          <code>localStorage</code> keys such as <code>timeless-wardrobe-custom-items-v1</code>,
+          <code>timeless-wardrobe-archive-overrides-v1</code>, and <code>timeless-wardrobe-archive-hidden-v1</code>, plus
+          optional <code>data/custom-items.json</code> when you use <code>npm run dev</code>.
+        </li>
+        <li>
+          <strong>Supabase sync (same bar for every piece)</strong> — With cloud configured, new pieces and edits are
+          written to <code>wardrobe_items</code> (catalogue pieces you changed are mirrored there like any other row).
+          Hidden archive ids and any legacy per-id override blobs still round-trip through
+          <code>wardrobe_app_state</code> row <code>id = default</code> when needed.
+        </li>
+        <li>
+          <strong>Saved outfits</strong> — Supabase tables <code>outfits</code> + <code>outfit_items</code> when the
+          wardrobe is cloud-backed and outfit fetch succeeds; otherwise <code>localStorage</code> key
+          <code>timeless-wardrobe-outfits-v1</code>.
+        </li>
+      </ul>
+      <p class="data-load-note__backup">
+        <button type="button" class="btn btn--small btn--ghost" id="data-note-backup-json">
+          Download browser backup JSON
+        </button>
+        <span class="data-load-note__backup-hint">
+          — full snapshot: custom rows, catalogue overrides, hidden ids, outfits, and display prefs (keep this file
+          somewhere safe when you are not on cloud sync).
+        </span>
+      </p>
+    </section>
 
     <footer class="site-footer">
       <p>Timeless Wardrobe</p>
@@ -347,11 +420,6 @@
                 <input id="add-item-size" name="size" type="text" maxlength="120" autocomplete="off" />
               </label>
               <label class="field field--span2">
-                <span class="field__label">Measured dimensions (optional, cm)</span>
-                <input type="hidden" id="add-item-measured-dimensions" name="measuredDimensions" value="" />
-                <div class="measured-dims-block" id="add-item-measured-dims-block"></div>
-              </label>
-              <label class="field field--span2">
                 <span class="field__label">Purchase date (optional)</span>
                 <span class="add-item-purchase-fields">
                   <input id="add-item-purchase-date" name="purchaseDate" type="date" />
@@ -363,6 +431,30 @@
                     placeholder="Optional note (e.g. approximate, gift)"
                     autocomplete="off"
                   />
+                </span>
+              </label>
+              <label class="field">
+                <span class="field__label">Price (optional)</span>
+                <span class="add-item-price-row">
+                  <input
+                    id="add-item-price"
+                    name="price"
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                    placeholder="e.g. 199 or 199.5"
+                    autocomplete="off"
+                  />
+                  <select id="add-item-price-currency" name="priceCurrency" aria-label="Price currency">
+                    <option value="TWD">TWD</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="CNY">CNY</option>
+                    <option value="HKD">HKD</option>
+                  </select>
                 </span>
               </label>
               <label class="field field--file field--span2">
@@ -379,6 +471,14 @@
             <label class="field field--block">
               <span class="field__label">Notes (optional)</span>
               <textarea id="add-item-notes" name="notes" class="textarea-autosize" rows="2" maxlength="2000"></textarea>
+            </label>
+            <label class="field field--block">
+              <span class="field__label">Measurements (optional)</span>
+              <input type="hidden" id="add-item-measured-dimensions" name="measuredDimensions" value="" />
+              <div id="add-item-measured-dims-block" class="add-item-measured-dims-host"></div>
+              <p class="measured-dims-hint">
+                Defaults: Shoulder, Chest, Waist, Sleeve, Back Length — pick <strong>cm</strong> or <strong>mm</strong> for all values in this piece.
+              </p>
             </label>
             <p id="add-item-form-msg" class="add-item-form__msg" role="status" aria-live="polite"></p>
             <div class="add-item-form__actions">

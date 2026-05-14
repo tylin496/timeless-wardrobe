@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f1eb" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161514" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141312" />
     <title>Timeless Wardrobe</title>
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="styles.css" />
@@ -28,6 +28,23 @@
     <main id="item-page-main" class="item-page-main" tabindex="-1">
       <div id="item-detail-root" class="item-detail__root item-detail__root--page"></div>
     </main>
+    <dialog
+      id="item-image-zoom-dialog"
+      class="item-image-zoom-dialog"
+      aria-modal="true"
+      aria-label="Enlarged product photo"
+    >
+      <div class="item-image-zoom-dialog__inner">
+        <div class="item-image-zoom-dialog__toolbar">
+          <button type="button" class="btn btn--ghost item-image-zoom-dialog__close" id="item-image-zoom-close">
+            Close
+          </button>
+        </div>
+        <div class="item-image-zoom-dialog__viewport">
+          <img id="item-image-zoom-img" class="item-image-zoom-dialog__img" alt="" />
+        </div>
+      </div>
+    </dialog>
     <p id="outfit-toast" class="outfit-toast item-page-toast" role="status" aria-live="polite"></p>
     <script src="data/wardrobe.js"></script>
     <script src="js/tw-supabase-config.js"></script>
