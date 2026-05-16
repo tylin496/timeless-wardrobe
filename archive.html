@@ -7,11 +7,11 @@
       name="description"
       content="A personal wardrobe archive — browse pieces by category and season, track spend, build outfits, and save looks."
     />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161514" />
     <title>Archive · Timeless Wardrobe</title>
-    <link rel="icon" type="image/png" href="/favicon-light.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" href="/favicon-dark.png" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
     <script src="js/tw-page-theme-boot.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="js/tw-admin-boot.js"></script>
@@ -22,7 +22,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="theme-catalogue">
+  <body class="theme-catalogue archive-page">
     <a class="skip-link" href="#main">Skip to archive</a>
     <a class="skip-link" href="#filter-search">Skip to search</a>
     <a class="skip-link tw-admin-only" href="#add-item-open">Skip to add item</a>
@@ -51,32 +51,36 @@
               </span>
             </a>
           </h1>
-          <nav
-            id="site-header-primary-nav"
-            class="site-header__primary-nav main-nav"
-            aria-label="Main categories"
-          >
-            <a href="#main" class="site-header__nav-link" data-category-jump="Clothing">Clothing</a>
-            <a href="#main" class="site-header__nav-link" data-category-jump="Accessories">Accessories</a>
-            <a href="#main" class="site-header__nav-link" data-category-jump="Watches">Watches</a>
-            <a href="#main" class="site-header__nav-link" data-category-jump="Fragrance">Fragrance</a>
-          </nav>
+          <div class="site-header__division-hover-zone">
+            <nav
+              id="site-header-primary-nav"
+              class="site-header__primary-nav main-nav"
+              aria-label="Main categories"
+            >
+              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Clothing">Clothing</a>
+              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Accessories">Accessories</a>
+              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Watches">Watches</a>
+              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Fragrance">Fragrance</a>
+            </nav>
+          </div>
           <div class="site-header__nav-submenu-dismiss" aria-hidden="true"></div>
           <div class="site-header__tools">
             <div class="site-header__season-mini" id="season-nav-mini" aria-label="Season quick filter">
               <button
                 type="button"
-                class="site-header__season-mini-tab"
+                class="site-header__season-mini-tab season-toggle"
                 data-season-filter="S/S"
                 id="season-mini-ss"
+                aria-label="S/S"
               >
                 S/S
               </button>
               <button
                 type="button"
-                class="site-header__season-mini-tab"
+                class="site-header__season-mini-tab season-toggle"
                 data-season-filter="A/W"
                 id="season-mini-aw"
+                aria-label="A/W"
               >
                 A/W
               </button>
@@ -128,24 +132,43 @@
             </button>
           </div>
         </div>
-        <div id="site-header-submenu" class="site-header__submenu mega-menu" hidden>
-          <div id="site-header-submenu-title" class="site-header__submenu-title"></div>
-          <div class="site-header__submenu-body">
-            <div id="site-header-submenu-links" class="site-header__submenu-links"></div>
-            <div id="site-header-submenu-preview" class="site-header__submenu-preview"></div>
+        <div
+          id="site-header-submenu"
+          class="site-header__submenu mega-menu desktop-mega-menu"
+          data-submenu-state="closed"
+          aria-hidden="true"
+          hidden
+        >
+          <div class="desktop-mega-menu-inner mega-menu-inner site-header__submenu-body">
+            <aside
+              id="site-header-submenu-links"
+              class="desktop-mega-menu-left mega-menu-left site-header__submenu-links site-header__submenu-zone site-header__submenu-zone--nav"
+              aria-label="Browse types"
+            ></aside>
+            <section
+              class="desktop-mega-menu-content mega-menu-content site-header__submenu-content site-header__submenu-zone site-header__submenu-zone--preview"
+              aria-label="Category preview"
+            >
+              <div id="site-header-submenu-preview" class="site-header__submenu-preview"></div>
+            </section>
           </div>
         </div>
         </div>
-        <div id="site-header-search-wrap" class="site-header__search-wrap" aria-hidden="true">
+        <div
+          id="site-header-search-wrap"
+          class="site-header__search-wrap desktop-search-flyout"
+          data-search-state="closed"
+          aria-hidden="true"
+          hidden
+        >
           <div class="site-header__search-dim" aria-hidden="true"></div>
-          <div class="site-header__search-megamenu">
-            <div class="site-header__search-megamenu-inner">
-          <div class="site-header__search-surface">
-            <div class="site-header__search-head">
-              <label class="site-header__search-field" for="filter-search">
-                <div class="site-header__search-pill-wrap">
-                  <span class="site-header__search-pill-icon" aria-hidden="true"></span>
-                  <span class="filters__search-field">
+          <div class="desktop-search-flyout-inner site-header__search-megamenu-inner">
+            <div class="site-header__search-surface">
+              <div class="site-header__search-head">
+                <div class="site-header__search-row site-header__search-field--rl">
+                  <span class="site-header__search-field-icon" aria-hidden="true"></span>
+                  <label class="site-header__search-input-label" for="filter-search">
+                    <span class="filters__search-field">
                     <input
                       id="filter-search"
                       type="search"
@@ -167,70 +190,69 @@
                     >
                       <span class="filters__search-clear-icon" aria-hidden="true">×</span>
                     </button>
-                  </span>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    id="site-header-search-close"
+                    class="site-header__search-close"
+                    aria-label="Close search"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
                 </div>
-              </label>
-              <button
-                type="button"
-                id="site-header-search-close"
-                class="site-header__search-close"
-                aria-label="Close search"
-              >
-                <span aria-hidden="true">×</span>
-              </button>
-            </div>
-            <div id="site-header-search-browse" class="site-header__search-browse">
-            <div class="site-header__search-dropdown-body">
-              <div class="site-header__search-dropdown-aside">
-                <p class="site-header__search-trending-heading">Trending searches</p>
-                <nav class="site-header__search-trending-aside-nav" aria-label="Trending searches">
-                  <button type="button" class="site-header__search-trending-row" data-trending-search="Polo shirt">
-                    <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                    <span>Polo Shirt</span>
-                  </button>
-                  <button type="button" class="site-header__search-trending-row" data-trending-search="Bags">
-                    <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                    <span>Bags</span>
-                  </button>
-                  <button type="button" class="site-header__search-trending-row" data-trending-search="Watches">
-                    <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                    <span>Watches</span>
-                  </button>
-                  <button type="button" class="site-header__search-trending-row" data-trending-search="Fragrance">
-                    <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                    <span>Fragrance</span>
-                  </button>
-                </nav>
               </div>
-              <div class="site-header__search-dropdown-main">
-                <p class="site-header__search-main-heading">Popular Categories</p>
-                <div
-                  id="site-header-search-featured-subcats"
-                  class="site-header__search-category-grid"
-                  role="list"
-                  aria-label="Featured subcategories"
-                ></div>
-              </div>
-            </div>
-            </div>
-            <div
-              id="site-header-search-results-pane"
-              class="site-header__search-results-pane"
-              hidden
-              aria-live="polite"
-            >
-              <div id="site-header-search-results-empty" class="site-header__search-results-empty" hidden>
-                <p class="site-header__search-results-empty__title">No results found</p>
-                <p class="site-header__search-results-empty__hint">Try another search term.</p>
+              <div id="site-header-search-browse" class="site-header__search-browse">
+                <div class="site-header__search-dropdown-body">
+                  <div class="site-header__search-dropdown-aside">
+                    <p class="site-header__search-trending-heading">Trending Searches</p>
+                    <nav class="site-header__search-trending-aside-nav" aria-label="Trending searches">
+                      <button type="button" class="site-header__search-trending-row" data-trending-search="Polo shirt">
+                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                        <span>Polo Shirt</span>
+                      </button>
+                      <button type="button" class="site-header__search-trending-row" data-trending-search="Bags">
+                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                        <span>Bags</span>
+                      </button>
+                      <button type="button" class="site-header__search-trending-row" data-trending-search="Watches">
+                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                        <span>Watches</span>
+                      </button>
+                      <button type="button" class="site-header__search-trending-row" data-trending-search="Fragrance">
+                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                        <span>Fragrance</span>
+                      </button>
+                    </nav>
+                  </div>
+                  <div class="site-header__search-dropdown-main">
+                    <p class="site-header__search-main-heading">Popular Categories</p>
+                    <div
+                      id="site-header-search-featured-subcats"
+                      class="site-header__search-category-grid"
+                      role="list"
+                      aria-label="Featured subcategories"
+                    ></div>
+                  </div>
+                </div>
               </div>
               <div
-                id="site-header-search-results-grid"
-                class="site-header__search-results-grid"
-                role="list"
-                aria-label="Search results"
-              ></div>
-            </div>
-          </div>
+                id="site-header-search-results-pane"
+                class="site-header__search-results-pane"
+                hidden
+                aria-live="polite"
+              >
+                <div id="site-header-search-results-empty" class="site-header__search-results-empty" hidden>
+                  <p class="site-header__search-results-empty__title">No results found</p>
+                  <p class="site-header__search-results-empty__hint">Try another search term.</p>
+                </div>
+                <div
+                  id="site-header-search-results-grid"
+                  class="site-header__search-results-grid"
+                  role="list"
+                  aria-label="Search results"
+                ></div>
+              </div>
             </div>
           </div>
         </div>
@@ -259,6 +281,7 @@
       </div>
     </aside>
 <main id="main" tabindex="-1">
+      <div class="archive-container">
       <section
         id="archive-search-results-plp"
         class="archive-search-results-plp"
@@ -295,8 +318,10 @@
         <div class="items-toolbar__head">
           <div class="items-toolbar__intro-lead">
             <div class="items-toolbar__intro">
-              <p class="items-toolbar__breadcrumb" id="items-toolbar-breadcrumb"></p>
-              <h2 class="items-toolbar__page-title" id="items-toolbar-page-title">All Types</h2>
+              <div class="archive-heading" id="archive-heading" aria-label="Collection">
+                <div class="archive-heading__context" id="archive-heading-context"></div>
+                <h2 class="archive-heading__title items-toolbar__page-title" id="items-toolbar-page-title"></h2>
+              </div>
               <nav
                 id="season-nav"
                 class="items-toolbar__season-nav filters__season season-strip"
@@ -305,121 +330,32 @@
                 <span class="season-strip__label">Season</span>
                 <div class="season-strip__list" role="group" aria-label="Filter by season">
                   <button type="button" class="season-strip__tab" data-season-filter="All">All</button>
-                  <button type="button" class="season-strip__tab" data-season-filter="A/W">A/W</button>
-                  <button type="button" class="season-strip__tab" data-season-filter="S/S">S/S</button>
+                  <button type="button" class="season-strip__tab season-toggle" data-season-filter="A/W" aria-label="A/W">
+                    A/W
+                  </button>
+                  <button type="button" class="season-strip__tab season-toggle" data-season-filter="S/S" aria-label="S/S">
+                    S/S
+                  </button>
                 </div>
               </nav>
-              <div id="items-toolbar-brand-story" class="items-toolbar__brand-story" hidden>
-                <div id="items-toolbar-brand-story-panels" class="items-toolbar__brand-story-panels">
-                  <div class="items-toolbar__brand-story-panel" data-brand-story-panel="">
-                    <p class="items-toolbar__brand-story-text">
-                      Timeless Wardrobe begins with a philosophy. Its curated approach to classic menswear is not about
-                      men&apos;s fashion; it&apos;s about style and collecting things that last. From relaxed
-                      <a
-                        href="#main"
-                        class="items-toolbar__brand-story-link"
-                        data-category-jump="Clothing"
-                        data-subcategory-jump="Tops"
-                        data-season-filter="S/S"
-                        aria-label="Clothing, Tops, S/S season"
-                        >summer essentials</a
-                      >
-                      to refined <a
-                        href="#main"
-                        class="items-toolbar__brand-story-link"
-                        data-category-jump="Clothing"
-                        data-subcategory-jump="Jackets"
-                        data-season-filter="All"
-                        aria-label="Clothing, tailoring, all seasons"
-                        >tailoring</a
-                      >, every piece reflects timelessness, craftsmanship, and quiet confidence.
-                    </p>
-                  </div>
-                  <div class="items-toolbar__brand-story-panel" data-brand-story-panel="Clothing" hidden>
-                    <p class="items-toolbar__brand-story-text">
-                      From relaxed shirting and knitwear to refined tailoring, Clothing is the foundation of a wardrobe
-                      built for longevity — pieces chosen for proportion, fabric, and quiet confidence rather than
-                      trend.
-                    </p>
-                  </div>
-                  <div class="items-toolbar__brand-story-panel" data-brand-story-panel="Accessories" hidden>
-                    <p class="items-toolbar__brand-story-text">
-                      Accessories are often the most personal pieces in a wardrobe. More than finishing touches, they
-                      reflect character, craftsmanship, and quiet distinction. From leather goods and eyewear to
-                      personal essentials and
-                      <a
-                        href="#main"
-                        class="items-toolbar__brand-story-link"
-                        data-category-jump="Accessories"
-                        data-subcategory-jump="Jewellery"
-                        aria-label="Accessories, jewellery"
-                        >heirloom pieces</a
-                      >, each is chosen for its purpose, integrity, and ability to age with grace.
-                    </p>
-                  </div>
-                  <div class="items-toolbar__brand-story-panel" data-brand-story-panel="Watches" hidden>
-                    <p class="items-toolbar__brand-story-text">
-                      True watch collecting begins with restraint. It is not about variations or excess, but about
-                      iconic designs, historical significance, and enduring proportions. From
-                      <a
-                        href="item.html?id=cartier-tank-solo-large"
-                        class="items-toolbar__brand-story-link"
-                        aria-label="Open Cartier Tank Solo dress watch piece"
-                        >dress watches</a
-                      >
-                      to
-                      <a
-                        href="item.html?id=tudor-black-bay-58"
-                        class="items-toolbar__brand-story-link"
-                        aria-label="Open Tudor Black Bay 58 heritage sport watch piece"
-                        >heritage sport models</a
-                      >, every piece is chosen for its integrity, craftsmanship, and place within horological history.
-                    </p>
-                  </div>
-                  <div class="items-toolbar__brand-story-panel" data-brand-story-panel="Fragrance" hidden>
-                    <p class="items-toolbar__brand-story-text">
-                      Style is not only seen. It is remembered. More than scent alone, fragrance carries atmosphere,
-                      memory, and character through time. From refined <a
-                        href="item.html?id=nicolai-new-york"
-                        class="items-toolbar__brand-story-link"
-                        aria-label="Open Parfums de Nicolaï New York Intense"
-                        >freshness</a
-                      > to warm <a
-                        href="item.html?id=mfk-grand-soir"
-                        class="items-toolbar__brand-story-link"
-                        aria-label="Open Maison Francis Kurkdjian Grand Soir"
-                        >evening depth</a
-                      >, every composition is chosen for its balance, presence, and lasting impression.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="items-toolbar__brand-story-toggle"
-                  id="items-toolbar-brand-story-toggle"
-                  aria-expanded="false"
-                  aria-controls="items-toolbar-brand-story-panels"
-                >
-                  <span class="items-toolbar__brand-story-toggle-label">View More</span>
-                </button>
-              </div>
               <div id="category-drill" class="category-drill category-drill--toolbar" hidden>
                 <div id="category-drill-grid" class="category-drill__grid"></div>
               </div>
             </div>
-            <div
-              id="items-toolbar-active-filter-chips"
-              class="items-toolbar__active-chips"
-              role="group"
-              aria-label="Active filters"
-              hidden
-            ></div>
           </div>
         </div>
+        <div
+          id="items-toolbar-active-filter-chips"
+          class="items-toolbar__active-chips items-toolbar__active-chips--browse"
+          role="group"
+          aria-label="Active filters"
+          hidden
+        ></div>
         <div class="items-toolbar__actions">
-          <div class="items-toolbar__archive-summary" aria-live="polite">
-              <p class="items-toolbar__spend-line" id="filter-spend-total"></p>
+          <div class="items-toolbar__control-bar">
+            <div class="items-toolbar__control-main items-toolbar__archive-summary" aria-live="polite">
               <p class="items-toolbar__count-line" id="filter-count"></p>
+              <p class="items-toolbar__spend-line" id="filter-spend-total" hidden></p>
             </div>
             <button
               type="button"
@@ -444,6 +380,7 @@
             </span>
               <span>Filter &amp; Sort</span>
             </button>
+          </div>
         </div>
         <div
           class="items-toolbar__chips filters__count-row"
@@ -475,6 +412,7 @@
         <button type="button" class="btn btn--small" id="empty-reset-filters" hidden>
           Clear category, type, colour &amp; search
         </button>
+      </div>
       </div>
     </main>
 
@@ -592,17 +530,17 @@
               role="group"
               aria-labelledby="archive-drawer-sort-heading"
             >
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="archive" aria-pressed="false">
-                Archive Order
+              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="price-asc" aria-pressed="false">
+                Price low to high
+              </button>
+              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="price-desc" aria-pressed="false">
+                Price high to low
               </button>
               <button type="button" class="archive-drawer-sort-chip" data-archive-sort="date-desc" aria-pressed="false">
-                Newest First
+                Newest added
               </button>
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="brand-asc" aria-pressed="false">
-                Brand A–Z
-              </button>
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="brand-desc" aria-pressed="false">
-                Brand Z–A
+              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="date-asc" aria-pressed="false">
+                Oldest added
               </button>
             </div>
           </section>
@@ -620,10 +558,22 @@
               <button type="button" class="archive-drawer-sort-chip" data-season-filter="All" aria-pressed="false">
                 All seasons
               </button>
-              <button type="button" class="archive-drawer-sort-chip" data-season-filter="A/W" aria-pressed="false">
+              <button
+                type="button"
+                class="archive-drawer-sort-chip season-toggle"
+                data-season-filter="A/W"
+                aria-pressed="false"
+                aria-label="A/W"
+              >
                 A/W
               </button>
-              <button type="button" class="archive-drawer-sort-chip" data-season-filter="S/S" aria-pressed="false">
+              <button
+                type="button"
+                class="archive-drawer-sort-chip season-toggle"
+                data-season-filter="S/S"
+                aria-pressed="false"
+                aria-label="S/S"
+              >
                 S/S
               </button>
             </div>
@@ -643,6 +593,18 @@
             ></div>
           </section>
           <section
+            class="archive-filter-drawer__block archive-filter-drawer__block--brands"
+            aria-labelledby="archive-drawer-brands-heading"
+          >
+            <h3 class="archive-filter-drawer__section-heading" id="archive-drawer-brands-heading">Brands</h3>
+            <div
+              id="archive-drawer-brand-chips"
+              class="archive-filter-drawer__chip-row archive-filter-drawer__brand-chips"
+              role="group"
+              aria-labelledby="archive-drawer-brands-heading"
+            ></div>
+          </section>
+          <section
             class="archive-filter-drawer__block archive-filter-drawer__block--colour"
             aria-labelledby="archive-colour-filter-label"
           >
@@ -653,25 +615,6 @@
               aria-labelledby="archive-colour-filter-label"
               id="archive-colour-chips"
             ></div>
-          </section>
-          <section
-            class="archive-filter-drawer__block archive-filter-drawer__block--price"
-            aria-labelledby="archive-drawer-price-heading"
-          >
-            <h3 class="archive-filter-drawer__section-heading" id="archive-drawer-price-heading">Price</h3>
-            <div
-              class="archive-filter-drawer__chip-row"
-              id="archive-drawer-price-chips"
-              role="group"
-              aria-labelledby="archive-drawer-price-heading"
-            >
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="price-asc" aria-pressed="false">
-                Low to high
-              </button>
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="price-desc" aria-pressed="false">
-                High to low
-              </button>
-            </div>
           </section>
         </div>
         <div class="archive-filter-drawer__footer">

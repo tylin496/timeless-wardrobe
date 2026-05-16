@@ -11,10 +11,10 @@
  */
 
 const WARDROBE_ITEMS = [
-  // ——— A/W – Country Classics ———
+  // ——— A/W – English Heritage ———
   {
     id: "cultum-brown-glen-check-tweed-jacket",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Jackets",
     brand: "CULTUM",
     name: "Brown Glen Check Tweed Jacket",
@@ -28,7 +28,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "jpress-grey-herringbone-tweed-jacket",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Jackets",
     brand: "J. PRESS",
     name: "Grey Herringbone Tweed Jacket",
@@ -41,7 +41,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "brooks-brothers-light-brown-houndstooth-tweed-jacket",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Jackets",
     brand: "BROOKS BROTHERS",
     name: "Light Brown Houndstooth Tweed Jacket",
@@ -54,7 +54,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "brooks-brothers-golden-fleece-navy-twill-blazer",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Jackets",
     brand: "BROOKS BROTHERS",
     name: "Golden Fleece Navy Twill Blazer",
@@ -67,7 +67,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "acme-cultum-navy-double-breasted-super-120s-blazer",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Jackets",
     brand: "ACME CULTUM",
     name: "Navy Double-Breasted Super 120s Blazer",
@@ -80,7 +80,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "spier-mackay-camel-hair-polo-coat",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Outerwear",
     brand: "SPIER & MACKAY",
     name: "Camel Hair Polo Coat",
@@ -93,7 +93,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "barbour-sage-beaufort-waxed-jacket",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Outerwear",
     brand: "BARBOUR",
     name: "Sage Beaufort Waxed Jacket",
@@ -106,7 +106,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "burberrys-beige-single-breasted-balmacaan-coat",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Outerwear",
     brand: "BURBERRYS",
     name: "Beige Single-Breasted Balmacaan Coat",
@@ -119,7 +119,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "private-white-vc-midnight-navy-ventile-harrington",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Outerwear",
     brand: "Private White VC",
     name: "Midnight Navy Ventile Harrington",
@@ -132,7 +132,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "muji-ecru-sherpa-fleece-vest-olive-trim",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Outerwear",
     brand: "MUJI",
     name: "Ecru Sherpa Fleece Vest (Olive Trim)",
@@ -145,7 +145,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "muji-oatmeal-beige-heavy-aran-wool-cable-knit-jumper",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Mid Layer",
     brand: "MUJI",
     name: "Oatmeal Beige Heavy Aran Wool Cable-Knit Jumper",
@@ -158,7 +158,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "prl-wine-polo-bear-wool-cashmere-jumper",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Mid Layer",
     brand: "PRL",
     name: "Wine Polo Bear Wool-Cashmere Jumper",
@@ -171,7 +171,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "the-engineer-brown-mixed-fair-isle-wool-vest",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Mid Layer",
     brand: "THE ENGINEER",
     name: "Brown Mixed Fair Isle Wool Vest",
@@ -184,7 +184,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "uniqlo-ecru-cricket-cable-knit-jumper-vest",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Mid Layer",
     brand: "UNIQLO",
     name: "Ecru Cricket Cable-Knit Jumper Vest (Navy / Yellow Trim, Cotton-Acrylic)",
@@ -197,7 +197,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "muji-dark-navy-wool-high-gauge-v-neck-cardigan",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Mid Layer",
     brand: "MUJI",
     name: "Dark Navy Wool High-Gauge Lightweight V-Neck Cardigan",
@@ -210,7 +210,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "uniqlo-beige-kataaze-knit-mock-neck",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Inner Layer",
     brand: "UNIQLO",
     name: "Beige Kataaze Knit Mock Neck (Acrylic Blend)",
@@ -223,7 +223,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "prl-washed-wine-cream-rugby-shirt",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Inner Layer",
     brand: "PRL",
     name: "Washed Wine / Cream Rugby Shirt",
@@ -236,7 +236,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "muji-washed-off-white-breton-boat-neck-tee",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Inner Layer",
     brand: "MUJI",
     name: "Washed Off-White Breton-Stripe Midweight Boat-Neck 3/4 Sleeve T-Shirt",
@@ -249,7 +249,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "the-engineer-black-cotton-long-sleeve-polo",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Inner Layer",
     brand: "THE ENGINEER",
     name: "Black Cotton Long-Sleeve Polo",
@@ -262,7 +262,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "muji-black-fine-knit-wool-ribbed-turtleneck",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Inner Layer",
     brand: "MUJI",
     name: "Black Fine Knit Wool Ribbed Turtle Neck Lightweight Jumper",
@@ -275,7 +275,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "uniqlo-ocbd-shirt",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Shirts",
     brand: "UNIQLO",
     name: "OCBD Shirt",
@@ -315,7 +315,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "llbean-camel-corduroy-trousers",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Bottoms",
     brand: "L.L.BEAN",
     name: "Camel Corduroy Trousers",
@@ -328,7 +328,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "uniqlo-tuck-trousers",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Bottoms",
     brand: "UNIQLO",
     name: "Tuck Trousers",
@@ -356,7 +356,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "uniqlo-jwa-straight-jeans",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Bottoms",
     brand: "UNIQLO",
     name: "× JWA Straight Jeans (Light Wash Blue / Dark Orange Brown all-season)",
@@ -369,7 +369,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "muji-cream-wide-leg-jeans",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Bottoms",
     brand: "MUJI",
     name: "Cream Wide-Leg Jeans (all-season)",
@@ -382,7 +382,7 @@ const WARDROBE_ITEMS = [
   },
   {
     id: "gu-olive-brown-wide-straight-trousers",
-    section: "A/W – Country Classics",
+    section: "A/W – English Heritage",
     category: "Bottoms",
     brand: "GU",
     name: "Olive brown wide-straight trousers (crease front, airy poly-blend, all-season)",

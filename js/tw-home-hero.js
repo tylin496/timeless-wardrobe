@@ -3,12 +3,30 @@
  * Keeps sessionStorage in sync with app.js `pickHomeHeroImagePath`.
  */
 (function () {
-  const HOME_HERO_IMAGES = [
+  const FALLBACK_HOME_HERO_IMAGES = [
     "images/heroes/hero-country-classics.png",
     "images/heroes/hero-editorial-01.png",
     "images/heroes/hero-editorial-02.png",
   ];
-  const HOME_HERO_STORAGE_KEY = "heroImage";
+  const HOME_HERO_IMAGES =
+    Array.isArray(window.TW_HOME_HERO_IMAGES) && window.TW_HOME_HERO_IMAGES.length
+      ? window.TW_HOME_HERO_IMAGES
+      : FALLBACK_HOME_HERO_IMAGES;
+  const HOME_HERO_STORAGE_KEY = "heroMedia-v2";
+  const HOME_HERO_VIDEO_EXT = /\.(mp4|webm)(\?|#|$)/i;
+
+  function isHomeHeroVideoPath(src) {
+    return HOME_HERO_VIDEO_EXT.test(String(src ?? "").trim());
+  }
+
+  function homeHeroMediaUrl(src) {
+    const path = String(src ?? "").trim();
+    if (!path) return "";
+    return path
+      .split("/")
+      .map((part) => encodeURIComponent(part))
+      .join("/");
+  }
 
   function pickHomeHeroImagePath() {
     try {
@@ -27,14 +45,14 @@
   }
 
   const hero = pickHomeHeroImagePath();
+  const href = homeHeroMediaUrl(hero);
   const link = document.createElement("link");
   link.rel = "preload";
-  link.as = "image";
-  link.href = hero;
-  link.setAttribute("fetchpriority", "high");
+  link.as = isHomeHeroVideoPath(hero) ? "video" : "image";
+  link.href = href;
+  if (!isHomeHeroVideoPath(hero)) link.setAttribute("fetchpriority", "high");
   link.setAttribute("data-tw-hero-preload", hero);
   document.head.appendChild(link);
 
-  /* Other carousel slides are warmed after mount via app.js `preloadHomeHeroImage`
-     (link preload for unused slides triggers "preloaded but not used" warnings). */
+  /* Other carousel slides are warmed after mount via app.js `preloadHomeHeroImage`. */
 })();

@@ -4,6 +4,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/favicon.ico", "destination": "/favicon-light.png" }
+    { "source": "/archive", "destination": "/archive.html" },
+    { "source": "/favicon.ico", "destination": "/icon.svg" }
   ]
 }

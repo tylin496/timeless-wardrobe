@@ -15,6 +15,16 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const customJsonPath = path.join(root, "data", "custom-items.json");
+const heroMediaExtensions = new Set([
+  ".avif",
+  ".gif",
+  ".jpg",
+  ".jpeg",
+  ".mp4",
+  ".png",
+  ".webm",
+  ".webp",
+]);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -27,8 +37,9 @@ const MIME = {
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
   ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
   ".woff2": "font/woff2",
 };
 
@@ -79,7 +90,7 @@ async function handlePutCustomItems(req, res) {
   }
 }
 
-async function serveFaviconPng(/** @type {http.IncomingMessage} */ req, /** @type {http.ServerResponse} */ res, absFile) {
+async function serveFaviconAsset(/** @type {http.IncomingMessage} */ req, /** @type {http.ServerResponse} */ res, absFile) {
   if (!isPathInsideRoot(absFile)) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Not found");
@@ -88,8 +99,9 @@ async function serveFaviconPng(/** @type {http.IncomingMessage} */ req, /** @typ
   try {
     const st = await fs.stat(absFile);
     if (!st.isFile()) return false;
+    const ext = path.extname(absFile).toLowerCase();
     res.writeHead(200, {
-      "Content-Type": "image/png",
+      "Content-Type": MIME[ext] || "application/octet-stream",
       "Cache-Control": "public, max-age=86400",
       "Content-Length": String(st.size),
     });
@@ -104,17 +116,50 @@ async function serveFaviconPng(/** @type {http.IncomingMessage} */ req, /** @typ
   }
 }
 
+async function buildHomeHeroManifestSource() {
+  const heroDir = path.join(root, "images", "heroes");
+  let entries = [];
+  try {
+    entries = await fs.readdir(heroDir, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  const images = entries
+    .filter((entry) => entry.isFile() && heroMediaExtensions.has(path.extname(entry.name).toLowerCase()))
+    .map((entry) => `images/heroes/${entry.name}`)
+    .sort((a, b) => a.localeCompare(b, "en"));
+  return `window.TW_HOME_HERO_IMAGES = ${JSON.stringify(images, null, 2)};\n`;
+}
+
+async function serveHomeHeroManifest(/** @type {http.ServerResponse} */ res) {
+  const source = await buildHomeHeroManifestSource();
+  res.writeHead(200, {
+    "Content-Type": "text/javascript; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Content-Length": String(Buffer.byteLength(source)),
+  });
+  res.end(source);
+}
+
 async function handleStatic(/** @type {http.IncomingMessage} */ req, /** @type {http.ServerResponse} */ res) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   let pathname = decodeURIComponent(url.pathname);
+  if (pathname === "/js/tw-home-hero-manifest.js") {
+    await serveHomeHeroManifest(res);
+    return;
+  }
   const faviconRoutes = {
-    "/favicon.ico": "favicon-light-32.png",
-    "/favicon-light.png": "favicon-light-32.png",
-    "/favicon-dark.png": "favicon-dark-32.png",
+    "/favicon.ico": "icon.svg",
+    "/favicon.png": "favicon.png",
+    "/icon.svg": "icon.svg",
   };
   if (pathname in faviconRoutes) {
     const absFile = path.join(root, faviconRoutes[pathname]);
-    if (await serveFaviconPng(req, res, absFile)) return;
+    if (await serveFaviconAsset(req, res, absFile)) return;
+    if (pathname === "/favicon.png") {
+      const svgFallback = path.join(root, "icon.svg");
+      if (await serveFaviconAsset(req, res, svgFallback)) return;
+    }
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Not found");
     return;
@@ -125,6 +170,7 @@ async function handleStatic(/** @type {http.IncomingMessage} */ req, /** @type {
     return;
   }
   let rel = pathname === "/" ? "index.html" : pathname.replace(/^\//, "");
+  if (rel === "archive") rel = "archive.html";
   rel = path.normalize(rel).replace(/^(\.\.(\/|\\|$))+/, "");
   let filePath = path.join(root, rel);
   if (!isPathInsideRoot(filePath)) {

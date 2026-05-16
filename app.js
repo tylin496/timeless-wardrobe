@@ -118,6 +118,61 @@
     return "";
   }
 
+  /** Small swatch beside item-edit colour code inputs (parses `#rgb` / `#rrggbb` from code, name, or label). */
+  function syncItemEditColourCodePreviewEl(previewEl, sources) {
+    if (!(previewEl instanceof HTMLElement)) return;
+    const hex = extractSwatchHexFromVariant({
+      colourCode: String(sources?.colourCode ?? "").trim(),
+      colour: String(sources?.colour ?? "").trim(),
+      label: String(sources?.label ?? "").trim(),
+    });
+    previewEl.classList.toggle("item-edit-colour-code-preview--filled", Boolean(hex));
+    previewEl.classList.toggle("item-edit-colour-code-preview--empty", !hex);
+    if (hex) {
+      previewEl.style.backgroundColor = hex;
+      if (hexFillLuminance(hex) < 0.28) {
+        previewEl.style.boxShadow =
+          "inset 0 0 0 1px rgba(255, 255, 255, 0.38), 0 0 0 1px rgba(255, 255, 255, 0.22)";
+      } else {
+        previewEl.style.boxShadow = "inset 0 0 0 1px rgba(0, 0, 0, 0.18)";
+      }
+      previewEl.setAttribute("title", hex);
+    } else {
+      previewEl.style.backgroundColor = "";
+      previewEl.style.boxShadow = "";
+      previewEl.removeAttribute("title");
+    }
+  }
+
+  function createItemEditColourCodePreview() {
+    const preview = document.createElement("span");
+    preview.className = "item-edit-colour-code-preview item-edit-colour-code-preview--empty";
+    preview.setAttribute("aria-hidden", "true");
+    return preview;
+  }
+
+  /**
+   * @param {{ input: HTMLInputElement, preview: HTMLElement, colourInput?: HTMLInputElement | null, labelInput?: HTMLInputElement | null }} opts
+   */
+  function wireItemEditColourCodePreview(opts) {
+    const input = opts?.input;
+    const preview = opts?.preview;
+    if (!(input instanceof HTMLInputElement) || !(preview instanceof HTMLElement)) return;
+    const colourInput = opts?.colourInput instanceof HTMLInputElement ? opts.colourInput : null;
+    const labelInput = opts?.labelInput instanceof HTMLInputElement ? opts.labelInput : null;
+    const run = () => {
+      syncItemEditColourCodePreviewEl(preview, {
+        colourCode: input.value,
+        colour: colourInput?.value ?? "",
+        label: labelInput?.value ?? "",
+      });
+    };
+    input.addEventListener("input", run);
+    colourInput?.addEventListener("input", run);
+    labelInput?.addEventListener("input", run);
+    run();
+  }
+
   /** Relative luminance 0–1 for `#rrggbb` (sRGB). */
   function hexFillLuminance(hex) {
     const s = String(hex ?? "").trim();
@@ -233,7 +288,12 @@
       heroHost.querySelector(".card__gallery-strip")?.remove();
       wireCoverImageWithFallbacks(heroImg, projected, {
         host: heroHost,
+        coverRenderWidth: ARCHIVE_GRID_CARD_RENDER.width,
+        coverRenderHeight: ARCHIVE_GRID_CARD_RENDER.height,
+        coverRenderQuality: ARCHIVE_GRID_CARD_RENDER.quality,
+        coverRenderResize: ARCHIVE_GRID_CARD_RENDER.resize,
         onResolved(url) {
+          heroImg.dataset.coverSrc = url;
           const ti = heroHost.querySelector(".card__gallery-strip .card__gallery-thumb.is-active img");
           if (ti) ti.src = url;
         },
@@ -442,6 +502,9 @@
   const ARCHIVE_SCROLL_RESTORE_KEY = "timeless-wardrobe-archive-scroll-v1";
   /** Same-tab return → restore category / season / type / search (same TTL as scroll). */
   const ARCHIVE_BROWSE_RESTORE_KEY = "timeless-wardrobe-archive-browse-v1";
+  /** After item save + full navigation, pin the saved row so a stale cloud read cannot revert new images. */
+  const WARDROBE_SAVE_PIN_KEY = "timeless-wardrobe-save-pin-v1";
+  const WARDROBE_SAVE_PIN_TTL_MS = 3 * 60 * 1000;
   const TW_ADMIN_MODE_STORAGE_KEY = "adminMode";
 
   /** Local dev hosts (`npm run dev` uses 127.0.0.1). */
@@ -548,14 +611,15 @@
   /** Homepage hero landing (`index.html`); logo and “Timeless Wardrobe” breadcrumb root. */
   const SITE_HOME_URL = "/";
   const ARCHIVE_PAGE_PATH = "/archive.html";
-  const ARCHIVE_HOME_MAIN_URL = `${ARCHIVE_PAGE_PATH}#main`;
+  const ARCHIVE_HOME_MAIN_URL = ARCHIVE_PAGE_PATH;
   const ARCHIVE_SCROLL_TTL_MS = 20 * 60 * 1000;
 
   const ARCHIVE_SORT_MODE_KEY = "timeless-wardrobe-archive-sort-v1";
   /** User hid the “browser-only storage” banner; clearing this key shows it again. */
   const LOCAL_DATA_RISK_BANNER_DISMISSED_KEY = "timeless-wardrobe-dismiss-local-risk-v1";
   const PRICE_CURRENCY_CODES = ["TWD", "USD", "JPY", "CNY"];
-  const ARCHIVE_SORT_MODES = ["archive", "date-desc", "brand-asc", "brand-desc", "price-asc", "price-desc"];
+  const ARCHIVE_SORT_MODES = ["price-asc", "price-desc", "date-desc", "date-asc"];
+  const ARCHIVE_DEFAULT_SORT_MODE = "date-desc";
   /** Basic colour archive filter: uses stored `basicColour` only when set; otherwise infers from colour / fabric / codes. */
   const BASIC_COLOUR_FILTER_KEY = "timeless-wardrobe-basic-colour-v1";
 
@@ -566,16 +630,16 @@
     try {
       const v = String(localStorage.getItem(ARCHIVE_SORT_MODE_KEY) || "").trim();
       if (ARCHIVE_SORT_MODES.includes(v)) return v;
-      /* Legacy values from older sort dropdown — map to closest supported mode. */
-      if (v === "date-asc") return "archive";
+      if (v === "date-asc") return "date-asc";
+      if (v === "archive" || v === "brand-asc" || v === "brand-desc") return ARCHIVE_DEFAULT_SORT_MODE;
     } catch {
       /* */
     }
-    return "archive";
+    return ARCHIVE_DEFAULT_SORT_MODE;
   }
 
   function persistArchiveSortMode(v) {
-    const ok = ARCHIVE_SORT_MODES.includes(v) ? v : "archive";
+    const ok = ARCHIVE_SORT_MODES.includes(v) ? v : ARCHIVE_DEFAULT_SORT_MODE;
     try {
       localStorage.setItem(ARCHIVE_SORT_MODE_KEY, ok);
     } catch {
@@ -704,6 +768,8 @@
   /** Archive list prices are converted to TWD for totals, sort, and card display. */
   const archiveDisplayCurrency = "TWD";
   let basicColourFilter = loadPersistedBasicColourFilter();
+  /** @type {Set<string>} */
+  let selectedBrandFilters = new Set();
 
   /**
    * Flatten optional price from top-level or `metadata` into `item.price` / `item.priceCurrency`.
@@ -1258,11 +1324,14 @@
   /** Seed / DB `category` → short browse label in drill-down grid. */
   const RECORD_CATEGORY_LABELS = {
     Jackets: "Tailoring",
+    Tailoring: "Tailoring",
     Outerwear: "Outerwear",
     "Mid Layer": "Layering",
     "Inner Layer": "Layering",
+    Layering: "Layering",
     Shirts: "Tops",
     Bottoms: "Trousers",
+    Trousers: "Trousers",
     Tops: "Tops",
     Footwear: "Footwear",
     Fragrance: "Fragrance",
@@ -1291,6 +1360,40 @@
     const r = String(raw ?? "").trim();
     if (!r) return "";
     return RECORD_CATEGORY_LABELS[r] || r;
+  }
+
+  function recordTypeDisplayLabel(raw) {
+    return friendlyRecordCategory(raw) || String(raw ?? "").trim();
+  }
+
+  /** Same browse label (e.g. Mid Layer + Inner Layer → Layering). */
+  function recordTypeDrillKeysEquivalent(a, b) {
+    const aa = String(a ?? "").trim();
+    const bb = String(b ?? "").trim();
+    if (!aa || !bb) return aa === bb;
+    if (aa === bb) return true;
+    return recordTypeDisplayLabel(aa).toLowerCase() === recordTypeDisplayLabel(bb).toLowerCase();
+  }
+
+  /**
+   * One drill key per display label; keeps lowest `RECORD_CATEGORY_RANK` raw key as canonical.
+   * @returns {{ raw: string, label: string }[]}
+   */
+  function collapseRecordTypeKeysByDisplayLabel(keys, browseSlot) {
+    const sorted = sortRecordTypeKeysForSlot(browseSlot, [...new Set(keys.filter(Boolean))]);
+    const byLabel = new Map();
+    for (const raw of sorted) {
+      const label = recordTypeDisplayLabel(raw);
+      const norm = label.toLowerCase();
+      if (!norm || byLabel.has(norm)) continue;
+      byLabel.set(norm, { raw, label });
+    }
+    return [...byLabel.values()].sort((a, b) => {
+      const ra = RECORD_CATEGORY_RANK[a.raw] ?? 800;
+      const rb = RECORD_CATEGORY_RANK[b.raw] ?? 800;
+      if (ra !== rb) return ra - rb;
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
   }
 
   /** For clipboard export: keep paste small — omit base64 bodies. */
@@ -1584,11 +1687,14 @@
   const RECORD_CATEGORY_RANK = {
     Outerwear: 0,
     Jackets: 1,
+    Tailoring: 1,
     "Mid Layer": 2,
     "Inner Layer": 3,
+    Layering: 2,
     Shirts: 4,
     Tops: 5,
     Bottoms: 6,
+    Trousers: 6,
     Footwear: 7,
     Beater: 54,
     "Dress watch": 50,
@@ -2097,6 +2203,73 @@
     return t;
   }
 
+  /** Keep in-memory cache-bust nonce when cloud list refresh returns the same `id`. */
+  function carryForwardMediaNonce(fromRow, toRow) {
+    const next = { ...toRow };
+    const n = fromRow?.__displayNonce;
+    if (typeof n === "number" && Number.isFinite(n)) {
+      /** @type {any} */ (next).__displayNonce = Math.floor(n);
+    }
+    return next;
+  }
+
+  /** Persist a just-saved row across `item.html` → archive navigation (cloud list can lag). */
+  function pinWardrobeSaveToSession(row) {
+    const id = String(row?.id ?? "").trim();
+    if (!id) return;
+    try {
+      sessionStorage.setItem(
+        WARDROBE_SAVE_PIN_KEY,
+        JSON.stringify({ t: Date.now(), row: { ...row, id } })
+      );
+    } catch {
+      /* private mode / disabled storage */
+    }
+  }
+
+  /** @returns {object | null} */
+  function consumePinnedWardrobeSaveFromSession() {
+    try {
+      const raw = sessionStorage.getItem(WARDROBE_SAVE_PIN_KEY);
+      if (!raw) return null;
+      sessionStorage.removeItem(WARDROBE_SAVE_PIN_KEY);
+      const o = JSON.parse(raw);
+      const t = Number(o?.t);
+      if (!Number.isFinite(t) || Date.now() - t > WARDROBE_SAVE_PIN_TTL_MS) return null;
+      const row = o?.row;
+      if (!row || typeof row !== "object" || row.id == null) return null;
+      return normalizeItemDerivedFields({ ...row, id: String(row.id) });
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Prefer freshly saved media over a cloud row that may still be stale (read-after-write lag).
+   * @param {object | null | undefined} pinned
+   * @param {object} cloudRow
+   */
+  function mergeCloudWardrobeRowWithPinnedSave(pinned, cloudRow) {
+    if (!pinned || pinned.id == null) return { ...cloudRow };
+    const id = String(pinned.id);
+    if (String(cloudRow?.id ?? "") !== id) return { ...cloudRow };
+    const merged = normalizeItemDerivedFields({
+      ...cloudRow,
+      ...pinned,
+      id,
+      image: String(pinned.image ?? cloudRow.image ?? "").trim(),
+      gallery: Array.isArray(pinned.gallery)
+        ? [...pinned.gallery]
+        : Array.isArray(cloudRow.gallery)
+          ? [...cloudRow.gallery]
+          : undefined,
+      colourVariants: Array.isArray(pinned.colourVariants)
+        ? pinned.colourVariants
+        : cloudRow.colourVariants,
+    });
+    return carryForwardMediaNonce(pinned, merged);
+  }
+
   function storagePathFromWardrobeImageUrl(url) {
     const s = String(url ?? "").trim().split("?")[0];
     if (!s || !/^https?:\/\//i.test(s)) return "";
@@ -2145,7 +2318,8 @@
     }
     u.searchParams.set("width", String(w));
     u.searchParams.set("height", String(h));
-    u.searchParams.set("resize", "cover");
+    const resizeMode = transformOpts?.resize === "contain" ? "contain" : "cover";
+    u.searchParams.set("resize", resizeMode);
 
     const quality = transformOpts?.quality;
     if (typeof quality === "number" && Number.isFinite(quality)) {
@@ -2158,7 +2332,7 @@
       u.searchParams.set("zoom", String(zoom));
     }
 
-    return u.href;
+    return withWardrobeImageCacheBust(u.href, /** @type {any} */ (transformOpts?.item));
   }
 
   async function deleteWardrobeImageUrlFromCloud(url) {
@@ -2594,21 +2768,66 @@
   function readSeasonNavFromLocalStorage() {
     try {
       const v = localStorage.getItem(SEASON_NAV_STORAGE_KEY);
-      if (v === "A/W" || v === "S/S" || v === "All") return v;
+      return normalizeSeasonNavToken(v);
     } catch {
       /* private mode / disabled */
     }
-    return "All";
+    return null;
+  }
+
+  function normalizeSeason(value) {
+    if (value == null || value === "") return null;
+    const v = String(value).toLowerCase().trim();
+    if (v === "ss" || v === "s/s" || v.includes("spring") || v.includes("summer")) return "SS";
+    if (v === "aw" || v === "a/w" || v.includes("autumn") || v.includes("winter")) return "AW";
+    if (v.includes("all")) return "ALL";
+    return null;
+  }
+
+  function normalizeSeasonNavToken(raw) {
+    const normalized = normalizeSeason(raw);
+    return normalized === "SS" || normalized === "AW" ? normalized : null;
+  }
+
+  function seasonNavQueryToken(season) {
+    if (season === "SS") return "SS";
+    if (season === "AW") return "AW";
+    return "";
+  }
+
+  function isArchiveLocation() {
+    const path = String(globalThis.location?.pathname ?? "");
+    return path === "/archive" || path === "/archive.html";
+  }
+
+  function readSeasonNavFromUrl() {
+    if (!isArchiveLocation()) return null;
+    try {
+      return normalizeSeasonNavToken(new URLSearchParams(globalThis.location.search).get("season"));
+    } catch {
+      return null;
+    }
+  }
+
+  function archiveUrlHasSeasonParam() {
+    if (!isArchiveLocation()) return false;
+    try {
+      return new URLSearchParams(globalThis.location.search).has("season");
+    } catch {
+      return false;
+    }
   }
 
   function loadPersistedSeasonNav() {
+    if (isArchiveLocation()) return readSeasonNavFromUrl();
     return readSeasonNavFromLocalStorage();
   }
 
   /** Season strip (A/W · S/S · All) stays in localStorage only — ephemeral UI, not synced to Supabase. */
   function persistSeasonNav() {
     try {
-      localStorage.setItem(SEASON_NAV_STORAGE_KEY, seasonNavFilter);
+      if (seasonNavFilter) localStorage.setItem(SEASON_NAV_STORAGE_KEY, seasonNavFilter);
+      else localStorage.removeItem(SEASON_NAV_STORAGE_KEY);
     } catch {
       /* ignore */
     }
@@ -2650,10 +2869,7 @@
   }
 
   function applySeasonNavFromLocalStorage() {
-    const v = readSeasonNavFromLocalStorage();
-    if (v === "A/W" || v === "S/S" || v === "All") {
-      seasonNavFilter = v;
-    }
+    seasonNavFilter = isArchiveLocation() ? readSeasonNavFromUrl() : readSeasonNavFromLocalStorage();
   }
 
   function hydrateArchiveStateFromLocalStorageOnly() {
@@ -2880,6 +3096,7 @@
       String(archiveSearchWithinRecordCategory ?? "").trim(),
       archiveSearchBrowseAllSlots ? "1" : "0",
       basicColourFilter,
+      [...selectedBrandFilters].sort().join("\x1f"),
       archiveSortMode,
       archiveDisplayCurrency,
     ].join("\x1e");
@@ -2977,24 +3194,22 @@
     const gridHost = document.getElementById("site-header-search-featured-subcats");
     if (!gridHost) return;
 
-    const popularCoverW = 440;
-    const popularCoverH = 550;
-    const popularCoverZoom = 1.12;
+    const popularCoverW = 480;
+    const popularCoverH = 640;
     const popularCoverQuality = 88;
-    const mainHref = document.getElementById("grid") ? "#main" : ARCHIVE_HOME_MAIN_URL;
+    const mainHref = ARCHIVE_HOME_MAIN_URL;
 
     /** @type {{ slot: string, sub: string, pool: object[], score: number, coverN: number }[]} */
     const candidates = [];
     const seenKeys = new Set();
     for (const slot of SLOT_OPTIONS) {
       const keys = drillSubcategoryKeysFromPool(slot, items);
-      for (const sub of keys) {
-        const dk = String(sub ?? "").trim();
-        if (!dk || isBannedPopularCategoryTitleLabel(dk)) continue;
-        const k = `${slot}\0${dk}`;
+      for (const { raw: dk, label } of collapseRecordTypeKeysByDisplayLabel(keys, slot)) {
+        if (!dk || isBannedPopularCategoryTitleLabel(dk) || isBannedPopularCategoryTitleLabel(label)) continue;
+        const k = `${slot}\0${label.toLowerCase()}`;
         if (seenKeys.has(k)) continue;
         seenKeys.add(k);
-        const pool = items.filter((it) => itemSlot(it) === slot && recordCategoryForDrill(it, slot) === dk);
+        const pool = poolItemsMatchingRecordTypeDrill(items, slot, dk);
         if (!pool.length) continue;
         const withCover = pool.filter((it) => buildCoverCandidates(it).length > 0);
         const coverN = withCover.length;
@@ -3044,8 +3259,8 @@
           missingClass: "site-header__search-category-card__media--missing",
           coverRenderWidth: popularCoverW,
           coverRenderHeight: popularCoverH,
-          coverRenderZoom: popularCoverZoom,
           coverRenderQuality: popularCoverQuality,
+          coverRenderResize: "contain",
         });
       } else {
         media.classList.add("site-header__search-category-card__media--missing");
@@ -3097,13 +3312,35 @@
     return s;
   }
 
-  /** Homepage hero pool — one image per session (sessionStorage), random on first visit / hard refresh. */
-  const HOME_HERO_IMAGES = [
+  /** Homepage hero pool — images + MP4/WebM (sessionStorage picks first slide). */
+  const FALLBACK_HOME_HERO_IMAGES = [
     "images/heroes/hero-country-classics.png",
     "images/heroes/hero-editorial-01.png",
     "images/heroes/hero-editorial-02.png",
   ];
-  const HOME_HERO_STORAGE_KEY = "heroImage";
+  const HOME_HERO_IMAGES =
+    Array.isArray(globalThis.TW_HOME_HERO_IMAGES) && globalThis.TW_HOME_HERO_IMAGES.length
+      ? globalThis.TW_HOME_HERO_IMAGES
+      : FALLBACK_HOME_HERO_IMAGES;
+  const HOME_HERO_STORAGE_KEY = "heroMedia-v2";
+  const HOME_HERO_VIDEO_EXT = /\.(mp4|webm)(\?|#|$)/i;
+
+  function isHomeHeroVideoPath(src) {
+    return HOME_HERO_VIDEO_EXT.test(String(src ?? "").trim());
+  }
+
+  function homeHeroMediaUrl(src) {
+    const path = String(src ?? "").trim();
+    if (!path) return "";
+    return path
+      .split("/")
+      .map((part) => encodeURIComponent(part))
+      .join("/");
+  }
+
+  function homeHeroVideoMime(path) {
+    return /\.webm(\?|#|$)/i.test(String(path ?? "")) ? "video/webm" : "video/mp4";
+  }
 
   function pickHomeHeroImagePath() {
     try {
@@ -3124,12 +3361,13 @@
   function ensureHomeHeroPreloadLink() {
     if (!document.body?.classList.contains("home-page")) return;
     const hero = pickHomeHeroImagePath();
-    if (document.querySelector(`link[data-tw-hero-preload="${CSS.escape(hero)}"]`)) return;
+    const href = homeHeroMediaUrl(hero);
+    if (!href || document.querySelector(`link[data-tw-hero-preload="${CSS.escape(hero)}"]`)) return;
     const link = document.createElement("link");
     link.rel = "preload";
-    link.as = "image";
-    link.href = hero;
-    link.setAttribute("fetchpriority", "high");
+    link.as = isHomeHeroVideoPath(hero) ? "video" : "image";
+    link.href = href;
+    if (!isHomeHeroVideoPath(hero)) link.setAttribute("fetchpriority", "high");
     link.dataset.twHeroPreload = hero;
     document.head.appendChild(link);
   }
@@ -3173,13 +3411,101 @@
   function preloadHomeHeroImage(src) {
     const path = String(src ?? "").trim();
     if (!path) return;
+    const url = homeHeroMediaUrl(path);
     try {
+      if (isHomeHeroVideoPath(path)) {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.muted = true;
+        video.src = url;
+        video.load();
+        return;
+      }
       const img = new Image();
       img.decoding = "async";
-      img.src = path;
+      img.src = url;
     } catch {
       /* ignore */
     }
+  }
+
+  function createHomeHeroSlideMedia(src, { eager = false, priority = "low" } = {}) {
+    const url = homeHeroMediaUrl(src);
+    if (isHomeHeroVideoPath(src)) {
+      const video = document.createElement("video");
+      video.className = "ed-lp__hero-layer-img ed-lp__hero-layer-video";
+      video.muted = true;
+      video.defaultMuted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.autoplay = eager;
+      video.controls = false;
+      video.preload = eager ? "auto" : "metadata";
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      video.setAttribute("disablepictureinpicture", "");
+      video.disablePictureInPicture = true;
+      const source = document.createElement("source");
+      source.src = url;
+      source.type = homeHeroVideoMime(src);
+      video.appendChild(source);
+      return video;
+    }
+    const img = document.createElement("img");
+    img.className = "ed-lp__hero-layer-img";
+    img.alt = "";
+    img.src = url;
+    img.fetchPriority = priority;
+    img.loading = eager ? "eager" : "lazy";
+    img.decoding = "async";
+    return img;
+  }
+
+  function playHomeHeroVideo(video) {
+    if (!video) return;
+    const attempt = () => {
+      video.play().catch(() => {});
+    };
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) attempt();
+    else {
+      video.addEventListener("loadeddata", attempt, { once: true });
+      video.addEventListener("canplay", attempt, { once: true });
+    }
+  }
+
+  function syncHomeHeroSlideMedia(slides, activeIndex) {
+    slides.forEach((slide, i) => {
+      const video = slide.querySelector("video.ed-lp__hero-layer-video");
+      if (!video) return;
+      if (i === activeIndex) playHomeHeroVideo(video);
+      else {
+        video.pause();
+        try {
+          video.currentTime = 0;
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }
+
+  const HERO_SLIDE_MOTION_CLASSES = [
+    "is-prep-enter-next",
+    "is-prep-enter-prev",
+    "is-exit-next",
+    "is-exit-prev",
+    "is-no-transition",
+  ];
+
+  function repairHomeHeroSlideVisibility(slides, preferredIndex = 0) {
+    if (!slides.length) return;
+    let index = slides.findIndex((s) => s.classList.contains("is-active"));
+    if (index < 0) index = preferredIndex;
+    slides.forEach((slide, i) => {
+      slide.classList.remove(...HERO_SLIDE_MOTION_CLASSES);
+      slide.classList.toggle("is-active", i === index);
+      slide.setAttribute("aria-hidden", i === index ? "false" : "true");
+    });
   }
 
   function initEditorialHomeHeroCarousel(slideCount) {
@@ -3193,9 +3519,17 @@
     if (n < 1) return;
 
     if (carouselUi) carouselUi.hidden = n < 2;
-    if (n < 2) return;
+    if (n < 2) {
+      repairHomeHeroSlideVisibility(slides, 0);
+      syncHomeHeroSlideMedia(slides, slides.findIndex((s) => s.classList.contains("is-active")) || 0);
+      return;
+    }
 
-    if (heroHost.dataset.twHeroCarouselWired === "1") return;
+    if (heroHost.dataset.twHeroCarouselWired === "1") {
+      repairHomeHeroSlideVisibility(slides);
+      syncHomeHeroSlideMedia(slides, slides.findIndex((s) => s.classList.contains("is-active")) || 0);
+      return;
+    }
     heroHost.dataset.twHeroCarouselWired = "1";
 
     let index = slides.findIndex((s) => s.classList.contains("is-active"));
@@ -3207,13 +3541,7 @@
     const reduceMotion = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
     const HERO_SLIDE_MS = 780;
 
-    const slideMotionClasses = [
-      "is-prep-enter-next",
-      "is-prep-enter-prev",
-      "is-exit-next",
-      "is-exit-prev",
-      "is-no-transition",
-    ];
+    const slideMotionClasses = HERO_SLIDE_MOTION_CLASSES;
 
     const autoplayMs = () => 6000 + Math.floor(Math.random() * 2001);
 
@@ -3228,7 +3556,8 @@
         dot.setAttribute("aria-selected", on ? "true" : "false");
         dot.setAttribute("tabindex", on ? "0" : "-1");
       });
-      const nextPath = slides[index]?.querySelector("img")?.getAttribute("src");
+      syncHomeHeroSlideMedia(slides, index);
+      const nextPath = String(slides[index]?.dataset.heroSrc ?? "").trim();
       if (nextPath) preloadHomeHeroImage(nextPath);
     };
 
@@ -3395,8 +3724,7 @@
     scheduleAutoplay();
   }
 
-  function mountEditorialHomeHeroLayers(heroHost) {
-    const paths = orderedHomeHeroImagePaths();
+  function mountEditorialHomeHeroLayers(heroHost, paths = orderedHomeHeroImagePaths()) {
     if (heroHost.dataset.twHeroCarouselMounted === "1") {
       initEditorialHomeHeroCarousel(paths.length);
       return;
@@ -3404,42 +3732,50 @@
 
     heroHost.replaceChildren();
     let firstError = false;
+    const usablePaths = paths.filter((p) => String(p ?? "").trim());
 
-    paths.forEach((src, i) => {
+    usablePaths.forEach((src, i) => {
       const slide = document.createElement("div");
       slide.className = "ed-lp__hero-slide" + (i === 0 ? " is-active" : "");
       slide.dataset.heroSlide = String(i);
+      slide.dataset.heroSrc = src;
       slide.setAttribute("aria-hidden", i === 0 ? "false" : "true");
 
-      const img = document.createElement("img");
-      img.className = "ed-lp__hero-layer-img";
-      img.alt = "";
-      img.src = src;
-      img.fetchPriority = i === 0 ? "high" : "low";
-      img.loading = i === 0 ? "eager" : "lazy";
-      img.decoding = "async";
+      const media = createHomeHeroSlideMedia(src, {
+        eager: i === 0,
+        priority: i === 0 ? "high" : "low",
+      });
 
-      img.addEventListener(
-        "error",
-        () => {
-          if (i !== 0 || firstError) return;
-          firstError = true;
-          heroHost.dataset.twHeroCarouselMounted = "";
-          heroHost.dataset.twHeroCarouselWired = "";
-          mountEditorialHomeHeroCatalogFallback(heroHost);
-          const carouselUi = document.getElementById("ed-lp-hero-carousel");
-          if (carouselUi) carouselUi.hidden = true;
-        },
-        { once: true }
-      );
+      const onFirstSlideMediaError = () => {
+        if (i !== 0 || firstError) return;
+        firstError = true;
+        heroHost.dataset.twHeroCarouselMounted = "";
+        heroHost.dataset.twHeroCarouselWired = "";
+        const tail = usablePaths.slice(1);
+        if (tail.length) {
+          mountEditorialHomeHeroLayers(heroHost, tail);
+          return;
+        }
+        mountEditorialHomeHeroCatalogFallback(heroHost);
+        const carouselUi = document.getElementById("ed-lp-hero-carousel");
+        if (carouselUi) carouselUi.hidden = true;
+      };
 
-      slide.appendChild(img);
+      media.addEventListener("error", onFirstSlideMediaError, { once: true });
+
+      slide.appendChild(media);
       heroHost.appendChild(slide);
       if (i > 0) preloadHomeHeroImage(src);
     });
 
+    if (!usablePaths.length) {
+      mountEditorialHomeHeroCatalogFallback(heroHost);
+      return;
+    }
+
     heroHost.dataset.twHeroCarouselMounted = "1";
-    initEditorialHomeHeroCarousel(paths.length);
+    initEditorialHomeHeroCarousel(usablePaths.length);
+    syncHomeHeroSlideMedia([...heroHost.querySelectorAll(".ed-lp__hero-slide")], 0);
   }
 
   function pickEditorialHeroBackdropItems(pool, maxN) {
@@ -3458,13 +3794,12 @@
     const seenKeys = new Set();
     for (const slot of SLOT_OPTIONS) {
       const keys = drillSubcategoryKeysFromPool(slot, items);
-      for (const sub of keys) {
-        const dk = String(sub ?? "").trim();
-        if (!dk || isBannedPopularCategoryTitleLabel(dk)) continue;
-        const k = `${slot}\0${dk}`;
+      for (const { raw: dk, label } of collapseRecordTypeKeysByDisplayLabel(keys, slot)) {
+        if (!dk || isBannedPopularCategoryTitleLabel(dk) || isBannedPopularCategoryTitleLabel(label)) continue;
+        const k = `${slot}\0${label.toLowerCase()}`;
         if (seenKeys.has(k)) continue;
         seenKeys.add(k);
-        const pool = items.filter((it) => itemSlot(it) === slot && recordCategoryForDrill(it, slot) === dk);
+        const pool = poolItemsMatchingRecordTypeDrill(items, slot, dk);
         if (!pool.length) continue;
         const coverN = pool.filter((it) => buildCoverCandidates(it).length > 0).length;
         const score = pool.length * 10 + coverN * 16;
@@ -3804,6 +4139,10 @@
     wireCoverImageWithFallbacks(img, item, {
       host: media,
       missingClass: "ed-lp__pcard-media--missing",
+      coverRenderWidth: ARCHIVE_GRID_CARD_RENDER.width,
+      coverRenderHeight: ARCHIVE_GRID_CARD_RENDER.height,
+      coverRenderQuality: ARCHIVE_GRID_CARD_RENDER.quality,
+      coverRenderResize: ARCHIVE_GRID_CARD_RENDER.resize,
     });
     const body = document.createElement("div");
     body.className = "ed-lp__pcard-body";
@@ -3847,7 +4186,11 @@
       document.body.style.setProperty("--home-header-nav-height", `${siteHeader.offsetHeight}px`);
     };
 
+    let homeHeaderRowHover = false;
+    const brandNavRow = document.querySelector(".site-header__brand-nav");
+
     const shouldUseSolidHeader = () => {
+      if (!isFiltersNarrowViewport() && homeHeaderRowHover) return true;
       if (document.body.classList.contains("archive-ui--header-search-open")) return true;
       if (document.body.classList.contains("archive-ui--header-submenu-open")) return true;
       if (document.body.classList.contains("archive-ui--styling-board")) return true;
@@ -3857,9 +4200,24 @@
 
     const update = () => {
       syncHeights();
+      if (isFiltersNarrowViewport()) homeHeaderRowHover = false;
       const solid = shouldUseSolidHeader();
       siteHeader.classList.toggle("site-header--overlay", !solid);
       siteHeader.classList.toggle("site-header--solid", solid);
+    };
+
+    const onHomeHeaderRowEnter = () => {
+      if (isFiltersNarrowViewport()) return;
+      homeHeaderRowHover = true;
+      update();
+    };
+
+    const onHomeHeaderRowLeave = (e) => {
+      if (isFiltersNarrowViewport()) return;
+      const to = e.relatedTarget;
+      if (to instanceof Element && brandNavRow?.contains(to)) return;
+      homeHeaderRowHover = false;
+      update();
     };
 
     if (initHomeHeroHeader._wired) {
@@ -3869,6 +4227,9 @@
     initHomeHeroHeader._wired = true;
 
     update();
+
+    brandNavRow?.addEventListener("mouseenter", onHomeHeaderRowEnter);
+    brandNavRow?.addEventListener("mouseleave", onHomeHeaderRowLeave);
     /** @type {ResizeObserver | null} */
     let ro = null;
     if (typeof ResizeObserver !== "undefined") {
@@ -3882,6 +4243,9 @@
     const mo = new MutationObserver(update);
     mo.observe(document.body, { attributes: true, attributeFilter: ["class"] });
     initHomeHeroHeader._teardown = () => {
+      homeHeaderRowHover = false;
+      brandNavRow?.removeEventListener("mouseenter", onHomeHeaderRowEnter);
+      brandNavRow?.removeEventListener("mouseleave", onHomeHeaderRowLeave);
       window.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
       ro?.disconnect();
@@ -3890,22 +4254,26 @@
     };
   }
 
+  function mountHomePageHero() {
+    if (!document.body.classList.contains("home-page")) return;
+    const heroHost = document.getElementById("ed-lp-hero-layers");
+    if (!heroHost) return;
+    mountEditorialHomeHeroLayers(heroHost);
+    initHomeHeroHeader();
+  }
+
   function renderEditorialLandingPage() {
     if (!document.body.classList.contains("home-page")) return;
+    mountHomePageHero();
     const root = document.getElementById("main");
     if (!root?.classList.contains("ed-lp")) return;
 
-    initHomeHeroHeader();
-
-    const heroHost = document.getElementById("ed-lp-hero-layers");
     const catsHost = document.getElementById("ed-lp-featured-cats");
     const highHost = document.getElementById("ed-lp-highlights");
     const recentHost = document.getElementById("ed-lp-recent");
     const awMedia = document.getElementById("ed-lp-season-aw-media");
     const ssMedia = document.getElementById("ed-lp-season-ss-media");
-    if (!heroHost || !catsHost || !highHost || !recentHost) return;
-
-    mountEditorialHomeHeroLayers(heroHost);
+    if (!catsHost || !highHost || !recentHost) return;
 
     catsHost.replaceChildren();
     const catPicks = collectFeaturedSubcategoryPicksForHome();
@@ -3946,10 +4314,10 @@
         wireCoverImageWithFallbacks(img, pick, {
           host: media,
           missingClass: "ed-lp__cat-card-media--missing",
-          coverRenderWidth: 640,
+          coverRenderWidth: 600,
           coverRenderHeight: 800,
-          coverRenderZoom: 1.1,
           coverRenderQuality: 86,
+          coverRenderResize: "contain",
         });
       } else {
         media.classList.add("ed-lp__cat-card-media--missing");
@@ -3992,12 +4360,11 @@
         link.dataset.edSeasonalEntry === "1" || link.classList.contains("ed-lp__season-tile");
       const seasonOnly = String(link.getAttribute("data-season-filter") ?? "").trim();
       if (isSeasonalEntry && (seasonOnly === "A/W" || seasonOnly === "S/S")) {
-        enterSeasonalCollection(seasonOnly);
         if (!document.getElementById("grid")) {
-          writeSeasonalEntryBrowseRestoreSnapshot(seasonOnly);
-          navigateToArchiveMain();
+          navigateToArchiveSeason(seasonOnly);
           return;
         }
+        enterSeasonalCollection(seasonOnly);
         renderGrid();
         syncToolbarActiveFilterChips();
         scrollArchiveViewportTop();
@@ -4007,13 +4374,20 @@
       const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
       const sub = String(link.getAttribute("data-subcategory-jump") ?? "").trim();
       const season = String(link.getAttribute("data-season-filter") ?? "").trim();
-      if (season === "S/S" || season === "A/W" || season === "All") {
-        seasonNavFilter = season;
+      const selectedSeason = normalizeSeasonNavToken(season);
+      const clearsSeason = normalizeSeason(season) === "ALL";
+      if (selectedSeason || clearsSeason) {
+        if (!document.getElementById("grid") && selectedSeason) {
+          navigateToArchiveSeason(season);
+          return;
+        }
+        seasonNavFilter = selectedSeason;
         try {
           persistSeasonNav();
         } catch {
           /* ignore */
         }
+        replaceArchiveSeasonQuery(seasonNavFilter);
         syncSeasonTabUI();
       }
       clearArchiveKeywordColourNarrowing();
@@ -4078,9 +4452,6 @@
    * the subcategory filter chip still work.
    */
   const ARCHIVE_RECORD_TYPE_SUBNAV_ENABLED = true;
-
-  /** Last visible brand-story panel (`data-brand-story-panel`) — collapse “View more” when copy changes. */
-  let lastBrandStoryPanelKey = "";
 
   /** Item id currently shown on the item page (for edit / delete actions). */
   let detailItemId = null;
@@ -4717,13 +5088,20 @@
   }
 
   function relocateFilterSearchFieldIntoHeaderOverlayPillWrap() {
-    const wrap = document.querySelector(".site-header__search-pill-wrap");
+    const host =
+      document.querySelector(".site-header__search-row.site-header__search-field--rl") ||
+      document.querySelector(".site-header__search-field--rl") ||
+      document.querySelector(".site-header__search-pill-wrap");
     const field = document.querySelector(".filters__search-field");
-    const icon = wrap?.querySelector(".site-header__search-pill-icon");
-    if (!wrap || !field) return;
-    if (field.parentElement === wrap) return;
-    if (icon) icon.insertAdjacentElement("afterend", field);
-    else wrap.appendChild(field);
+    if (!host || !field) return;
+    const slot =
+      host.querySelector(".site-header__search-input-label") ||
+      host.querySelector(".site-header__search-pill-wrap") ||
+      host;
+    if (field.parentElement === slot) return;
+    slot.appendChild(field);
+    const closeBtn = host.querySelector("#site-header-search-close, .site-header__search-close");
+    if (closeBtn && closeBtn.parentElement === host) host.appendChild(closeBtn);
   }
 
   function relocateFilterSearchFieldIntoPlpAnchor() {
@@ -4751,7 +5129,7 @@
     document.body.classList.remove("archive-ui--search-results-plp");
     if (!skipRestore && archiveSearchReturnSnapshot) {
       const s = archiveSearchReturnSnapshot;
-      seasonNavFilter = s.seasonNav;
+      seasonNavFilter = normalizeSeasonNavToken(s.seasonNav);
       categoryNavFilter = s.category;
       subcategoryFilter = s.subcategory;
       basicColourFilter = persistBasicColourFilter(s.basicColour || "");
@@ -4776,17 +5154,6 @@
     syncSearchKeywordChip();
   }
 
-  /** Enter in open search overlay: refresh in-panel results; keep overlay open (RL-style). */
-  function runHeaderSearchOverlayQuery() {
-    cancelHeaderSearchOverlayUiDebounce();
-    const raw = String(els.search?.value ?? "").trim();
-    const norm = normalizeSearch(raw);
-    headerSearchOpenArchiveSearchNorm = norm;
-    headerSearchOverlayOpeningQueryRaw = raw;
-    syncSearchKeywordChip();
-    syncHeaderSearchOverlayResultsPane();
-  }
-
   function submitArchiveSearchFromInput() {
     cancelSearchGridDebounce();
     cancelHeaderSearchOverlayUiDebounce();
@@ -4794,8 +5161,8 @@
     const norm = normalizeSearch(raw);
 
     if (isHeaderSearchWrapOpen()) {
-      runHeaderSearchOverlayQuery();
-      return;
+      dismissHeaderSubmenuDom();
+      forceCloseHeaderSearchOverlay({ submitted: Boolean(norm) });
     }
 
     if (!document.getElementById("grid")) {
@@ -4828,7 +5195,7 @@
         subcategory: subcategoryFilter,
         basicColour: basicColourFilter,
       };
-      seasonNavFilter = "All";
+      seasonNavFilter = null;
       try {
         persistSeasonNav();
       } catch {
@@ -4848,7 +5215,7 @@
     invalidateArchiveSortedCache();
     archiveSubmittedSearchNorm = norm;
     archiveSubmittedSearchRaw = raw;
-    document.body.classList.add("archive-ui--search-results-plp");
+    document.body.classList.remove("archive-ui--search-results-plp");
     renderCategoryDrill();
     syncFilterSearchFieldDomPlacement();
     syncArchiveSearchResultsPlpUi();
@@ -4898,25 +5265,9 @@
     const wrap = document.getElementById("archive-search-results-plp");
     const heading = document.getElementById("archive-search-results-heading");
     const pills = document.getElementById("archive-search-results-pills");
-    if (!wrap) return;
-    if (!archiveSubmittedSearchNorm) {
-      wrap.hidden = true;
-      if (pills) pills.replaceChildren();
-      syncToolbarActiveFilterChips();
-      return;
-    }
-    wrap.hidden = false;
-    const raw = archiveSubmittedSearchRaw || archiveSubmittedSearchNorm;
-    const n = getArchiveSortedDataset().length;
-    if (heading) {
-      heading.replaceChildren();
-      heading.append(document.createTextNode(`${n} result${n === 1 ? "" : "s"} for `));
-      const em = document.createElement("em");
-      em.className = "archive-search-results-plp__heading-query";
-      em.textContent = `“${raw}”`;
-      heading.append(em);
-    }
-    syncArchiveSearchResultCategoryPills(pills);
+    if (wrap) wrap.hidden = true;
+    if (heading) heading.replaceChildren();
+    if (pills) pills.replaceChildren();
     syncToolbarActiveFilterChips();
   }
 
@@ -4958,10 +5309,10 @@
     wireCoverImageWithFallbacks(img, item, {
       host: media,
       missingClass: "site-header__search-result-card__media--missing",
-      coverRenderWidth: 280,
-      coverRenderHeight: 360,
-      coverRenderZoom: 1.08,
+      coverRenderWidth: 300,
+      coverRenderHeight: 400,
       coverRenderQuality: 82,
+      coverRenderResize: "contain",
     });
     media.appendChild(img);
 
@@ -4987,47 +5338,12 @@
   }
 
   function syncHeaderSearchOverlayResultsPane() {
-    const browse = document.getElementById("site-header-search-browse");
-    const pane = document.getElementById("site-header-search-results-pane");
-    const gridEl = document.getElementById("site-header-search-results-grid");
-    const emptyEl = document.getElementById("site-header-search-results-empty");
-    if (!browse || !pane || !gridEl || !emptyEl) return;
-
-    const norm = normalizeSearch(String(els.search?.value ?? "").trim());
-
-    if (!norm) {
-      browse.hidden = false;
-      pane.hidden = true;
-      gridEl.replaceChildren();
-      emptyEl.hidden = true;
-      queueMicrotask(() => syncSearchOverlayBackdropTop());
-      return;
-    }
-
-    const hits = items.filter((it) => itemMatchesSearch(it, norm)).sort(compareGridItems).slice(0, 12);
-
-    browse.hidden = true;
-    pane.hidden = false;
-    gridEl.replaceChildren();
-
-    if (!hits.length) {
-      emptyEl.hidden = false;
-      queueMicrotask(() => syncSearchOverlayBackdropTop());
-      return;
-    }
-
-    emptyEl.hidden = true;
-    for (const item of hits) {
-      gridEl.appendChild(createHeaderSearchOverlayResultLink(item));
-    }
+    resetHeaderSearchOverlayResultsDom();
     queueMicrotask(() => syncSearchOverlayBackdropTop());
   }
 
   function flushHeaderSearchOverlayUiDebounceIfPending() {
-    if (headerSearchOverlayUiDebounceTimer == null) return;
-    clearTimeout(headerSearchOverlayUiDebounceTimer);
-    headerSearchOverlayUiDebounceTimer = null;
-    syncHeaderSearchOverlayResultsPane();
+    cancelHeaderSearchOverlayUiDebounce();
   }
 
   /** Basic colour archive filter: enabled on the archive grid (all category tabs + “All”); hidden on `item.html`. */
@@ -5055,23 +5371,9 @@
         String(subcategoryFilter ?? "").trim() ||
         effectiveArchiveKeywordSearchNorm() ||
         String(archiveSearchWithinRecordCategory ?? "").trim() ||
-        (allowColour && basicColourFilter)
+        (allowColour && basicColourFilter) ||
+        selectedBrandFilters.size > 0
     );
-  }
-
-  /** Brand-story strip: show on All Pieces landing and category slots; hide for search / colour narrowing. */
-  function archiveBrandStoryHiddenByAuxFilters() {
-    const allowColour = allowArchiveBasicColourFilter();
-    const cat = String(categoryNavFilter ?? "").trim();
-    if (effectiveArchiveKeywordSearchNorm()) return true;
-    if (allowColour && basicColourFilter) return true;
-    if (!cat) {
-      const sub = String(subcategoryFilter ?? "").trim();
-      const within = String(archiveSearchWithinRecordCategory ?? "").trim();
-      const allSeasonsNav = String(seasonNavFilter ?? "").trim() === "All";
-      return Boolean(sub || within || !allSeasonsNav);
-    }
-    return false;
   }
 
   function describeNarrowingFiltersForUiSansSearch() {
@@ -5081,13 +5383,34 @@
     const sub = String(subcategoryFilter ?? "").trim();
     if (sub) bits.push(friendlyRecordCategory(sub) || sub);
     if (allowArchiveBasicColourFilter() && basicColourFilter) bits.push(basicColourLabelEn(basicColourFilter));
+    if (selectedBrandFilters.size > 0) {
+      const brands = [...selectedBrandFilters].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+      if (brands.length === 1) bits.push(brands[0]);
+      else bits.push(`${brands.length} brands`);
+    }
     return bits.join(" · ");
+  }
+
+  function hideLegacyFilterCountRowChips() {
+    const unified = document.getElementById("items-toolbar-active-filter-chips");
+    if (!unified || document.body.classList.contains("archive-ui--search-results-plp")) return false;
+    for (const key of ["searchChip", "categoryChip", "colourChip", "subcategoryChip"]) {
+      const btn = els[key];
+      const textEl = els[`${key}Text`];
+      if (textEl) textEl.textContent = "";
+      if (btn) {
+        btn.hidden = true;
+        btn.removeAttribute("aria-label");
+      }
+    }
+    return true;
   }
 
   function syncSearchKeywordChip() {
     const btn = els.searchChip;
     const textEl = els.searchChipText;
     if (!btn || !textEl) return;
+    if (hideLegacyFilterCountRowChips()) return;
     if (archiveSubmittedSearchNorm && !isHeaderSearchWrapOpen()) {
       textEl.textContent = "";
       btn.hidden = true;
@@ -5113,6 +5436,7 @@
     const btn = els.categoryChip;
     const textEl = els.categoryChipText;
     if (!btn || !textEl) return;
+    if (hideLegacyFilterCountRowChips()) return;
     const cat = String(categoryNavFilter ?? "").trim();
     if (cat) {
       const label = categoryDisplayLabel(cat) || cat;
@@ -5130,6 +5454,7 @@
     const btn = els.colourChip;
     const textEl = els.colourChipText;
     if (!btn || !textEl) return;
+    if (hideLegacyFilterCountRowChips()) return;
     const allowColour = allowArchiveBasicColourFilter();
     if (allowColour && basicColourFilter) {
       const label = basicColourLabelEn(basicColourFilter);
@@ -5147,12 +5472,9 @@
     const btn = els.subcategoryChip;
     const textEl = els.subcategoryChipText;
     if (!btn || !textEl) return;
+    if (hideLegacyFilterCountRowChips()) return;
     const raw = String(subcategoryFilter ?? "").trim();
-    const drill = document.getElementById("category-drill");
-    const drillRowVisible =
-      ARCHIVE_RECORD_TYPE_SUBNAV_ENABLED && drill instanceof HTMLElement && !drill.hidden;
-    /* Toolbar pills already show the active type + toggle off on second tap — hide the duplicate chip row. */
-    if (raw && !drillRowVisible) {
+    if (raw) {
       const label = friendlyRecordCategory(raw) || raw;
       textEl.textContent = label;
       btn.hidden = false;
@@ -5170,7 +5492,7 @@
     const searchHost = document.getElementById("archive-search-results-active-chips");
     if (!browseHost && !searchHost) return;
 
-    function renderChipRow(host, defs) {
+    function renderChipRow(host, defs, { onClearAll } = {}) {
       if (!host) return;
       host.replaceChildren();
       for (const def of defs) {
@@ -5194,6 +5516,19 @@
         row.appendChild(rm);
         host.appendChild(row);
       }
+      if (defs.length > 1 && typeof onClearAll === "function") {
+        const clearAll = document.createElement("button");
+        clearAll.type = "button";
+        clearAll.className = "items-toolbar__active-chips-clear";
+        clearAll.textContent = "Clear All";
+        clearAll.setAttribute("aria-label", "Clear all active filters");
+        clearAll.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClearAll();
+        });
+        host.appendChild(clearAll);
+      }
       const show = defs.length > 0;
       host.hidden = !show;
     }
@@ -5216,13 +5551,58 @@
           },
         });
       }
-      renderChipRow(searchHost, searchDefs);
+      renderChipRow(searchHost, searchDefs, {
+        onClearAll() {
+          archiveSearchWithinRecordCategory = "";
+          resetAllArchiveFilters();
+        },
+      });
     } else if (searchHost) {
       searchHost.replaceChildren();
       searchHost.hidden = true;
     }
 
     const browseDefs = [];
+
+    const season = normalizeSeasonNavToken(seasonNavFilter);
+    if (season) {
+      const label = season === "SS" ? "S/S" : "A/W";
+      browseDefs.push({
+        label,
+        removeLabel: `Remove ${label} season filter`,
+        onRemove() {
+          seasonNavFilter = null;
+          try {
+            persistSeasonNav();
+          } catch {
+            /* ignore */
+          }
+          syncSeasonTabUI();
+          replaceArchiveSeasonQuery(seasonNavFilter);
+          renderGrid();
+        },
+      });
+    }
+
+    const cat = String(categoryNavFilter ?? "").trim();
+    if (cat) {
+      const catLabel = categoryDisplayLabel(cat) || cat;
+      browseDefs.push({
+        label: catLabel,
+        removeLabel: `Remove category filter “${catLabel}”`,
+        onRemove() {
+          withPreservedArchiveScroll(() => {
+            categoryNavFilter = "";
+            subcategoryFilter = "";
+            syncCategoryTabUI();
+            renderCategoryDrill();
+            syncFiltersMenuForViewport();
+            renderGrid();
+          });
+        },
+      });
+    }
+
     const sub = String(subcategoryFilter ?? "").trim();
     if (sub) {
       const label = friendlyRecordCategory(sub) || sub;
@@ -5230,32 +5610,44 @@
         label,
         removeLabel: `Remove ${label} filter`,
         onRemove() {
-          subcategoryFilter = "";
-          validateSubcategoryFilter();
-          renderCategoryDrill();
-          syncFiltersMenuForViewport();
-          renderGrid();
+          withPreservedArchiveScroll(() => {
+            subcategoryFilter = "";
+            validateSubcategoryFilter();
+            renderCategoryDrill();
+            syncFiltersMenuForViewport();
+            renderGrid();
+          });
         },
       });
     }
-    const season = String(seasonNavFilter ?? "").trim();
-    if (season === "S/S" || season === "A/W") {
-      const label = season === "S/S" ? "S/S" : "A/W";
+
+    const brandKeys = [...selectedBrandFilters].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    for (const brand of brandKeys) {
       browseDefs.push({
-        label,
-        removeLabel: `Remove ${label} season filter`,
+        label: brand,
+        removeLabel: `Remove brand filter “${brand}”`,
         onRemove() {
-          seasonNavFilter = "All";
-          try {
-            persistSeasonNav();
-          } catch {
-            /* ignore */
-          }
-          syncSeasonTabUI();
+          toggleBrandFilter(brand);
+          syncArchiveBrandFilterChipUi();
           renderGrid();
         },
       });
     }
+
+    if (!searchPlp) {
+      const submittedNorm = String(archiveSubmittedSearchNorm ?? "").trim();
+      if (submittedNorm) {
+        const rawQ = archiveSubmittedSearchRaw || submittedNorm;
+        browseDefs.push({
+          label: rawQ,
+          removeLabel: `Remove search “${rawQ}”`,
+          onRemove() {
+            clearArchiveKeywordSearchThenRender();
+          },
+        });
+      }
+    }
+
     const allowColour = allowArchiveBasicColourFilter();
     if (allowColour && basicColourFilter) {
       const label = basicColourLabelEn(basicColourFilter);
@@ -5269,14 +5661,18 @@
         },
       });
     }
+
+    const clearAllActiveFilters = () => resetAllArchiveFilters();
+
     if (searchPlp) {
       if (browseHost) {
         browseHost.replaceChildren();
         browseHost.hidden = true;
       }
     } else {
-      renderChipRow(browseHost, browseDefs);
+      renderChipRow(browseHost, browseDefs, { onClearAll: clearAllActiveFilters });
     }
+    hideLegacyFilterCountRowChips();
   }
 
   function clearArchiveKeywordSearchThenRender(options = {}) {
@@ -5292,7 +5688,6 @@
     syncFilterSearchClearVisibility();
     syncFilterSearchFieldDomPlacement();
     renderGrid();
-    if (isHeaderSearchWrapOpen()) syncHeaderSearchOverlayResultsPane();
     if (focusInput) els.search.focus();
   }
 
@@ -5322,6 +5717,7 @@
     if (els.search) els.search.value = "";
     resetHeaderSearchOverlayResultsDom();
     basicColourFilter = persistBasicColourFilter("");
+    clearBrandFilters();
     categoryNavFilter = "";
     subcategoryFilter = "";
     forceCloseHeaderSearchOverlay();
@@ -5339,15 +5735,17 @@
    * @param {"A/W" | "S/S"} seasonToken
    */
   function enterSeasonalCollection(seasonToken) {
-    if (seasonToken !== "A/W" && seasonToken !== "S/S") return;
+    const selectedSeason = normalizeSeasonNavToken(seasonToken);
+    if (!selectedSeason) return;
     clearArchiveBrowseFiltersForSeasonalEntry();
-    seasonNavFilter = seasonToken;
+    seasonNavFilter = selectedSeason;
     try {
       persistSeasonNav();
     } catch {
       /* ignore */
     }
-    archiveSortMode = persistArchiveSortMode("archive");
+    replaceArchiveSeasonQuery(seasonNavFilter);
+    archiveSortMode = persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
     syncArchiveSortChipUi();
     syncSeasonTabUI();
     syncCategoryTabUI();
@@ -5362,7 +5760,7 @@
   /** Persist a clean archive snapshot for seasonal entry navigation (no inherited filters). */
   function writeSeasonalEntryBrowseRestoreSnapshot(seasonToken) {
     writeArchiveBrowseRestoreSnapshot({
-      seasonNav: seasonToken,
+      seasonNav: normalizeSeasonNavToken(seasonToken) || null,
       category: "",
       subcategory: "",
       search: "",
@@ -5370,8 +5768,38 @@
     });
   }
 
+  function archiveSeasonHref(seasonToken) {
+    const normalized = normalizeSeasonNavToken(seasonToken);
+    const query = seasonNavQueryToken(normalized);
+    return query ? `${ARCHIVE_PAGE_PATH}?season=${query}` : ARCHIVE_HOME_MAIN_URL;
+  }
+
+  function navigateToArchiveSeason(seasonToken) {
+    const href = archiveSeasonHref(seasonToken);
+    try {
+      globalThis.location.assign(href);
+    } catch {
+      globalThis.location.href = href;
+    }
+  }
+
+  function replaceArchiveSeasonQuery(seasonToken) {
+    if (!isArchiveLocation()) return;
+    const normalized = normalizeSeasonNavToken(seasonToken);
+    try {
+      const u = new URL(globalThis.location.href);
+      const query = seasonNavQueryToken(normalized);
+      if (query) u.searchParams.set("season", query);
+      else u.searchParams.delete("season");
+      globalThis.history.replaceState(null, "", `${u.pathname}${u.search}`);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function resetNarrowingFilters() {
     clearArchiveKeywordColourNarrowing();
+    clearBrandFilters();
     if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
     categoryNavFilter = "";
     subcategoryFilter = "";
@@ -5384,34 +5812,45 @@
     collapseFiltersMenuPanel();
   }
 
-  /** Archive “reset view”: season All, all slots, no narrowing filters; sort / currency unchanged. */
+  /** Archive “reset view”: season All, all slots, no narrowing filters; sort returns to default. */
   function resetAllArchiveFilters() {
-    seasonNavFilter = "All";
+    seasonNavFilter = null;
     persistSeasonNav();
+    replaceArchiveSeasonQuery(seasonNavFilter);
     syncSeasonTabUI();
-    archiveSortMode = persistArchiveSortMode("archive");
+    archiveSortMode = persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
     syncArchiveSortChipUi();
     document.body.classList.remove("archive-ui--nav-folded");
     closeArchiveFilterDrawer();
     resetNarrowingFilters();
   }
 
-  /** Season tab: "All" shows everything; S/S vs A/W use exact match plus `All-season` / blank / item `All`. */
+  /** Normalized season tags on a piece (`SS` | `AW` | `ALL`). */
+  function normalizedItemSeasonTags(item) {
+    const raw = item?.season;
+    const seasons = Array.isArray(raw) ? raw : [raw];
+    return seasons
+      .map((s) => normalizeStoredItemSeason(s ?? ""))
+      .map(normalizeSeason)
+      .filter(Boolean);
+  }
+
+  /** Season tab: null shows everything; SS/AW match themselves plus all-season pieces. */
   function itemPassesSeasonNav(item, nav) {
-    if (nav === "All") return true;
-    const s = String(item.season ?? "").trim();
-    if (nav === "S/S") return s === "S/S" || s === "All-season" || s === "All" || s === "";
-    if (nav === "A/W") return s === "A/W" || s === "All-season" || s === "All" || s === "";
-    return true;
+    const selectedSeason = normalizeSeasonNavToken(nav);
+    if (!selectedSeason) return true;
+    const normalized = normalizedItemSeasonTags(item);
+    // Legacy archive: blank / unknown season tags behave like all-season.
+    if (!normalized.length) return true;
+    return normalized.includes(selectedSeason) || normalized.includes("ALL");
   }
 
   /** UI / export: blank, `All-season`, or `All` → label "All seasons". */
   function seasonUiLabel(raw) {
-    const s = String(raw ?? "").trim();
-    if (!s || s === "All-season" || s === "All") return "All seasons";
-    if (s === "S/S") return "Spring / Summer";
-    if (s === "A/W") return "A/W";
-    return s;
+    const normalized = normalizeSeason(raw);
+    if (normalized === "SS") return "Spring / Summer";
+    if (normalized === "AW") return "A/W";
+    return "All seasons";
   }
 
   /** Stored value for “all seasons” on a piece; matches add/edit season `<select>` default. */
@@ -5542,7 +5981,18 @@
 
   function itemMatchesDrillSubcategory(item, browseCategory, sub) {
     if (!sub) return true;
-    return recordCategoryForDrill(item, browseCategory) === sub;
+    const itemKey = recordCategoryForDrill(item, browseCategory);
+    return recordTypeDrillKeysEquivalent(itemKey, sub);
+  }
+
+  /** Items in `browseSlot` matching a record-type drill key (alias-aware). */
+  function poolItemsMatchingRecordTypeDrill(pool, browseSlot, subKey) {
+    const slot = String(browseSlot ?? "").trim();
+    const sub = String(subKey ?? "").trim();
+    return pool.filter((it) => {
+      if (itemSlot(it) !== slot) return false;
+      return itemMatchesDrillSubcategory(it, slot, sub);
+    });
   }
 
   /** Drop record-type keys that duplicate the browse tab name (`Watches`, `Fragrance`). */
@@ -5597,14 +6047,7 @@
     }
     if (!keys.includes(fall)) keys = sortRecordTypeKeysForSlot(slot, [fall, ...keys]);
 
-    const entries = [];
-    const seenLabels = new Set();
-    for (const raw of keys) {
-      const label = friendlyRecordCategory(raw) || raw;
-      if (seenLabels.has(label)) continue;
-      seenLabels.add(label);
-      entries.push({ raw, label });
-    }
+    const entries = collapseRecordTypeKeysByDisplayLabel(keys, slot);
     return [{ raw: "", label: SUBCATEGORY_ALL_LABEL }, ...entries];
   }
 
@@ -5627,7 +6070,7 @@
   function subcategoryFilterMatchesEntry(raw, subF) {
     const key = String(raw ?? "").trim();
     const active = String(subF ?? "").trim();
-    return key ? active === key : !active;
+    return key ? recordTypeDrillKeysEquivalent(active, key) : !active;
   }
 
   /** Legacy Chinese `category` / drill keys saved before English migration. */
@@ -5670,13 +6113,18 @@
       }
     }
     selectEl.innerHTML = "";
-    for (const k of keys) {
+    const collapsed = collapseRecordTypeKeysByDisplayLabel(keys, slot);
+    for (const { raw, label } of collapsed) {
       const o = document.createElement("option");
-      o.value = k;
-      o.textContent = friendlyRecordCategory(k) || k;
+      o.value = raw;
+      o.textContent = label;
       selectEl.appendChild(o);
     }
-    const pick = prev && keys.includes(prev) ? prev : fall;
+    const canonKeys = collapsed.map((e) => e.raw);
+    const pick =
+      prev && canonKeys.find((k) => recordTypeDrillKeysEquivalent(k, prev))
+        ? canonKeys.find((k) => recordTypeDrillKeysEquivalent(k, prev))
+        : fall;
     selectEl.value = pick;
   }
 
@@ -5749,7 +6197,13 @@
       return;
     }
     const allowed = drillSubcategoryKeysFromPool(categoryNavFilter, seasonalPool);
-    if (!allowed.includes(sub)) subcategoryFilter = "";
+    const collapsed = collapseRecordTypeKeysByDisplayLabel(allowed, categoryNavFilter);
+    const match = collapsed.find((e) => recordTypeDrillKeysEquivalent(e.raw, sub));
+    if (!match) {
+      subcategoryFilter = "";
+      return;
+    }
+    subcategoryFilter = match.raw;
   }
 
   /** Avoid `aria-hidden` + focused descendant (Chrome blocks and UX breaks); call before hiding `#category-drill`. */
@@ -5810,6 +6264,19 @@
     drill.removeAttribute("aria-hidden");
   }
 
+  let lastCategoryDrillStructureKey = "";
+
+  function categoryDrillStructureKey(slot, typeEntries, subF) {
+    return [slot, subF, ...typeEntries.map((e) => `${e.raw}\t${e.label}`)].join("\0");
+  }
+
+  function syncCategoryDrillActiveStates(grid, subF) {
+    grid.querySelectorAll(".category-drill__choice[data-subcategory]").forEach((btn) => {
+      const raw = String(btn.dataset.subcategory ?? "");
+      btn.classList.toggle("is-active", subcategoryFilterMatchesEntry(raw, subF));
+    });
+  }
+
   function renderCategoryDrill() {
     const drill = document.getElementById("category-drill");
     const grid = document.getElementById("category-drill-grid");
@@ -5843,6 +6310,7 @@
       drill.setAttribute("aria-hidden", "true");
       grid.innerHTML = "";
       grid.hidden = true;
+      lastCategoryDrillStructureKey = "";
       document.getElementById("archive-slot-type-strip")?.remove();
       return;
     }
@@ -5871,13 +6339,23 @@
       grid.hidden = true;
       drill.hidden = true;
       drill.setAttribute("aria-hidden", "true");
+      lastCategoryDrillStructureKey = "";
       return;
     }
 
+    const subF = String(subcategoryFilter ?? "").trim();
+    const structureKey = categoryDrillStructureKey(slot, typeEntries, subF);
+    if (structureKey === lastCategoryDrillStructureKey && grid.childElementCount > 0) {
+      syncCategoryDrillActiveStates(grid, subF);
+      drill.hidden = false;
+      drill.removeAttribute("aria-hidden");
+      grid.hidden = false;
+      return;
+    }
+    lastCategoryDrillStructureKey = structureKey;
+
     grid.innerHTML = "";
     grid.hidden = false;
-
-    const subF = String(subcategoryFilter ?? "").trim();
 
     function appendChoice(rawValue, label) {
       const b = document.createElement("button");
@@ -5899,16 +6377,78 @@
     }
   }
 
-  /** Season, slot, drill, and basic colour only — no live keyword typing (keywords are commit-only). */
-  function applyArchiveUiFilters(list) {
+  /** Season, slot, drill, basic colour, and brand — no live keyword typing (keywords are commit-only). */
+  function applyArchiveUiFilters(list, opts = {}) {
+    const skipBrand = Boolean(opts.skipBrandFilter);
     const f = getFilters();
     return list.filter((item) => {
       if (!itemPassesSeasonNav(item, f.seasonNav)) return false;
       if (!archiveSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) return false;
       if (f.subcategory && !itemMatchesDrillSubcategory(item, f.category, f.subcategory)) return false;
       if (!itemMatchesBasicColourFilter(item, f.basicColour)) return false;
+      if (!skipBrand && selectedBrandFilters.size > 0) {
+        const brand = String(item?.brand ?? "").trim();
+        if (!selectedBrandFilters.has(brand)) return false;
+      }
       return true;
     });
+  }
+
+  /** Pool for brand filter chips — same constraints as the grid, excluding the brand filter itself. */
+  function poolItemsForBrandFilterOptions() {
+    const committed = String(archiveSubmittedSearchNorm ?? "").trim();
+    if (committed) {
+      let pool = items.filter((item) => itemMatchesSearch(item, committed));
+      const wc = String(archiveSearchWithinRecordCategory ?? "").trim();
+      if (wc) pool = pool.filter((item) => itemMatchesArchiveSearchWithinRecordCategory(item, wc));
+      return applyArchiveUiFilters(pool, { skipBrandFilter: true });
+    }
+    return applyArchiveUiFilters(items, { skipBrandFilter: true });
+  }
+
+  function brandKeyForItem(item) {
+    return String(item?.brand ?? "").trim();
+  }
+
+  /** @returns {string[]} */
+  function availableBrandsForCurrentContext() {
+    const seen = new Set();
+    const out = [];
+    for (const item of poolItemsForBrandFilterOptions()) {
+      const key = brandKeyForItem(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    }
+    out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return out;
+  }
+
+  /** @returns {Map<string, number>} */
+  function brandCountsForCurrentContext() {
+    const out = new Map();
+    for (const item of poolItemsForBrandFilterOptions()) {
+      const key = brandKeyForItem(item);
+      if (!key) continue;
+      out.set(key, (out.get(key) ?? 0) + 1);
+    }
+    return out;
+  }
+
+  function toggleBrandFilter(brand) {
+    const key = String(brand ?? "").trim();
+    if (!key) return;
+    const next = new Set(selectedBrandFilters);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    selectedBrandFilters = next;
+    invalidateArchiveSortedCache();
+  }
+
+  function clearBrandFilters() {
+    if (!selectedBrandFilters.size) return;
+    selectedBrandFilters = new Set();
+    invalidateArchiveSortedCache();
   }
 
   /**
@@ -5934,6 +6474,19 @@
    * Title line: when a descriptive colour is set and the name repeats it at the start, strip it (colour lives in specs).
    * Does not strip when the leading colour is the first half of a compound material (e.g. Camel Hair, Navy Wool).
    */
+  /** Archive card meta line — single-colour rows only; multi-variant cards use the swatch tray. */
+  function colourLabelForItem(item) {
+    const variants = getItemColourVariants(item);
+    if (variants?.length > 1) return "";
+    if (variants?.length === 1) {
+      const v = variants[0];
+      const col = String(v.colour ?? v.color ?? "").trim();
+      const label = String(v.label ?? "").trim();
+      return col || label || String(item?.colour ?? "").trim();
+    }
+    return String(item?.colour ?? "").trim();
+  }
+
   function displayNameWithoutLeadingColour(item) {
     const name = String(item?.name ?? "").trim();
     const col = String(item?.colour ?? "").trim();
@@ -6105,9 +6658,41 @@
     return withWardrobeImageCacheBust(src, item);
   }
 
+  const ARCHIVE_GRID_CARD_RENDER = Object.freeze({
+    width: 600,
+    height: 800,
+    quality: 82,
+    resize: "contain",
+  });
+
+  const ITEM_DETAIL_GALLERY_RENDER = Object.freeze({
+    width: 900,
+    height: 1200,
+    quality: 86,
+    resize: "contain",
+  });
+
+  /**
+   * Supabase transform (cover/contain) for card / gallery frames; plain URL when no frame size.
+   * @param {string} url
+   * @param {object} item
+   * @param {{ width?: number, height?: number, quality?: number, resize?: "cover" | "contain", zoom?: number } | null} [frame]
+   */
+  function wardrobeImageForFrame(url, item, frame) {
+    const bust = withWardrobeImageCacheBust(String(url ?? "").trim(), item);
+    if (!bust || !isDisplayableCloudImageUrl(bust)) return "";
+    if (!frame?.width || !frame?.height) return bust;
+    return withSupabaseWardrobeImageRenderSize(bust, frame.width, frame.height, {
+      item,
+      resize: frame.resize === "contain" ? "contain" : "cover",
+      quality: frame.quality,
+      zoom: typeof frame.zoom === "number" && frame.zoom > 1 && frame.zoom <= 3 ? frame.zoom : undefined,
+    });
+  }
+
   /**
    * Try `buildCoverCandidates` in order until one loads. Optionally cache working URL on `item.id`.
-   * @param {{ host?: HTMLElement, missingClass?: string | null, onResolved?: (url: string) => void, onExhausted?: () => void, coverRenderWidth?: number, coverRenderHeight?: number, coverRenderZoom?: number, coverRenderQuality?: number }} [opts]
+   * @param {{ host?: HTMLElement, missingClass?: string | null, onResolved?: (url: string) => void, onExhausted?: () => void, coverRenderWidth?: number, coverRenderHeight?: number, coverRenderZoom?: number, coverRenderQuality?: number, coverRenderResize?: "cover" | "contain" }} [opts]
    */
   function wireCoverImageWithFallbacks(img, item, opts) {
     const prevAbort = /** @type {(() => void) | undefined} */ (/** @type {any} */ (img).__twCoverWireAbort);
@@ -6129,8 +6714,14 @@
     if (typeof rw === "number" && typeof rh === "number" && rw > 0 && rh > 0) {
       const z = opts?.coverRenderZoom;
       const q = opts?.coverRenderQuality;
+      const resize =
+        opts?.coverRenderResize === "contain" || opts?.coverRenderResize === "cover"
+          ? opts.coverRenderResize
+          : "contain";
       candidates = candidates.map((u) =>
         withSupabaseWardrobeImageRenderSize(u, rw, rh, {
+          item,
+          resize,
           zoom: typeof z === "number" && z > 1 && z <= 3 ? z : undefined,
           quality: typeof q === "number" && q >= 20 ? q : undefined,
         })
@@ -6162,6 +6753,13 @@
         let tag = `${tw}x${th}`;
         if (typeof zz === "number" && zz > 1 && Number.isFinite(zz)) tag += `z${Math.round(zz * 100)}`;
         if (typeof qq === "number" && qq >= 20 && Number.isFinite(qq)) tag += `q${Math.round(qq)}`;
+        const rs =
+          opts?.coverRenderResize === "cover"
+            ? "cover"
+            : opts?.coverRenderResize === "contain"
+              ? "contain"
+              : "contain";
+        tag += `r${rs === "contain" ? "c" : "v"}`;
         return `${base}::render${tag}`;
       }
       return base;
@@ -6218,9 +6816,18 @@
   }
 
   /** Thumbnail strip to swap the hero `img` (grid card or detail dialog). */
-  function mountHeroGalleryStrip(mediaEl, heroImgEl, item) {
+  function mountHeroGalleryStrip(mediaEl, heroImgEl, item, opts = {}) {
     const extras = itemGalleryList(item).filter(isDisplayableCloudImageUrl);
     if (!extras.length) return;
+
+    const inArchiveGrid = Boolean(mediaEl.closest("#grid"));
+    const frame =
+      opts.coverFrame ??
+      (inArchiveGrid ? ARCHIVE_GRID_CARD_RENDER : ITEM_DETAIL_GALLERY_RENDER);
+
+    function heroFrameSrc(url) {
+      return wardrobeImageForFrame(url, item, frame) || withWardrobeImageCacheBust(url, item);
+    }
 
     const strip = document.createElement("div");
     strip.className = "card__gallery-strip";
@@ -6238,12 +6845,13 @@
     mainBtn.title = "Cover";
     const mainTi = document.createElement("img");
     const firstCover = buildCoverCandidates(item)[0] ?? "";
-    if (firstCover) mainTi.src = firstCover;
+    if (firstCover) mainTi.src = heroFrameSrc(firstCover);
     mainTi.alt = "";
     mainTi.draggable = false;
     mainBtn.appendChild(mainTi);
     mainBtn.addEventListener("click", () => {
-      const src = effectiveCoverSrc(item);
+      const cached = String(heroImgEl.dataset.coverSrc ?? "").trim();
+      const src = cached || heroFrameSrc(effectiveCoverSrc(item) || firstCover);
       if (src) heroImgEl.src = src;
       else heroImgEl.removeAttribute("src");
       heroImgEl.alt = imageAltForItem(item);
@@ -6257,12 +6865,12 @@
       btn.className = "card__gallery-thumb";
       btn.title = `Photo ${i + 2}`;
       const ti = document.createElement("img");
-      ti.src = withWardrobeImageCacheBust(url, item);
+      ti.src = heroFrameSrc(url);
       ti.alt = "";
       ti.draggable = false;
       btn.appendChild(ti);
       btn.addEventListener("click", () => {
-        heroImgEl.src = withWardrobeImageCacheBust(url, item);
+        heroImgEl.src = heroFrameSrc(url);
         heroImgEl.alt = `${item.brand} — ${displayNameWithoutLeadingColour(item)} (detail)`;
         setActive(btn);
       });
@@ -6725,6 +7333,307 @@
         /* ignore */
       }
     }
+  }
+
+  /** Main edit: 1 cover + up to 12 gallery slots. */
+  const ITEM_EDIT_PHOTO_MAX = 13;
+
+  function revokeItemEditPhotoManager(host) {
+    if (!(host instanceof HTMLElement)) return;
+    const entries = /** @type {any[]} */ (host.__twPhotoEntries);
+    if (Array.isArray(entries)) {
+      for (const e of entries) {
+        if (e?.kind === "file" && e.previewUrl) {
+          try {
+            URL.revokeObjectURL(e.previewUrl);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+    host.__twPhotoEntries = [];
+    if (host.__twPhotoFiles instanceof Map) host.__twPhotoFiles.clear();
+    host.replaceChildren();
+  }
+
+  /**
+   * Unified photo strip: one upload control, first tile = cover, rest = gallery, drag to reorder.
+   * @param {HTMLElement} host
+   * @param {{ coverUrl?: string, galleryUrls?: string[], maxPhotos?: number, uploadLabel?: string, hint?: string, onDirty?: () => void }} [opts]
+   */
+  function mountItemEditPhotoManager(host, opts = {}) {
+    revokeItemEditPhotoManager(host);
+    host.classList.add("item-edit-photo-manager");
+    host.dataset.role = "item-edit-photo-manager";
+
+    const maxPhotos = Math.min(
+      ITEM_EDIT_PHOTO_MAX,
+      Math.max(1, Math.floor(Number(opts.maxPhotos) || ITEM_EDIT_PHOTO_MAX))
+    );
+    /** @type {any[]} */
+    const entries = [];
+    const cover0 = String(opts.coverUrl ?? "").trim();
+    if (cover0) entries.push({ kind: "url", url: cover0 });
+    for (const raw of opts.galleryUrls ?? []) {
+      const url = String(raw ?? "").trim();
+      if (!url) continue;
+      if (entries.some((e) => e.kind === "url" && e.url === url)) continue;
+      if (entries.length >= maxPhotos) break;
+      entries.push({ kind: "url", url });
+    }
+
+    /** @type {Map<string, File>} */
+    const filesById = new Map();
+    host.__twPhotoFiles = filesById;
+    host.__twPhotoEntries = entries;
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.multiple = true;
+    fileInput.hidden = true;
+    fileInput.className = "item-edit-photo-manager__file-input";
+
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "btn btn--small btn--ghost item-edit-photo-manager__upload";
+    uploadBtn.textContent = opts.uploadLabel || "Upload photos";
+
+    const hint = document.createElement("p");
+    hint.className = "item-edit-photo-manager__hint";
+    hint.textContent =
+      opts.hint ||
+      "The first photo is the cover; the rest go in the gallery. Drag tiles to reorder.";
+
+    const list = document.createElement("div");
+    list.className = "item-edit-photo-manager__list";
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", "Photos");
+
+    /** @type {number | null} */
+    let dragFrom = null;
+
+    function syncEntries() {
+      host.__twPhotoEntries = entries;
+    }
+
+    function renderList() {
+      syncEntries();
+      list.replaceChildren();
+      if (!entries.length) {
+        list.hidden = true;
+        return;
+      }
+      list.hidden = false;
+      entries.forEach((entry, index) => {
+        const tile = document.createElement("div");
+        tile.className = "item-edit-photo-tile";
+        if (index === 0) tile.classList.add("item-edit-photo-tile--cover");
+        tile.draggable = true;
+        tile.dataset.index = String(index);
+        tile.setAttribute("role", "listitem");
+
+        const badge = document.createElement("span");
+        badge.className = "item-edit-photo-tile__badge";
+        badge.textContent = index === 0 ? "Cover" : String(index + 1);
+
+        const img = document.createElement("img");
+        img.className = "item-edit-photo-tile__img";
+        img.draggable = false;
+        img.alt = index === 0 ? "Cover" : `Photo ${index + 1}`;
+        if (entry.kind === "url") img.src = entry.url;
+        else img.src = entry.previewUrl;
+
+        const grip = document.createElement("span");
+        grip.className = "item-edit-photo-tile__grip";
+        grip.setAttribute("aria-hidden", "true");
+        grip.title = "Drag to reorder";
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn--small btn--ghost item-edit-photo-tile__remove";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const e = entries[index];
+          if (e?.kind === "file" && e.previewUrl) {
+            try {
+              URL.revokeObjectURL(e.previewUrl);
+            } catch {
+              /* ignore */
+            }
+            filesById.delete(e.id);
+          }
+          entries.splice(index, 1);
+          renderList();
+          opts.onDirty?.();
+        });
+
+        tile.appendChild(badge);
+        tile.appendChild(img);
+        tile.appendChild(grip);
+        tile.appendChild(removeBtn);
+
+        tile.addEventListener("dragstart", (ev) => {
+          dragFrom = index;
+          tile.classList.add("is-dragging");
+          if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = "move";
+            try {
+              ev.dataTransfer.setData("text/plain", String(index));
+            } catch {
+              /* ignore */
+            }
+          }
+        });
+        tile.addEventListener("dragend", () => {
+          tile.classList.remove("is-dragging");
+          dragFrom = null;
+          list.querySelectorAll(".item-edit-photo-tile.is-drop-target").forEach((n) => {
+            n.classList.remove("is-drop-target");
+          });
+        });
+        tile.addEventListener("dragover", (ev) => {
+          ev.preventDefault();
+          if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+          tile.classList.add("is-drop-target");
+        });
+        tile.addEventListener("dragleave", () => {
+          tile.classList.remove("is-drop-target");
+        });
+        tile.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          tile.classList.remove("is-drop-target");
+          const from =
+            dragFrom != null
+              ? dragFrom
+              : Number.parseInt(String(ev.dataTransfer?.getData("text/plain") ?? ""), 10);
+          const to = index;
+          if (!Number.isFinite(from) || from < 0 || from >= entries.length || from === to) return;
+          const [moved] = entries.splice(from, 1);
+          entries.splice(to, 0, moved);
+          dragFrom = null;
+          renderList();
+          opts.onDirty?.();
+        });
+
+        list.appendChild(tile);
+      });
+    }
+
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
+      const picked = fileInput.files ? Array.from(fileInput.files) : [];
+      fileInput.value = "";
+      let dropped = 0;
+      for (const file of picked) {
+        if (entries.length >= maxPhotos) {
+          dropped += 1;
+          continue;
+        }
+        const id =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `f-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const previewUrl = URL.createObjectURL(file);
+        filesById.set(id, file);
+        entries.push({ kind: "file", id, file, previewUrl });
+      }
+      if (dropped > 0) {
+        hint.textContent = `Only the first ${maxPhotos} photos are kept (${dropped} skipped).`;
+      } else if (opts.hint) {
+        hint.textContent = opts.hint;
+      } else {
+        hint.textContent =
+          "The first photo is the cover; the rest go in the gallery. Drag tiles to reorder.";
+      }
+      renderList();
+      opts.onDirty?.();
+    });
+
+    host.appendChild(uploadBtn);
+    host.appendChild(fileInput);
+    host.appendChild(hint);
+    host.appendChild(list);
+    renderList();
+  }
+
+  /**
+   * @param {HTMLElement} host
+   * @returns {{ slots: ({ kind: "url", url: string } | { kind: "file", file: File })[] }}
+   */
+  function readItemEditPhotoManager(host) {
+    const entries = Array.isArray(host?.__twPhotoEntries) ? host.__twPhotoEntries : [];
+    const files = host?.__twPhotoFiles instanceof Map ? host.__twPhotoFiles : new Map();
+    /** @type {({ kind: "url", url: string } | { kind: "file", file: File })[]} */
+    const slots = [];
+    for (const e of entries) {
+      if (e?.kind === "url" && e.url) {
+        slots.push({ kind: "url", url: String(e.url) });
+      } else if (e?.kind === "file") {
+        const file = files.get(String(e.id ?? ""));
+        if (file) slots.push({ kind: "file", file });
+      }
+    }
+    return { slots };
+  }
+
+  /**
+   * @param {({ kind: "url", url: string } | { kind: "file", file: File })[]} slots
+   * @param {string} itemId
+   * @param {(t: string, err?: boolean) => void} setMsg
+   * @param {{ variantKey?: string, keepCoverOnFailure?: boolean, previousCover?: string }} [opts]
+   */
+  async function materializeItemEditPhotoSlots(slots, itemId, setMsg, opts = {}) {
+    const variantKey = String(opts.variantKey ?? "").trim();
+    const prevCover = String(opts.previousCover ?? "").trim();
+    let image = "";
+    /** @type {string[]} */
+    const gallery = [];
+    let galIndex = 0;
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      let url = "";
+      if (s.kind === "url") {
+        url = String(s.url ?? "").trim();
+      } else if (s.kind === "file" && s.file) {
+        try {
+          if (isSupabaseReady()) {
+            if (i === 0) {
+              url = variantKey
+                ? await uploadWardrobeImageFileToCloud(s.file, itemId, { type: "variant_cover", key: variantKey })
+                : await uploadWardrobeImageFileToCloud(s.file, itemId, { type: "main_cover" });
+            } else {
+              galIndex += 1;
+              url = await uploadWardrobeImageFileToCloud(s.file, itemId, {
+                type: "main_gallery",
+                index: galIndex,
+              });
+            }
+          } else {
+            url = await fileToStorageDataUrl(s.file, { preferJpeg: i > 0 });
+          }
+        } catch (err) {
+          console.warn(err);
+          const where =
+            i === 0
+              ? variantKey
+                ? `variant cover (${variantKey})`
+                : "main cover"
+              : `gallery image #${galIndex + 1}`;
+          setMsg(`${messageForCloudUploadFailure(where, err)} — skipped this file.`, true);
+          if (i === 0 && opts.keepCoverOnFailure && prevCover) {
+            image = prevCover;
+          }
+          continue;
+        }
+      }
+      if (!url) continue;
+      if (i === 0) image = url;
+      else gallery.push(url);
+    }
+    return { image, gallery: dedupeGalleryUrls(image, gallery, 12) };
   }
 
   /** Target max decoded size per embedded photo (local JSON + uploads). Tune here (bytes). */
@@ -7572,6 +8481,60 @@
     return globalThis.matchMedia?.("(max-width: 900px), (hover: none), (pointer: coarse)")?.matches ?? false;
   }
 
+  function isArchiveGridCardContext() {
+    return document.body.classList.contains("archive-page") && !!document.getElementById("grid");
+  }
+
+  function archiveGridHoverGalleryUrl(item) {
+    const list = itemGalleryList(item);
+    const u = String(list[0] ?? "").trim();
+    if (!u || !isDisplayableCloudImageUrl(u)) return "";
+    return wardrobeImageForFrame(u, item, ARCHIVE_GRID_CARD_RENDER);
+  }
+
+  function wireArchiveCardHoverGallery(article, img, resolveCoverItem) {
+    if (!isArchiveGridCardContext()) return;
+    if (globalThis.matchMedia?.("(max-width: 900px)")?.matches) return;
+
+    const restoreCover = () => {
+      const cover = String(img.dataset.coverSrc ?? "").trim();
+      if (cover) img.src = cover;
+    };
+    const showHoverGallery = () => {
+      const hoverUrl = archiveGridHoverGalleryUrl(resolveCoverItem());
+      if (!hoverUrl || !String(img.dataset.coverSrc ?? "").trim()) return;
+      img.src = hoverUrl;
+    };
+
+    article.addEventListener("mouseenter", showHoverGallery);
+    article.addEventListener("mouseleave", restoreCover);
+    article.addEventListener("focusin", showHoverGallery);
+    article.addEventListener("focusout", (ev) => {
+      const next = ev.relatedTarget;
+      if (next instanceof Node && article.contains(next)) return;
+      restoreCover();
+    });
+  }
+
+  function mountArchiveCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray = false } = {}) {
+    if (!boardAddBtn) return;
+    boardAddBtn.classList.add("card__board-add--archive-hover");
+    if (hasColourTray) {
+      const trayInner = media.querySelector(".card__colour-tray__inner");
+      if (trayInner) {
+        trayInner.appendChild(boardAddBtn);
+        return;
+      }
+    }
+    const bar = document.createElement("div");
+    bar.className = "card__hover-bar card__hover-bar--solo";
+    const inner = document.createElement("div");
+    inner.className = "card__hover-bar__inner";
+    inner.appendChild(boardAddBtn);
+    bar.appendChild(inner);
+    media.appendChild(bar);
+  }
+
   function stylingBoardCtaLabel(blocked) {
     return blocked ? "ON BOARD" : "+ STYLING BOARD";
   }
@@ -7629,10 +8592,12 @@
     if (cardOpts.fetchPriority === "high") img.fetchPriority = "high";
     wireCoverImageWithFallbacks(img, cardCoverItem, {
       host: media,
-      coverRenderWidth: 520,
-      coverRenderHeight: 650,
-      coverRenderQuality: 82,
+      coverRenderWidth: ARCHIVE_GRID_CARD_RENDER.width,
+      coverRenderHeight: ARCHIVE_GRID_CARD_RENDER.height,
+      coverRenderQuality: ARCHIVE_GRID_CARD_RENDER.quality,
+      coverRenderResize: ARCHIVE_GRID_CARD_RENDER.resize,
       onResolved(url) {
+        img.dataset.coverSrc = url;
         const ti = media.querySelector(".card__gallery-strip .card__gallery-thumb.is-active img");
         if (ti) ti.src = url;
       },
@@ -7640,11 +8605,11 @@
 
     media.appendChild(img);
 
-    const rawSe = String(item.season ?? "").trim();
-    if (rawSe === "A/W" || rawSe === "S/S") {
+    const rawSe = normalizeSeason(item.season);
+    if (rawSe === "AW" || rawSe === "SS") {
       const chip = document.createElement("span");
       chip.className = "card__season-chip";
-      chip.textContent = rawSe;
+      chip.textContent = rawSe === "SS" ? "S/S" : "A/W";
       media.appendChild(chip);
     }
 
@@ -7666,7 +8631,6 @@
       boardAddBtn.setAttribute("aria-label", boardAddBtn.title);
       boardAddBtn.textContent = stylingBoardCtaLabel(blocked);
       boardAddBtn.disabled = Boolean(blocked);
-      media.appendChild(boardAddBtn);
     }
 
     const openHint = "Open piece";
@@ -7712,14 +8676,17 @@
 
     const metaLine = document.createElement("p");
     metaLine.className = "card__meta-line";
-    const fr = friendlyRecordCategory(recKey) || recKey;
-    metaLine.textContent = `${fr} · ${categoryDisplayLabel(slotLab)}`;
+    const colourLabel = colourLabelForItem(item);
+    metaLine.textContent = [colourLabel, item.size ? `Size ${String(item.size).trim()}` : ""]
+      .filter(Boolean)
+      .join(" · ");
 
     body.appendChild(title);
     body.appendChild(brand);
     body.appendChild(metaLine);
 
-    if (variants && variants.length > 1) {
+    const hasColourTray = Boolean(variants && variants.length > 1);
+    if (hasColourTray) {
       mountVariantSwatchStrip(media, item, {
         outfitPick: true,
         heroImg: img,
@@ -7729,19 +8696,24 @@
         heroInitialColourKey: variantKeyForHero || undefined,
       });
     }
+    mountArchiveCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray });
+
+    const resolveCoverItemForHover = () => {
+      const active = media.querySelector(".card__swatch.is-active");
+      const ck = active instanceof HTMLElement ? String(active.dataset.variantKey ?? "").trim() : "";
+      if (ck) return itemProjectionForOutfitSlot(item, { itemId: String(item.id), colourKey: ck });
+      return cardCoverItem;
+    };
+    wireArchiveCardHoverGallery(article, img, resolveCoverItemForHover);
 
     const specs = document.createElement("ul");
-    specs.className = "card__specs";
-    for (const part of specParts(item, { forGridCard: true })) {
+    specs.className = "card__specs card__specs--hover";
+    const fr = friendlyRecordCategory(recKey) || recKey;
+    [fr, categoryDisplayLabel(slotLab), ...specParts(item, { forGridCard: true })].filter(Boolean).forEach((part) => {
       const li = document.createElement("li");
       li.textContent = part;
       specs.appendChild(li);
-    }
-    if (item.size) {
-      const li = document.createElement("li");
-      li.textContent = String(item.size).trim();
-      specs.appendChild(li);
-    }
+    });
     const showPurchaseOnCard = archiveSortMode === "date-desc";
     if (showPurchaseOnCard && item.purchaseDate) {
       const li = document.createElement("li");
@@ -7755,7 +8727,7 @@
       const priceBrief = formattedArchivePriceLine(item, { brief: true });
       if (priceBrief) {
         const priceEl = document.createElement("p");
-        priceEl.className = "card__price-subtle";
+        priceEl.className = "card__price-subtle card__price-subtle--hover";
         priceEl.textContent = priceBrief;
         const priceFull = formattedArchivePriceLine(item);
         if (priceFull !== priceBrief) priceEl.title = priceFull;
@@ -7789,6 +8761,7 @@
       String(archiveSearchWithinRecordCategory ?? "").trim(),
       archiveSearchBrowseAllSlots ? "1" : "0",
       basicColourFilter,
+      [...selectedBrandFilters].sort().join("\x1f"),
       archiveSortMode,
       archiveDisplayCurrency,
       String(wardrobeRevision),
@@ -7868,17 +8841,6 @@
       if (cmp !== 0) return archiveSortMode === "date-desc" ? -cmp : cmp;
       return compareArchiveGridItems(a, b);
     }
-    if (archiveSortMode === "brand-asc" || archiveSortMode === "brand-desc") {
-      const ba = String(a?.brand ?? "").trim();
-      const bb = String(b?.brand ?? "").trim();
-      const cmpBrand = ba.localeCompare(bb, undefined, { sensitivity: "base" });
-      if (cmpBrand !== 0) return archiveSortMode === "brand-desc" ? -cmpBrand : cmpBrand;
-      const na = `${String(a?.name ?? "").trim()}\0${String(a?.id ?? "")}`;
-      const nb = `${String(b?.name ?? "").trim()}\0${String(b?.id ?? "")}`;
-      const cmpName = na.localeCompare(nb, undefined, { sensitivity: "base" });
-      if (cmpName !== 0) return cmpName;
-      return compareArchiveGridItems(a, b);
-    }
     return compareArchiveGridItems(a, b);
   }
 
@@ -7910,16 +8872,144 @@
     return String(a?.id ?? "").localeCompare(String(b?.id ?? ""), undefined, { sensitivity: "base" });
   }
 
-  /** Default archive PLP heading when no browse slot is selected. */
   const ARCHIVE_ALL_TYPES_LABEL = "All Types";
-  /** Season-aware archive eyebrow (uppercase; slash only when paired with a category title). */
-  function archiveSeasonEyebrowText({ withSlash = false } = {}) {
-    const seasonRaw = String(seasonNavFilter ?? "").trim();
-    let label;
-    if (seasonRaw === "S/S") label = "SPRING / SUMMER";
-    else if (seasonRaw === "A/W") label = "AUTUMN / WINTER";
-    else label = "ALL SEASONS";
-    return withSlash ? `${label} /` : label;
+  const ARCHIVE_HEADING_DEFAULT_TITLE = "Collection";
+
+  /** Season token for line 1 (`COLLECTION / … /`). */
+  function archiveHeadingSeasonLabel() {
+    if (seasonNavFilter === "SS") return "S / S";
+    if (seasonNavFilter === "AW") return "A / W";
+    return "ALL SEASONS";
+  }
+
+  function archiveHeadingAtCollectionRoot() {
+    const cat = String(categoryNavFilter ?? "").trim();
+    const sub = String(subcategoryFilter ?? "").trim();
+    return !cat && !sub && !seasonNavFilter && !narrowingFiltersActive();
+  }
+
+  /** Archive root — all seasons, no division drill, no narrowing filters. */
+  function navigateArchiveCollectionRoot() {
+    resetAllArchiveFilters();
+    scrollArchiveViewportTop();
+  }
+
+  /** Clear season tab only; keep parent division / subcategory drill when set. */
+  function navigateArchiveAllSeasonsKeepDivision() {
+    if (!seasonNavFilter) return;
+    seasonNavFilter = null;
+    try {
+      persistSeasonNav();
+    } catch {
+      /* ignore */
+    }
+    replaceArchiveSeasonQuery(seasonNavFilter);
+    syncSeasonTabUI();
+    renderGrid();
+  }
+
+  function renderArchiveHeadingBreadcrumb(host, { searchActive = false } = {}) {
+    if (!host) return;
+    host.replaceChildren();
+
+    const nav = document.createElement("nav");
+    nav.className = "archive-heading__breadcrumb";
+    nav.setAttribute("aria-label", "Collection breadcrumb");
+
+    function appendSep() {
+      const sep = document.createElement("span");
+      sep.className = "archive-heading__crumb-sep";
+      sep.setAttribute("aria-hidden", "true");
+      sep.textContent = " / ";
+      nav.appendChild(sep);
+    }
+
+    function appendCrumb(label, { onClick = null, isCurrent = false } = {}) {
+      if (isCurrent || !onClick) {
+        const el = document.createElement("span");
+        el.className = "archive-heading__crumb archive-heading__crumb--current";
+        el.textContent = label;
+        nav.appendChild(el);
+        return;
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "archive-heading__crumb archive-heading__crumb--link";
+      btn.textContent = label;
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        onClick();
+      });
+      nav.appendChild(btn);
+    }
+
+    const atRoot = archiveHeadingAtCollectionRoot();
+    appendCrumb("COLLECTION", {
+      onClick: navigateArchiveCollectionRoot,
+      isCurrent: atRoot && !searchActive,
+    });
+    appendSep();
+
+    if (searchActive) {
+      appendCrumb("SEARCH", { isCurrent: true });
+    } else {
+      const seasonAll = !seasonNavFilter;
+      appendCrumb(archiveHeadingSeasonLabel(), {
+        onClick: navigateArchiveAllSeasonsKeepDivision,
+        isCurrent: seasonAll,
+      });
+    }
+    appendSep();
+
+    host.appendChild(nav);
+  }
+
+  /** Line 2 — parent division only; subcategories stay in drill pills / filter chips. */
+  function archiveHeadingTitleLine(parentCategory) {
+    const cat = String(parentCategory ?? "").trim();
+    if (cat) return categoryDisplayLabel(cat);
+    return ARCHIVE_HEADING_DEFAULT_TITLE;
+  }
+
+  function resolveArchiveSearchTitleLine(qNorm) {
+    const rawQ =
+      headerSearchOverlayArchiveSearchFrozen && headerSearchOverlayOpeningQueryRaw != null
+        ? headerSearchOverlayOpeningQueryRaw
+        : archiveSubmittedSearchRaw || String(els.search?.value ?? "").trim();
+    return rawQ.length > 0 ? `Results for “${rawQ}”` : `Results for “${qNorm}”`;
+  }
+
+  /** Two-line editorial archive heading (context trail + serif title). */
+  function renderArchiveHeading({
+    titleLine = ARCHIVE_HEADING_DEFAULT_TITLE,
+    hidden = false,
+    searchActive = false,
+  } = {}) {
+    const root = document.getElementById("archive-heading");
+    const elContext = document.getElementById("archive-heading-context");
+    const elTitle = document.getElementById("items-toolbar-page-title");
+    if (!root || !elContext || !elTitle) return;
+
+    root.hidden = hidden;
+    if (hidden) {
+      elContext.replaceChildren();
+      elTitle.textContent = "";
+      elTitle.setAttribute("aria-hidden", "true");
+      root.removeAttribute("aria-label");
+      return;
+    }
+
+    const title = String(titleLine ?? "").trim() || ARCHIVE_HEADING_DEFAULT_TITLE;
+    renderArchiveHeadingBreadcrumb(elContext, { searchActive });
+    elContext.hidden = false;
+    elTitle.hidden = false;
+    elTitle.removeAttribute("aria-hidden");
+    elTitle.textContent = title;
+    elTitle.classList.remove("items-toolbar__page-title--placeholder");
+    const trail = searchActive
+      ? "COLLECTION / SEARCH /"
+      : `COLLECTION / ${archiveHeadingSeasonLabel()} /`;
+    root.setAttribute("aria-label", `${trail} ${title}`);
   }
   /** Per-slot subcategory drill / mega menu: view entire parent category (empty `subcategoryFilter`). */
   const SUBCATEGORY_ALL_LABEL = "All";
@@ -7942,65 +9032,17 @@
     if (scrollTop) scrollArchiveViewportTop();
   }
 
-  function syncBrandStoryActivePanel() {
-    const story = document.getElementById("items-toolbar-brand-story");
-    const storyBtn = document.getElementById("items-toolbar-brand-story-toggle");
-    if (!story || story.hidden) return;
-    const cat = String(categoryNavFilter ?? "").trim();
-    const slotKey = !cat ? "" : SLOT_OPTIONS.includes(cat) ? cat : SLOT_CLOTHING;
-    if (lastBrandStoryPanelKey !== slotKey) {
-      lastBrandStoryPanelKey = slotKey;
-      story.classList.remove("items-toolbar__brand-story--expanded");
-      if (storyBtn) {
-        storyBtn.setAttribute("aria-expanded", "false");
-        const lab = storyBtn.querySelector(".items-toolbar__brand-story-toggle-label");
-        if (lab) lab.textContent = "View More";
-      }
-    }
-    story.querySelectorAll("[data-brand-story-panel]").forEach((panel) => {
-      const key = String(panel.getAttribute("data-brand-story-panel") ?? "").trim();
-      const active = key === slotKey;
-      /* Use the content attribute so visibility stays in sync with HTML `[hidden]` (some engines are finicky with only the IDL `.hidden`). */
-      if (active) panel.removeAttribute("hidden");
-      else panel.setAttribute("hidden", "");
-    });
-  }
-
-  /**
-   * Slash-terminated trail above the serif PLP title (uppercase via CSS).
-   * Never repeats the active main nav category — use contextual archive labels only.
-   */
-  function archiveToolbarBreadcrumbText() {
+  /** Two-line editorial archive heading (context trail + serif title). */
+  function syncArchiveToolbarHeading() {
+    const root = document.getElementById("archive-heading");
+    if (!root) return;
     const submitted = String(archiveSubmittedSearchNorm ?? "").trim();
     const qNorm = effectiveArchiveKeywordSearchNorm();
     const searchActive = Boolean((submitted && !isHeaderSearchWrapOpen()) || qNorm);
-    if (searchActive) return "SEARCH /";
-
-    const sub = String(subcategoryFilter ?? "").trim();
-    const allowColour = allowArchiveBasicColourFilter();
-    const colourOn = allowColour && String(basicColourFilter ?? "").trim();
-    const within = String(archiveSearchWithinRecordCategory ?? "").trim();
-    if (sub || colourOn || within) return "CURATED SELECTION /";
-
-    const cat = String(categoryNavFilter ?? "").trim();
-
-    if (cat) return archiveSeasonEyebrowText({ withSlash: true });
-    return archiveSeasonEyebrowText({ withSlash: false });
-  }
-
-  /** Breadcrumb + serif page title — retail PLP–style archive header (left stack). */
-  function syncArchiveToolbarHeading() {
-    const bc = document.getElementById("items-toolbar-breadcrumb");
-    const pt = document.getElementById("items-toolbar-page-title");
-    if (!bc || !pt) return;
-    const qNorm = effectiveArchiveKeywordSearchNorm();
     const cat = String(categoryNavFilter ?? "").trim();
     const sub = String(subcategoryFilter ?? "").trim();
-    const allSeasonsNav = String(seasonNavFilter ?? "").trim() === "All";
+    const allSeasonsNav = !seasonNavFilter;
     const classicHome = !cat && !sub && !narrowingFiltersActive() && allSeasonsNav;
-    const showArchiveBrandStory = !archiveBrandStoryHiddenByAuxFilters();
-    const story = document.getElementById("items-toolbar-brand-story");
-    const storyBtn = document.getElementById("items-toolbar-brand-story-toggle");
     const allPiecesLanding =
       classicHome && !archiveSubmittedSearchNorm && !qNorm && !isHeaderSearchWrapOpen();
     const defaultArchiveLanding =
@@ -8009,43 +9051,18 @@
     document.body.classList.toggle("archive-ui--all-pieces-landing", allPiecesLanding);
     document.body.classList.toggle("archive-ui--default-archive-landing", defaultArchiveLanding);
 
-    bc.textContent = archiveToolbarBreadcrumbText();
-
-    if (archiveSubmittedSearchNorm && !isHeaderSearchWrapOpen()) {
-      pt.hidden = false;
-      pt.textContent = ARCHIVE_ALL_TYPES_LABEL;
-    } else if (qNorm) {
-      pt.hidden = false;
-      const rawQ =
-        headerSearchOverlayArchiveSearchFrozen && headerSearchOverlayOpeningQueryRaw != null
-          ? headerSearchOverlayOpeningQueryRaw
-          : archiveSubmittedSearchRaw || String(els.search?.value ?? "").trim();
-      pt.textContent =
-        rawQ.length > 0 ? `Results for “${rawQ}”` : `Results for “${qNorm}”`;
-    } else if (cat) {
-      pt.hidden = false;
-      pt.textContent = categoryDisplayLabel(cat);
-    } else if (sub) {
-      pt.hidden = false;
-      pt.textContent = friendlyRecordCategory(sub) || sub;
-    } else {
-      pt.textContent = "";
-      pt.hidden = true;
+    if (qNorm) {
+      renderArchiveHeading({
+        searchActive: true,
+        titleLine: resolveArchiveSearchTitleLine(qNorm),
+      });
+      return;
     }
 
-    if (story && storyBtn) {
-      if (showArchiveBrandStory) {
-        story.hidden = false;
-        syncBrandStoryActivePanel();
-      } else {
-        lastBrandStoryPanelKey = "";
-        story.hidden = true;
-        story.classList.remove("items-toolbar__brand-story--expanded");
-        storyBtn.setAttribute("aria-expanded", "false");
-        const lab = storyBtn.querySelector(".items-toolbar__brand-story-toggle-label");
-        if (lab) lab.textContent = "View More";
-      }
-    }
+    renderArchiveHeading({
+      searchActive: false,
+      titleLine: archiveHeadingTitleLine(cat),
+    });
   }
 
   function renderGrid() {
@@ -8059,6 +9076,7 @@
     syncArchiveSearchResultsPlpUi();
     syncArchiveToolbarHeading();
     syncBasicColourFilterChipUi();
+    syncArchiveBrandFilterChipUi();
     syncArchiveDrawerSubcategoryPills();
     syncCategoryFilterChip();
     syncColourFilterChip();
@@ -8101,22 +9119,23 @@
     const n = sorted.length;
     const seasonalTotal = countItemsForCurrentSeasonTab();
     const gridSearchNorm = effectiveArchiveKeywordSearchNorm();
+    let countText = "";
+    if (gridSearchNorm) {
+      countText = `${n} piece${n === 1 ? "" : "s"}`;
+    } else if (narrowingFiltersActive()) {
+      countText =
+        n === seasonalTotal
+          ? `${n} piece${n === 1 ? "" : "s"}`
+          : `${n} of ${seasonalTotal} piece${seasonalTotal === 1 ? "" : "s"}`;
+    } else {
+      countText = `${n} piece${n === 1 ? "" : "s"}`;
+    }
+    const spendText = els.spendTotal?.dataset.spendCompact || "";
     if (els.count) {
-      if (gridSearchNorm) {
-        els.count.textContent = `${n} piece${n === 1 ? "" : "s"} match this search`;
-      } else if (narrowingFiltersActive()) {
-        els.count.textContent =
-          n === seasonalTotal
-            ? `${n} piece${n === 1 ? "" : "s"}`
-            : `${n} of ${seasonalTotal} piece${seasonalTotal === 1 ? "" : "s"}`;
-      } else {
-        const where =
-          seasonNavFilter === "All" ? "all seasons" : seasonUiLabel(seasonNavFilter);
-        els.count.textContent = `${n} piece${n === 1 ? "" : "s"} in ${where}`;
-      }
+      els.count.textContent = spendText ? `${countText} · ${spendText}` : countText;
     }
     if (els.emptyMsg) {
-      const onSeasonTab = seasonNavFilter !== "All";
+      const onSeasonTab = Boolean(seasonNavFilter);
       if (gridSearchNorm) {
         els.emptyMsg.textContent = "No pieces match this search.";
       } else {
@@ -8149,16 +9168,19 @@
     const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
 
     if (!Number.isFinite(total)) {
-      el.textContent = `${prefix}: ${formatMoneyInCurrency(0, archiveDisplayCurrency)}`;
+      const formatted = formatMoneyInCurrency(0, archiveDisplayCurrency);
+      el.dataset.spendCompact = formatted;
+      el.textContent = formatted;
       return;
     }
 
     const token = ++spendTotalAnimToken;
     if (spendTotalAnimRaf) cancelAnimationFrame(spendTotalAnimRaf);
+    el.dataset.spendCompact = formatMoneyInCurrency(total, archiveDisplayCurrency);
 
     if (reduce) {
       spendTotalCurrentValue = total;
-      el.textContent = `${prefix}: ${formatMoneyInCurrency(total, archiveDisplayCurrency)}`;
+      el.textContent = el.dataset.spendCompact;
       return;
     }
 
@@ -8171,7 +9193,9 @@
       const p = Math.min(1, (now - t0) / duration);
       const eased = 1 - Math.pow(1 - p, 3);
       const next = start + delta * eased;
-      el.textContent = `${prefix}: ${formatMoneyInCurrency(next, archiveDisplayCurrency)}`;
+      const formatted = formatMoneyInCurrency(next, archiveDisplayCurrency);
+      el.dataset.spendCompact = formatted;
+      el.textContent = formatted;
       if (p < 1) {
         spendTotalAnimRaf = requestAnimationFrame(step);
       } else {
@@ -8367,6 +9391,10 @@
       wireCoverImageWithFallbacks(simg, proj, {
         host: thumb,
         missingClass: null,
+        coverRenderWidth: 132,
+        coverRenderHeight: 176,
+        coverRenderQuality: 78,
+        coverRenderResize: "contain",
         onExhausted: () => {
           thumb.style.background = "transparent";
         },
@@ -8578,6 +9606,17 @@
     codeIn.placeholder = "Colour code (#hex, SKU…)";
     codeIn.value = colourCode;
 
+    const codeRow = document.createElement("div");
+    codeRow.className = "item-edit-colour-code-row";
+    const codePreview = createItemEditColourCodePreview();
+    codeRow.append(codePreview, codeIn);
+    wireItemEditColourCodePreview({
+      input: codeIn,
+      preview: codePreview,
+      colourInput: colourIn,
+      labelInput: labelIn,
+    });
+
     const basicSel = document.createElement("select");
     basicSel.className = "item-edit-variant-basic-colour";
     basicSel.setAttribute("aria-label", "Broad colour (archive filter)");
@@ -8590,31 +9629,13 @@
     notesIn.placeholder = "Notes (optional)";
     notesIn.value = notes;
 
-    const coverLab = document.createElement("label");
-    coverLab.className = "item-edit-variant-cover-wrap";
-    const coverSpan = document.createElement("span");
-    coverSpan.className = "item-edit-variant-cover-label";
-    coverSpan.textContent = image ? "Replace cover (one file only)" : "Cover image (required, one file)";
-    const coverIn = document.createElement("input");
-    coverIn.type = "file";
-    coverIn.className = "item-edit-variant-cover";
-    coverIn.accept = "image/*";
-    coverIn.addEventListener("change", () => {
-      trimCoverFileInputToOne(coverIn);
-    });
-    coverLab.appendChild(coverSpan);
-    coverLab.appendChild(coverIn);
-
-    const rmCov = document.createElement("button");
-    rmCov.type = "button";
-    rmCov.className = "btn btn--small btn--ghost item-edit-variant-cover-remove";
-    rmCov.textContent = "Remove cover";
-    rmCov.hidden = !image;
-    rmCov.addEventListener("click", () => {
-      fs.removeAttribute("data-prev-image");
-      coverSpan.textContent = "Cover image (required)";
-      rmCov.hidden = true;
-      coverIn.value = "";
+    const photoHost = document.createElement("div");
+    photoHost.className = "item-edit-photo-manager item-edit-photo-manager--variant";
+    mountItemEditPhotoManager(photoHost, {
+      coverUrl: image,
+      galleryUrls: Array.isArray(data.gallery) ? data.gallery : [],
+      maxPhotos: ITEM_EDIT_PHOTO_MAX,
+      uploadLabel: "Upload photos",
     });
 
     const previewLab = document.createElement("label");
@@ -8648,32 +9669,6 @@
       previewIn.value = "";
     });
 
-    const varGalWrap = document.createElement("div");
-    varGalWrap.className = "item-edit-variant-gallery-block";
-    const varGalLab = document.createElement("span");
-    varGalLab.className = "item-edit-variant-cover-label";
-    varGalLab.textContent = "Gallery (remove or keep)";
-    varGalWrap.appendChild(varGalLab);
-    const varGal = document.createElement("div");
-    varGal.className = "item-edit-variant-gallery-existing";
-    for (const u of Array.isArray(data.gallery) ? data.gallery.map((x) => String(x ?? "").trim()).filter(Boolean) : []) {
-      const grow = document.createElement("div");
-      grow.className = "item-edit-gallery-row";
-      grow.dataset.galleryUrl = u;
-      const gim = document.createElement("img");
-      gim.className = "item-edit-gallery-thumb";
-      gim.alt = "";
-      gim.src = u;
-      const grm = document.createElement("button");
-      grm.type = "button";
-      grm.className = "btn btn--small btn--ghost item-edit-gallery-remove";
-      grm.textContent = "Remove";
-      grm.addEventListener("click", () => grow.remove());
-      grow.appendChild(gim);
-      grow.appendChild(grm);
-      varGal.appendChild(grow);
-    }
-    varGalWrap.appendChild(varGal);
 
     const rm = document.createElement("button");
     rm.type = "button";
@@ -8690,14 +9685,12 @@
     fs.appendChild(keyIn);
     fs.appendChild(labelIn);
     fs.appendChild(colourIn);
-    fs.appendChild(codeIn);
+    fs.appendChild(codeRow);
     fs.appendChild(basicSel);
     fs.appendChild(notesIn);
-    fs.appendChild(coverLab);
-    fs.appendChild(rmCov);
+    fs.appendChild(photoHost);
     fs.appendChild(previewLab);
     fs.appendChild(rmPrev);
-    if (varGal.children.length) fs.appendChild(varGalWrap);
     fs.appendChild(rm);
     listEl.appendChild(fs);
     syncVariantRemoveButtons(listEl);
@@ -8721,15 +9714,12 @@
       const col = row.querySelector(".item-edit-variant-colour")?.value?.trim() || "";
       const code = row.querySelector(".item-edit-variant-colour-code")?.value?.trim() || "";
       const nts = row.querySelector(".item-edit-variant-notes")?.value?.trim() || "";
-      const prevIm = row.getAttribute("data-prev-image")?.trim() || "";
       const prevPr = row.getAttribute("data-prev-preview")?.trim() || "";
-      const coverIn = row.querySelector(".item-edit-variant-cover");
-      const file = coverIn?.files?.[0];
       const previewIn = row.querySelector(".item-edit-variant-preview");
       const previewFile = previewIn?.files?.[0];
-      const gWrap = row.querySelector(".item-edit-variant-gallery-existing");
-      const hasGal = Boolean(gWrap?.querySelector(".item-edit-gallery-row[data-gallery-url]"));
-      return Boolean(lab || col || code || nts || prevIm || prevPr || file || previewFile || hasGal);
+      const photoHost = row.querySelector(".item-edit-photo-manager");
+      const photoCount = photoHost ? readItemEditPhotoManager(photoHost).slots.length : 0;
+      return Boolean(lab || col || code || nts || prevPr || previewFile || photoCount > 0);
     });
     if (!rows.length) {
       setMsg("Add at least one colour row with a cover image.", true);
@@ -8744,23 +9734,10 @@
       const colourTxt = row.querySelector(".item-edit-variant-colour")?.value?.trim() || "";
       const colourCode = row.querySelector(".item-edit-variant-colour-code")?.value?.trim() || "";
       const notes = row.querySelector(".item-edit-variant-notes")?.value?.trim() || "";
-      const coverIn = row.querySelector(".item-edit-variant-cover");
-      trimCoverFileInputToOne(/** @type {HTMLInputElement | null} */ (coverIn));
-      const file = coverIn?.files?.[0];
-      const prevIm = row.getAttribute("data-prev-image")?.trim() || "";
-      let image = prevIm;
-      if (file) {
-        try {
-          const cloudId = opts?.cloudItemId && isSupabaseReady() ? String(opts.cloudItemId).trim() : "";
-          image = cloudId
-            ? await uploadWardrobeImageFileToCloud(file, cloudId, { type: "variant_cover", key })
-            : await fileToStorageDataUrl(file);
-        } catch (err) {
-          console.warn(err);
-          setMsg(messageForCloudUploadFailure(`variant cover (${key || "unknown key"})`, err), true);
-          return null;
-        }
-      }
+      const photoHost = row.querySelector(".item-edit-photo-manager");
+      const { slots: photoSlots } = photoHost
+        ? readItemEditPhotoManager(photoHost)
+        : { slots: /** @type {const} */ ([]) };
       if (!key) {
         setMsg("Each colour row needs an internal key (reload and try again).", true);
         return null;
@@ -8773,19 +9750,23 @@
         );
         return null;
       }
-      if (!image) {
-        setMsg("Each row needs a cover image — upload one, or keep an existing row’s image.", true);
+      if (!photoSlots.length) {
+        setMsg("Each colour row needs at least one photo.", true);
         return null;
       }
       const match = prevVars.find((x) => x && String(x.key ?? "").trim() === key);
-      let gallery = [];
-      const gWrap = row.querySelector(".item-edit-variant-gallery-existing");
-      if (gWrap) {
-        gallery = [...gWrap.querySelectorAll(".item-edit-gallery-row[data-gallery-url]")]
-          .map((n) => String(n.getAttribute("data-gallery-url") ?? "").trim())
-          .filter(Boolean);
-      } else if (match && Array.isArray(match.gallery)) {
-        gallery = match.gallery.map((x) => String(x ?? "").trim()).filter(Boolean);
+      const prevCover = String(match?.image ?? row.getAttribute("data-prev-image") ?? "").trim();
+      const cloudId = opts?.cloudItemId && isSupabaseReady() ? String(opts.cloudItemId).trim() : id;
+      const materialized = await materializeItemEditPhotoSlots(photoSlots, cloudId, setMsg, {
+        variantKey: key,
+        keepCoverOnFailure: true,
+        previousCover: prevCover,
+      });
+      const image = materialized.image;
+      const gallery = materialized.gallery;
+      if (!image) {
+        setMsg("Each row needs a cover image — upload one, or keep an existing row’s image.", true);
+        return null;
       }
 
       const previewRemoved = row.dataset.previewRemoved === "1";
@@ -8935,54 +9916,32 @@
     }
 
     let image = String(prev.image ?? "").trim();
+    let gallery = [...itemGalleryList(prev)];
     if (!(variantsMode && colourVariantsBuilt?.length)) {
-      const stripCover = form.querySelector("#item-edit-remove-cover")?.value === "1";
-      const coverEl = /** @type {HTMLInputElement | null} */ (form.querySelector("#item-edit-cover"));
-      trimCoverFileInputToOne(coverEl);
-      const coverFile = coverEl?.files?.[0];
-      if (coverFile) {
-        setMsg("Processing images…", false);
-        try {
-          image = isSupabaseReady()
-            ? await uploadWardrobeImageFileToCloud(coverFile, id, { type: "main_cover" })
-            : await fileToStorageDataUrl(coverFile);
-        } catch (err) {
-          console.warn(err);
+      const photoHost = document.getElementById("item-edit-photos");
+      if (photoHost) {
+        const entryCount = Array.isArray(photoHost.__twPhotoEntries) ? photoHost.__twPhotoEntries.length : 0;
+        const { slots } = readItemEditPhotoManager(photoHost);
+        if (entryCount === 0) {
+          image = "";
+          gallery = [];
+        } else if (slots.length) {
+          setMsg("Processing images…", false);
+          const materialized = await materializeItemEditPhotoSlots(slots, id, setMsg, {
+            keepCoverOnFailure: true,
+            previousCover: image,
+          });
+          image = materialized.image;
+          gallery = materialized.gallery;
+        } else {
           setMsg(
-            `${messageForCloudUploadFailure("main cover", err)} — keeping the previous cover and continuing other fields.`,
+            "Could not read the uploaded photo files. Remove them and upload again, then save.",
             true
           );
-          keepFinalWarningMessage = true;
+          return;
         }
-      } else if (stripCover) {
-        image = "";
       }
     }
-
-    let gallery = [...itemGalleryList(prev)];
-    if (!variantsMode) {
-      const inner = form.querySelector("#item-edit-gallery-existing .item-edit-gallery-existing-inner");
-      if (inner) {
-        gallery = [...inner.querySelectorAll(".item-edit-gallery-row[data-gallery-url]")]
-          .map((r) => String(r.getAttribute("data-gallery-url") ?? "").trim())
-          .filter(Boolean);
-      }
-    }
-    const gFiles = form.querySelector("#item-edit-gallery")?.files
-      ? Array.from(form.querySelector("#item-edit-gallery").files)
-      : [];
-    for (const gf of gFiles.slice(0, 12)) {
-      try {
-        const url = isSupabaseReady()
-          ? await uploadWardrobeImageFileToCloud(gf, id, { type: "main_gallery", index: gallery.length + 1 })
-          : await fileToStorageDataUrl(gf, { preferJpeg: true });
-        gallery.push(url);
-      } catch (e) {
-        console.warn(e);
-        setMsg(messageForCloudUploadFailure(`gallery image #${gallery.length + 1}`, e), true);
-      }
-    }
-    gallery = dedupeGalleryUrls(image, gallery, 12);
 
     const colourTrim = String(primaryColour ?? "").trim();
     const colourCodeTrim = String(colourCode ?? "").trim();
@@ -9068,6 +10027,8 @@
     let didCloudListRefresh = false;
     let archiveCloudRowSaved = false;
     let archiveSavedAsOverride = false;
+    /** @type {object | null} */
+    let savedRowForPin = null;
 
     if (isCustom) {
       const inWardrobe = loadCustomItems().some((x) => String(x.id) === id);
@@ -9085,8 +10046,9 @@
         customCloudSynced = true;
         customProjectSynced = false;
         await deleteSupabaseImagesNoLongerUsed(prev, saved, updated);
+        savedRowForPin = saved;
         try {
-          await refreshCloudBackedCustomItems();
+          await refreshCloudBackedCustomItems({ pinnedRows: [saved] });
           didCloudListRefresh = true;
           const hit = cloudBackedCustomItems.find((x) => String(x.id) === String(id));
           if (hit) /** @type {any} */ (hit).__displayNonce = mediaBust;
@@ -9168,6 +10130,7 @@
       try {
         const mergedForCloud = normalizeItemDerivedFields(mergeArchivePatchIntoFullItem(prev, patch));
         const saved = await saveWardrobeItemToCloud(mergedForCloud);
+        const mediaBust = stampWardrobeItemMediaNonce(saved);
         archiveCloudRowSaved = true;
         upsertWardrobeBaseRowInMemory(saved);
         try {
@@ -9188,7 +10151,10 @@
         } catch (imgErr) {
           console.warn("Image cleanup after catalogue save (continuing):", imgErr);
         }
-        await refreshCloudBackedCustomItems();
+        savedRowForPin = saved;
+        await refreshCloudBackedCustomItems({ pinnedRows: [saved] });
+        const hitCat = cloudBackedCustomItems.find((x) => String(x?.id ?? "") === String(id));
+        if (hitCat) /** @type {any} */ (hitCat).__displayNonce = mediaBust;
         didCloudListRefresh = true;
       } catch (e) {
         setMsg(`Cloud row save failed: ${messageForFailedWardrobeUpsert(e)}`, true);
@@ -9232,7 +10198,11 @@
         "Saved in this browser/origin only (domain/protocol/port). Add Supabase (js/tw-supabase-config.js) to sync your wardrobe, or keep backups via “Download backup JSON”."
       );
     }
-    if (returnToArchiveAfterSave) globalThis.location.assign(ARCHIVE_HOME_MAIN_URL);
+    if (returnToArchiveAfterSave) {
+      if (savedRowForPin) pinWardrobeSaveToSession(savedRowForPin);
+      writeArchiveBrowseRestoreForItemReturn(next ?? updated);
+      navigateToArchiveMain();
+    }
   }
 
   /** PDP-style trail: site → section → record type (matches archive tabs / drill). */
@@ -9384,6 +10354,10 @@
     img.draggable = false;
     wireCoverImageWithFallbacks(img, item, {
       host: media,
+      coverRenderWidth: ITEM_DETAIL_GALLERY_RENDER.width,
+      coverRenderHeight: ITEM_DETAIL_GALLERY_RENDER.height,
+      coverRenderQuality: ITEM_DETAIL_GALLERY_RENDER.quality,
+      coverRenderResize: ITEM_DETAIL_GALLERY_RENDER.resize,
       onResolved(url) {
         const ti = media.querySelector(".card__gallery-strip .card__gallery-thumb.is-active img");
         if (ti) ti.src = url;
@@ -9445,14 +10419,14 @@
 
       const identitySec = createItemEditSection("Identity");
       const identityGrid = identitySec.grid;
+      const initialVariants = getItemColourVariants(item);
+      const isCustomPiece = String(item.id ?? "").startsWith("custom-");
       const colourSec = createItemEditSection("Colour & season");
       const colourGrid = colourSec.grid;
       const materialSec = createItemEditSection("Material & fit");
       const materialGrid = materialSec.grid;
       const acquisitionSec = createItemEditSection("Acquisition");
       const acquisitionGrid = acquisitionSec.grid;
-      const imagesSec = createItemEditSection("Images");
-      const imagesGrid = imagesSec.grid;
 
       function addField(labelText, child, targetGrid = identityGrid) {
         appendItemEditField(targetGrid, labelText, child);
@@ -9473,6 +10447,26 @@
       nameIn.maxLength = 200;
       nameIn.value = String(item.name ?? "");
       addField("Name", nameIn);
+
+      const photosFieldWrap = document.createElement("div");
+      photosFieldWrap.className = "field field--span2 item-edit-photos-field";
+      photosFieldWrap.id = "item-edit-photos-field";
+      const photosLabel = document.createElement("span");
+      photosLabel.className = "field__label";
+      photosLabel.textContent = "Photos";
+      const photosHost = document.createElement("div");
+      photosHost.id = "item-edit-photos";
+      if (!initialVariants) {
+        mountItemEditPhotoManager(photosHost, {
+          coverUrl: String(item.image ?? "").trim(),
+          galleryUrls: itemGalleryList(item),
+          uploadLabel: "Upload photos",
+        });
+      }
+      photosFieldWrap.appendChild(photosLabel);
+      photosFieldWrap.appendChild(photosHost);
+      photosFieldWrap.hidden = Boolean(initialVariants);
+      identityGrid.appendChild(photosFieldWrap);
 
       const catSel = document.createElement("select");
       catSel.id = "item-edit-browse-slot";
@@ -9524,9 +10518,6 @@
       });
       refreshSubtypeChips();
 
-      const initialVariants = getItemColourVariants(item);
-      const isCustomPiece = String(item.id ?? "").startsWith("custom-");
-
       /** @type {HTMLElement | null} */
       let colourSingleField = null;
 
@@ -9562,8 +10553,17 @@
       const ccspan = document.createElement("span");
       ccspan.className = "field__label";
       ccspan.textContent = "Colour code (optional)";
+      const colourCodeRow = document.createElement("div");
+      colourCodeRow.className = "item-edit-colour-code-row";
+      const colourCodePreview = createItemEditColourCodePreview();
+      colourCodeRow.append(colourCodePreview, colourCodeInput);
       colourCodeLab.appendChild(ccspan);
-      colourCodeLab.appendChild(colourCodeInput);
+      colourCodeLab.appendChild(colourCodeRow);
+      wireItemEditColourCodePreview({
+        input: colourCodeInput,
+        preview: colourCodePreview,
+        colourInput: colourNameInput,
+      });
 
       const itemMetaForBasic =
         item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) ? item.metadata : null;
@@ -9702,8 +10702,8 @@
         colourSingleField.hidden = false;
         addVarBtn.hidden = true;
         disableVariantsBtn.hidden = true;
-        const coverField = form.querySelector("#item-edit-cover")?.closest("label");
-        if (coverField instanceof HTMLElement) coverField.hidden = false;
+        const photosField = document.getElementById("item-edit-photos-field");
+        if (photosField instanceof HTMLElement) photosField.hidden = false;
       });
 
       if (colourSingleField) {
@@ -9748,8 +10748,8 @@
           colourSingleField.hidden = true;
           addVarBtn.hidden = false;
           disableVariantsBtn.hidden = false;
-          const coverField = form.querySelector("#item-edit-cover")?.closest("label");
-          if (coverField instanceof HTMLElement) coverField.hidden = true;
+          const photosField = document.getElementById("item-edit-photos-field");
+          if (photosField instanceof HTMLElement) photosField.hidden = true;
         });
       }
 
@@ -9843,126 +10843,10 @@
       addField("Purchase date (optional)", purchaseWrap, acquisitionGrid);
       addField("Price (optional)", priceWrap, acquisitionGrid);
 
-      if (!initialVariants) {
-        const removeCoverIn = document.createElement("input");
-        removeCoverIn.type = "hidden";
-        removeCoverIn.id = "item-edit-remove-cover";
-        removeCoverIn.value = "";
-        imagesGrid.appendChild(removeCoverIn);
-
-        const curImg = String(item.image ?? "").trim();
-        if (curImg) {
-          const coverManage = document.createElement("div");
-          coverManage.className = "field field--span2 item-edit-cover-manage";
-          const prevFig = document.createElement("div");
-          prevFig.className = "item-edit-current-cover";
-          const preImg = document.createElement("img");
-          preImg.className = "item-edit-current-cover-img";
-          preImg.alt = "Current cover";
-          preImg.src = curImg;
-          const rmC = document.createElement("button");
-          rmC.type = "button";
-          rmC.className = "btn btn--small btn--ghost item-edit-remove-cover-btn";
-          rmC.textContent = "Remove cover";
-          rmC.addEventListener("click", () => {
-            removeCoverIn.value = "1";
-            prevFig.remove();
-          });
-          prevFig.appendChild(preImg);
-          prevFig.appendChild(rmC);
-          coverManage.appendChild(prevFig);
-          imagesGrid.appendChild(coverManage);
-        }
-      }
-
-      const coverLab = document.createElement("label");
-      coverLab.className = "field field--file field--span2";
-      const coverSpan = document.createElement("span");
-      coverSpan.className = "field__label";
-      coverSpan.textContent = "New cover image (optional, one file only)";
-      const coverIn = document.createElement("input");
-      coverIn.type = "file";
-      coverIn.id = "item-edit-cover";
-      coverIn.accept = "image/*";
-      coverLab.appendChild(coverSpan);
-      coverLab.appendChild(coverIn);
-      imagesGrid.appendChild(coverLab);
-      coverLab.hidden = Boolean(initialVariants);
-      if (!initialVariants) {
-        coverIn.addEventListener("change", () => {
-          trimCoverFileInputToOne(coverIn, () => {
-            const msg = document.getElementById("item-detail-edit-msg");
-            const st = document.getElementById("item-detail-edit-status");
-            const note = "Cover is limited to one image — using the first file only.";
-            if (msg) {
-              msg.hidden = false;
-              msg.textContent = note;
-              msg.classList.remove("item-detail__edit-msg--error");
-            }
-            if (st) {
-              st.hidden = false;
-              st.textContent = note;
-              st.classList.remove("item-edit-save-status--error", "item-edit-save-status--dirty");
-            }
-          });
-          const h = form.querySelector("#item-edit-remove-cover");
-          if (h) h.value = "";
-        });
-      }
-
-      const galLab = document.createElement("label");
-      galLab.className = "field field--file field--span2";
-      const galSpan = document.createElement("span");
-      galSpan.className = "field__label";
-      galSpan.textContent = "Add gallery photos (optional, max 12 total)";
-      const galIn = document.createElement("input");
-      galIn.type = "file";
-      galIn.id = "item-edit-gallery";
-      galIn.accept = "image/*";
-      galIn.multiple = true;
-      galLab.appendChild(galSpan);
-      galLab.appendChild(galIn);
-      imagesGrid.appendChild(galLab);
-
-      if (!initialVariants) {
-        const galUrls = itemGalleryList(item);
-        if (galUrls.length) {
-          const galWrap = document.createElement("div");
-          galWrap.id = "item-edit-gallery-existing";
-          galWrap.className = "field field--span2 item-edit-gallery-existing";
-          const galHead = document.createElement("span");
-          galHead.className = "field__label";
-          galHead.textContent = "Gallery (remove photos you no longer want)";
-          galWrap.appendChild(galHead);
-          const inner = document.createElement("div");
-          inner.className = "item-edit-gallery-existing-inner";
-          for (const u of galUrls) {
-            const grow = document.createElement("div");
-            grow.className = "item-edit-gallery-row";
-            grow.dataset.galleryUrl = u;
-            const gim = document.createElement("img");
-            gim.className = "item-edit-gallery-thumb";
-            gim.alt = "";
-            gim.src = u;
-            const grm = document.createElement("button");
-            grm.type = "button";
-            grm.className = "btn btn--small btn--ghost item-edit-gallery-remove";
-            grm.textContent = "Remove";
-            grm.addEventListener("click", () => grow.remove());
-            grow.appendChild(gim);
-            grow.appendChild(grm);
-            inner.appendChild(grow);
-          }
-          galWrap.appendChild(inner);
-          imagesGrid.appendChild(galWrap);
-        }
-      }
-
       formScroll.appendChild(identitySec.section);
       formScroll.appendChild(colourSec.section);
       formScroll.appendChild(materialSec.section);
       formScroll.appendChild(acquisitionSec.section);
-      formScroll.appendChild(imagesSec.section);
 
       const notesSec = createItemEditSection("Notes");
       const notesLab = document.createElement("label");
@@ -10214,8 +11098,7 @@
         ARCHIVE_BROWSE_RESTORE_KEY,
         JSON.stringify({
           t: Date.now(),
-          seasonNav:
-            overrides.seasonNav != null ? String(overrides.seasonNav).trim() : String(seasonNavFilter ?? "").trim(),
+          seasonNav: normalizeSeasonNavToken(overrides.seasonNav ?? seasonNavFilter),
           category: overrides.category != null ? String(overrides.category) : String(categoryNavFilter ?? ""),
           subcategory:
             overrides.subcategory != null
@@ -10233,12 +11116,71 @@
     }
   }
 
+  /** Read browse snapshot without consuming (same TTL as `consumeArchiveBrowseStateForReturn`). */
+  function peekArchiveBrowseRestoreSnapshot() {
+    try {
+      const raw = sessionStorage.getItem(ARCHIVE_BROWSE_RESTORE_KEY);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      const t = Number(o?.t);
+      if (!Number.isFinite(t) || Date.now() - t > ARCHIVE_SCROLL_TTL_MS) return null;
+      return o;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Before leaving `item.html` after save, refresh the archive browse snapshot so the PLP
+   * re-opens on the same section + record-type drill the user came from (or the saved item’s type).
+   * @param {object | null | undefined} item
+   */
+  function writeArchiveBrowseRestoreForItemReturn(item) {
+    const prev = peekArchiveBrowseRestoreSnapshot();
+    const slot = item ? itemSlot(item) : "";
+    const drill = item ? recordCategoryForDrill(item, slot) : "";
+    let category = String(prev?.category ?? "").trim();
+    let subcategory = String(prev?.subcategory ?? "").trim();
+    if (!SLOT_OPTIONS.includes(category)) category = slot;
+    if (!subcategory && drill) subcategory = drill;
+    if (prev) {
+      writeArchiveBrowseRestoreSnapshot({
+        seasonNav: prev.seasonNav,
+        category,
+        subcategory,
+        search: String(prev.search ?? ""),
+        basicColour: String(prev.basicColour ?? ""),
+      });
+      return;
+    }
+    writeArchiveBrowseRestoreSnapshot({ category, subcategory });
+  }
+
   function navigateToArchiveMain() {
     try {
       globalThis.location.assign(ARCHIVE_HOME_MAIN_URL);
     } catch {
       globalThis.location.href = ARCHIVE_HOME_MAIN_URL;
     }
+  }
+
+  function normalizeArchiveTopLanding() {
+    if (!isArchiveLocation()) return;
+    if (String(globalThis.location.hash ?? "") !== "#main") return;
+    try {
+      const u = new URL(globalThis.location.href);
+      u.hash = "";
+      globalThis.history.replaceState(null, "", `${u.pathname}${u.search}`);
+    } catch {
+      /* ignore */
+    }
+    requestAnimationFrame(() => {
+      try {
+        globalThis.scrollTo(0, 0);
+      } catch {
+        /* ignore */
+      }
+    });
   }
 
   function isSiteHomePage() {
@@ -10297,8 +11239,14 @@
     const t = Number(o?.t);
     if (!Number.isFinite(t) || Date.now() - t > ARCHIVE_SCROLL_TTL_MS) return;
 
-    const nav = String(o?.seasonNav ?? "").trim();
-    if (nav === "All" || nav === "S/S" || nav === "A/W") seasonNavFilter = nav;
+    const urlSeason = readSeasonNavFromUrl();
+    if (urlSeason) {
+      seasonNavFilter = urlSeason;
+    } else if (archiveUrlHasSeasonParam() || isArchiveLocation()) {
+      seasonNavFilter = null;
+    } else {
+      seasonNavFilter = normalizeSeasonNavToken(o?.seasonNav);
+    }
 
     const cat = String(o?.category ?? "").trim();
     if (!cat) categoryNavFilter = "";
@@ -10315,7 +11263,7 @@
         archiveSearchWithinRecordCategory = "";
         archiveSearchBrowseAllSlots = true;
         archiveSearchReturnSnapshot = null;
-        document.body.classList.add("archive-ui--search-results-plp");
+        document.body.classList.remove("archive-ui--search-results-plp");
       }
     }
 
@@ -10605,17 +11553,12 @@
     });
   }
 
-  function setSeasonNavFilter(next, { toggleSame = false } = {}) {
-    const v = String(next ?? "").trim();
-    if (v !== "S/S" && v !== "A/W" && v !== "All") return;
-    if (v === "All") {
-      seasonNavFilter = "All";
-    } else if (toggleSame && seasonNavFilter === v) {
-      seasonNavFilter = "All";
-    } else {
-      seasonNavFilter = v;
-    }
+  function setSeasonNavFilter(next) {
+    const normalized = normalizeSeason(next);
+    const v = normalized === "SS" || normalized === "AW" ? normalized : null;
+    seasonNavFilter = v && seasonNavFilter !== v ? v : null;
     persistSeasonNav();
+    replaceArchiveSeasonQuery(seasonNavFilter);
     invalidateArchiveSortedCache();
     syncSeasonTabUI();
     validateSubcategoryFilter();
@@ -10627,7 +11570,9 @@
     const markTabs = (root, selector, pressedAttr) => {
       if (!root) return;
       root.querySelectorAll(selector).forEach((tab) => {
-        const v = tab.dataset.seasonFilter ?? "";
+        const raw = tab.dataset.seasonFilter ?? "";
+        const normalized = normalizeSeason(raw);
+        const v = normalized === "SS" || normalized === "AW" ? normalized : null;
         const active = v === seasonNavFilter;
         tab.classList.toggle("is-active", active);
         tab.setAttribute(pressedAttr, active ? "true" : "false");
@@ -10655,6 +11600,16 @@
     } catch {
       globalThis.scrollTo(0, 0);
     }
+  }
+
+  /** Keep viewport Y stable when toolbar / drill chips reflow (avoids scroll-fold feedback loops). */
+  function withPreservedArchiveScroll(updateFn) {
+    const y = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
+    updateFn();
+    requestAnimationFrame(() => {
+      const max = Math.max(0, document.documentElement.scrollHeight - globalThis.innerHeight);
+      globalThis.scrollTo(0, Math.min(y, max));
+    });
   }
 
   function syncFiltersMenuForViewport() {
@@ -10740,20 +11695,15 @@
     }
     if (!keys.includes(fall)) keys = sortRecordTypeKeysForSlot(slot, [fall, ...keys]);
 
-    const typeEntries = [];
-    const seenTypeLabels = new Set();
-    for (const raw of keys) {
-      const label = friendlyRecordCategory(raw) || raw;
-      if (seenTypeLabels.has(label)) continue;
-      seenTypeLabels.add(label);
-      typeEntries.push({ raw, label });
-    }
+    const typeEntries = collapseRecordTypeKeysByDisplayLabel(keys, slot);
 
     const withCounts = typeEntries
       .map(({ raw, label }) => ({
         raw,
         label,
-        count: pool.filter((i) => itemSlot(i) === slot && recordCategoryForDrill(i, slot) === raw).length,
+        count: pool.filter(
+          (i) => itemSlot(i) === slot && itemMatchesDrillSubcategory(i, slot, raw)
+        ).length,
       }))
       .filter((x) => x.count > 0);
 
@@ -10785,7 +11735,7 @@
       b.type = "button";
       b.className = "archive-drawer-record-type-chip";
       b.dataset.drawerRecordType = raw;
-      const on = String(subcategoryFilter ?? "").trim() === raw;
+      const on = recordTypeDrillKeysEquivalent(subcategoryFilter, raw);
       b.classList.toggle("is-active", on);
       b.setAttribute("aria-pressed", on ? "true" : "false");
       b.setAttribute("aria-label", `Filter by ${label}`);
@@ -10856,6 +11806,46 @@
     }
   }
 
+  function syncArchiveBrandFilterChipUi() {
+    const chipWrap = document.getElementById("archive-drawer-brand-chips");
+    const chipBlock = chipWrap?.closest(".archive-filter-drawer__block--brands");
+    if (!chipWrap) return;
+    const allowBrand = allowArchiveBasicColourFilter();
+    if (chipBlock) chipBlock.hidden = !allowBrand;
+    chipWrap.hidden = !allowBrand;
+    if (!allowBrand) {
+      chipWrap.replaceChildren();
+      return;
+    }
+    const counts = brandCountsForCurrentContext();
+    const available = new Set(availableBrandsForCurrentContext());
+    const keys = [...available];
+    for (const brand of selectedBrandFilters) {
+      if (!available.has(brand)) keys.push(brand);
+    }
+    keys.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    chipWrap.replaceChildren();
+    if (!keys.length) return;
+    for (const brand of keys) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "archive-drawer-sort-chip archive-drawer-brand-chip";
+      b.dataset.brandFilter = brand;
+      const on = selectedBrandFilters.has(brand);
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.setAttribute("aria-label", `Filter brand: ${brand}`);
+      b.textContent = `${brand} (${counts.get(brand) ?? 0})`;
+      b.addEventListener("click", () => {
+        toggleBrandFilter(brand);
+        syncArchiveBrandFilterChipUi();
+        syncToolbarActiveFilterChips();
+        renderGrid();
+      });
+      chipWrap.appendChild(b);
+    }
+  }
+
   function openArchiveFilterDrawer() {
     const root = document.getElementById("archive-filter-drawer");
     const openBtn = document.getElementById("archive-filter-drawer-open");
@@ -10876,6 +11866,7 @@
       document.body.classList.add("archive-ui--filter-drawer");
       syncArchiveDrawerSubcategoryPills();
       syncArchiveSortChipUi();
+      syncArchiveBrandFilterChipUi();
       syncArchiveFilterDrawerDoneLabel(applyFilters(items).length);
       document.getElementById("archive-filter-drawer-close")?.focus();
     });
@@ -10959,10 +11950,12 @@
       drawerRecChips.addEventListener("click", (e) => {
         const b = e.target.closest("button.archive-drawer-record-type-chip");
         if (!b || !drawerRecChips.contains(b)) return;
-        subcategoryFilter = String(b.dataset.drawerRecordType ?? "").trim();
-        validateSubcategoryFilter();
-        renderCategoryDrill();
-        renderGrid();
+        withPreservedArchiveScroll(() => {
+          subcategoryFilter = String(b.dataset.drawerRecordType ?? "").trim();
+          validateSubcategoryFilter();
+          renderCategoryDrill();
+          renderGrid();
+        });
       });
     }
     if (drawerRoot && drawerOpen && drawerRoot.dataset.twDrawerUiWired !== "1") {
@@ -10991,21 +11984,27 @@
       chipWrap.dataset.twColourWired = "1";
       syncBasicColourFilterChipUi();
     }
+
+    const brandWrap = document.getElementById("archive-drawer-brand-chips");
+    if (brandWrap && brandWrap.dataset.twBrandWired !== "1") {
+      brandWrap.dataset.twBrandWired = "1";
+      syncArchiveBrandFilterChipUi();
+    }
   }
 
   function syncSearchOverlayBackdropTop() {
     try {
-      if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
-        document.documentElement.style.removeProperty("--tw-search-dim-top");
+      if (globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+        syncHeaderFlyoutDimTop();
         return;
       }
       const wrap = document.getElementById("site-header-search-wrap");
-      const megamenu = wrap?.querySelector(".site-header__search-megamenu");
-      if (!wrap?.classList.contains("is-open") || !megamenu) {
+      const panel = wrap?.querySelector(".desktop-search-flyout-inner") ?? wrap;
+      if (!wrap?.classList.contains("is-open") || !panel) {
         document.documentElement.style.removeProperty("--tw-search-dim-top");
         return;
       }
-      const bottom = Math.ceil(megamenu.getBoundingClientRect().bottom);
+      const bottom = Math.ceil(panel.getBoundingClientRect().bottom);
       document.documentElement.style.setProperty("--tw-search-dim-top", `${bottom}px`);
     } catch {
       try {
@@ -11014,6 +12013,95 @@
         /* ignore */
       }
     }
+  }
+
+  /** Viewport Y below utility + primary header row (flyout panels sit above the dim). */
+  function measureHeaderChromeBottom() {
+    const util = document.querySelector(".site-utility-bar");
+    const brandNav = document.querySelector(".site-header__brand-nav");
+    let bottom = 0;
+    if (util) bottom = Math.max(bottom, Math.ceil(util.getBoundingClientRect().bottom));
+    if (brandNav) bottom = Math.max(bottom, Math.ceil(brandNav.getBoundingClientRect().bottom));
+    return bottom;
+  }
+
+  /** Desktop flyouts: dim full page below header chrome; flyouts sit above dim (z-index). */
+  function syncHeaderFlyoutDimTop() {
+    try {
+      if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+        document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
+        return;
+      }
+      const submenuOpen =
+        document.body.classList.contains("archive-ui--header-submenu-open") ||
+        document.body.classList.contains("archive-ui--header-submenu-closing");
+      const searchWrap = document.getElementById("site-header-search-wrap");
+      const searchState = String(searchWrap?.dataset.searchState ?? "closed").trim() || "closed";
+      const searchOpen =
+        document.body.classList.contains("archive-ui--header-search-open") ||
+        document.body.classList.contains("archive-ui--header-search-closing") ||
+        searchState === "opening" ||
+        searchState === "open" ||
+        searchState === "closing";
+      if (!submenuOpen && !searchOpen) {
+        document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
+        return;
+      }
+      const chromeBottom = measureHeaderChromeBottom();
+      if (chromeBottom > 0) {
+        document.documentElement.style.setProperty("--site-header-chrome-bottom", `${chromeBottom}px`);
+        document.documentElement.style.setProperty("--site-header-submenu-dim-top", `${chromeBottom}px`);
+      }
+    } catch {
+      try {
+        document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function syncHeaderSubmenuDimTop() {
+    syncHeaderFlyoutDimTop();
+  }
+
+  const HEADER_SEARCH_FLYOUT_MOTION_MS = 300;
+
+  function hideHeaderFlyoutDimIfIdle() {
+    const searchWrap = document.getElementById("site-header-search-wrap");
+    const searchState = String(searchWrap?.dataset.searchState ?? "closed").trim() || "closed";
+    const submenuOpen =
+      document.body.classList.contains("archive-ui--header-submenu-open") ||
+      document.body.classList.contains("archive-ui--header-submenu-closing");
+    const searchOpen =
+      document.body.classList.contains("archive-ui--header-search-open") ||
+      document.body.classList.contains("archive-ui--header-search-closing") ||
+      searchWrap?.classList.contains("is-open") ||
+      searchState === "opening" ||
+      searchState === "open" ||
+      searchState === "closing";
+    if (submenuOpen || searchOpen) return;
+    const dim = document.getElementById("site-header-submenu-dim");
+    if (dim) {
+      dim.hidden = true;
+      dim.setAttribute("aria-hidden", "true");
+    }
+    try {
+      document.documentElement.style.removeProperty("--site-header-chrome-bottom");
+      document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
+      document.documentElement.style.removeProperty("--tw-search-dim-top");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function showHeaderFlyoutDim() {
+    if (globalThis.matchMedia?.("(max-width: 900px)")?.matches) return;
+    const dim = document.getElementById("site-header-submenu-dim");
+    if (!dim) return;
+    dim.hidden = false;
+    dim.setAttribute("aria-hidden", "false");
+    syncHeaderFlyoutDimTop();
   }
 
   const TW_MOTION_MS = 280;
@@ -11072,11 +12160,23 @@
     }
     const wrap = document.getElementById("site-header-submenu");
     if (wrap) {
-      wrap.hidden = true;
+      if (isFiltersNarrowViewport()) {
+        wrap.hidden = true;
+      } else {
+        wrap.removeAttribute("hidden");
+      }
       wrap.dataset.submenuState = "closed";
       wrap.classList.remove("site-header__submenu--opening", "site-header__submenu--switching");
+      wrap.setAttribute("aria-hidden", "true");
     }
     document.body.classList.remove("archive-ui--header-submenu-open", "archive-ui--header-submenu-closing");
+    hideHeaderFlyoutDimIfIdle();
+    try {
+      document.documentElement.style.removeProperty("--site-header-chrome-bottom");
+      document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
+    } catch {
+      /* ignore */
+    }
   }
 
   const PAGE_THEME_LEAK_CLASSES = [
@@ -11156,6 +12256,7 @@
     document.body.classList.remove(
       "archive-ui--mobile-nav-open",
       "archive-ui--header-search-open",
+      "archive-ui--header-search-closing",
       "archive-ui--header-submenu-open",
       "archive-ui--styling-board",
       "archive-ui--filter-drawer",
@@ -11190,18 +12291,18 @@
     installPageThemeLifecycle._wired = true;
     globalThis.addEventListener("pageshow", () => {
       applyPageTheme();
-      if (resolvePageTheme() === "home") initHomeHeroHeader();
+      if (resolvePageTheme() === "home") mountHomePageHero();
     });
     globalThis.addEventListener("popstate", () => {
       applyPageTheme();
-      if (resolvePageTheme() === "home") initHomeHeroHeader();
+      if (resolvePageTheme() === "home") mountHomePageHero();
     });
     globalThis.addEventListener("pagehide", () => {
       if (resolvePageTheme() === "home") teardownHomeHeroHeader();
     });
   }
 
-  function forceCloseHeaderSearchOverlay() {
+  function forceCloseHeaderSearchOverlay({ submitted = false, clear = false } = {}) {
     const headerSearchWrap = document.getElementById("site-header-search-wrap");
     const headerSearchBtn = document.getElementById("site-header-search-btn");
     const headerSearchInput = /** @type {HTMLInputElement | null} */ (document.getElementById("filter-search"));
@@ -11214,11 +12315,20 @@
     resetHeaderSearchOverlayResultsDom();
     headerSearchWrap.classList.remove("is-open");
     headerSearchWrap.setAttribute("aria-hidden", "true");
+    headerSearchWrap.dataset.searchState = "closed";
+    if (globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+      headerSearchWrap.setAttribute("hidden", "");
+    }
     headerSearchBtn?.setAttribute("aria-expanded", "false");
     headerSearchBtn?.setAttribute("aria-label", "Open search");
-    document.body.classList.remove("archive-ui--header-search-open");
+    document.body.classList.remove("archive-ui--header-search-open", "archive-ui--header-search-closing");
     document.documentElement.style.removeProperty("--tw-search-dim-top");
-    if (snap != null && headerSearchInput) headerSearchInput.value = snap;
+    hideHeaderFlyoutDimIfIdle();
+    if (clear && headerSearchInput) {
+      headerSearchInput.value = "";
+    } else if (!submitted && snap != null && headerSearchInput) {
+      headerSearchInput.value = snap;
+    }
     syncFilterSearchClearVisibility();
     syncFilterSearchFieldDomPlacement();
     syncSearchKeywordChip();
@@ -11231,8 +12341,14 @@
     const drawerOpen = !!drawerRoot && !drawerRoot.hasAttribute("hidden");
     const headerSearchOpen = document.getElementById("site-header-search-wrap")?.classList.contains("is-open");
     const mobileNavOpen = document.getElementById("site-mobile-shell")?.classList.contains("is-open");
+    const submenuOpen =
+      document.body.classList.contains("archive-ui--header-submenu-open") ||
+      document.body.classList.contains("archive-ui--header-submenu-closing");
     if (!drawerOpen && !headerSearchOpen && !mobileNavOpen) {
       document.body.classList.remove("archive-ui--filter-drawer");
+    }
+    if (!drawerOpen && !headerSearchOpen && !mobileNavOpen && !submenuOpen) {
+      hideHeaderFlyoutDimIfIdle();
     }
   }
 
@@ -11274,6 +12390,12 @@
             return;
           }
           const y = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
+          /** PLP filters / chips: header collapse shifts layout and retriggers scroll (bounce loop). */
+          if (categoryNavFilter || narrowingFiltersActive()) {
+            body.classList.remove("archive-ui--nav-folded");
+            archiveNavScrollFoldLastY = y;
+            return;
+          }
           const dy = y - archiveNavScrollFoldLastY;
           if (filtersNav?.classList.contains("filters--menu-open")) {
             body.classList.remove("archive-ui--nav-folded");
@@ -11281,11 +12403,11 @@
             return;
           }
           const folded = body.classList.contains("archive-ui--nav-folded");
-          if (y < 48) {
+          if (y < 160) {
             if (folded) body.classList.remove("archive-ui--nav-folded");
-          } else if (dy > 6) {
+          } else if (dy > 12) {
             if (!folded) body.classList.add("archive-ui--nav-folded");
-          } else if (dy < -6) {
+          } else if (dy < -12) {
             if (folded) body.classList.remove("archive-ui--nav-folded");
           }
           archiveNavScrollFoldLastY = y;
@@ -11369,7 +12491,7 @@
 
   function wireEvents() {
     initNavigationPrefetch();
-    const archiveMainHref = () => (document.getElementById("grid") ? "#main" : ARCHIVE_HOME_MAIN_URL);
+    const archiveMainHref = () => ARCHIVE_HOME_MAIN_URL;
 
     /** Full-screen mobile nav shell (below utility bar); replaces legacy slide-in panel. */
     function mountMobileNavigationShell() {
@@ -11377,6 +12499,7 @@
       if (shell) {
         const hasRlLayout =
           shell.querySelector(".site-mobile-shell__bar--submenu") &&
+          shell.querySelector(".site-mobile-shell__submenu-back .site-mobile-shell__submenu-title") &&
           shell.querySelector(".site-mobile-nav__season-link");
         if (hasRlLayout) return shell;
         shell.remove();
@@ -11444,8 +12567,8 @@
       submenuBar.innerHTML = `
         <button type="button" class="site-mobile-shell__submenu-back" id="site-mobile-nav-back" aria-label="Back to main menu">
           <span class="site-mobile-nav__back-chevron" aria-hidden="true"></span>
+          <span class="site-mobile-shell__submenu-title" id="site-mobile-nav-drill-title"></span>
         </button>
-        <h2 class="site-mobile-shell__submenu-title" id="site-mobile-nav-drill-title"></h2>
         <button type="button" class="site-mobile-shell__submenu-close" id="site-mobile-nav-drill-close" aria-label="Close menu">
           <span class="site-mobile-shell__close-icon" aria-hidden="true"></span>
         </button>
@@ -11524,47 +12647,81 @@
       collapseFiltersMenuPanel();
     };
 
-    let headerSubmenuHideTimer = 0;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+    let closeTimer = null;
     let headerSubmenuSwitchAnimTimer = 0;
     /** @type {(() => void) | null} */
     let headerSubmenuCloseAbort = null;
-    const cancelHeaderSubmenuHide = () => {
-      if (!headerSubmenuHideTimer) return;
-      clearTimeout(headerSubmenuHideTimer);
-      headerSubmenuHideTimer = 0;
-    };
     const HEADER_SUBMENU_HOVER_HIDE_MS = 120;
+    const HEADER_SUBMENU_MOTION_MS = 300;
 
-    /** Mega menu stays open only while pointer is over main nav or the mega panel. */
-    const isInHeaderSubmenuHoverZone = (el) => {
+    const headerSubmenuUsesDomHidden = () => isFiltersNarrowViewport();
+
+    const getHeaderSubmenuState = (wrap) => {
+      if (!wrap) return "closed";
+      return String(wrap.dataset.submenuState || "closed").trim() || "closed";
+    };
+
+    const headerSubmenuIsOpen = (wrap) => {
+      const el = wrap || document.getElementById("site-header-submenu");
+      if (!el) return false;
+      const state = getHeaderSubmenuState(el);
+      return state === "open" || state === "opening";
+    };
+
+    const HEADER_DIVISION_LINK_SELECTOR = ".site-header__primary-nav.main-nav [data-category-jump]";
+
+    const getHeaderDivisionLink = (el) => {
+      if (!(el instanceof Element)) return null;
+      return el.closest(HEADER_DIVISION_LINK_SELECTOR);
+    };
+
+    const isInMegaMenuHoverSafe = (el) => {
       if (!(el instanceof Element)) return false;
-      return !!el.closest(".main-nav, .mega-menu");
+      return !!(
+        el.closest(".site-header__division-hover-zone") ||
+        el.closest("#site-header-submenu.site-header__submenu")
+      );
     };
 
-    const scheduleHeaderSubmenuHide = (delayMs = HEADER_SUBMENU_HOVER_HIDE_MS) => {
-      cancelHeaderSubmenuHide();
-      headerSubmenuHideTimer = setTimeout(() => {
-        headerSubmenuHideTimer = 0;
+    const cancelCloseMegaMenu = () => {
+      if (!closeTimer) return;
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    };
+
+    const scheduleCloseMegaMenu = () => {
+      cancelCloseMegaMenu();
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
         hideHeaderSubmenu();
-      }, delayMs);
+      }, HEADER_SUBMENU_HOVER_HIDE_MS);
     };
 
-    const onHeaderSubmenuHoverZonePointerLeave = (e) => {
+    const closeMegaMenuNow = () => {
+      cancelCloseMegaMenu();
+      hideHeaderSubmenu();
+    };
+
+    const stripDesktopMegaMenuDivisionHeading = () => {
       if (isFiltersNarrowViewport()) return;
-      const sub = document.getElementById("site-header-submenu");
-      if (!sub || sub.hidden) return;
-      const to = e.relatedTarget;
-      if (isInHeaderSubmenuHoverZone(to)) return;
-      scheduleHeaderSubmenuHide();
+      const content = document.querySelector(
+        ".desktop-mega-menu-content, .desktop-mega-menu .site-header__submenu-content"
+      );
+      if (!content) return;
+      content
+        .querySelectorAll(
+          "#site-header-submenu-title, .mega-menu-content__heading, .site-header__submenu-title, hr"
+        )
+        .forEach((el) => el.remove());
     };
 
     const clearHeaderSubmenuContent = () => {
-      const title = document.getElementById("site-header-submenu-title");
       const links = document.getElementById("site-header-submenu-links");
       const preview = document.getElementById("site-header-submenu-preview");
-      if (title) title.textContent = "";
       if (links) links.replaceChildren();
       if (preview) preview.replaceChildren();
+      stripDesktopMegaMenuDivisionHeading();
     };
 
     const setHeaderSubmenuState = (wrap, state) => {
@@ -11573,22 +12730,24 @@
 
     const clearHeaderSubmenuBackdropInset = () => {
       document.documentElement.style.removeProperty("--site-header-chrome-bottom");
+      document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
     };
 
     const syncHeaderSubmenuBackdropInset = () => {
       if (isHeaderCompactLayout()) return;
-      const util = siteUtilityBarEl || document.querySelector(".site-utility-bar");
-      const brandNav = document.querySelector(".site-header__brand-nav");
-      let bottom = 0;
-      if (util) bottom = Math.max(bottom, Math.ceil(util.getBoundingClientRect().bottom));
-      if (brandNav) bottom = Math.max(bottom, Math.ceil(brandNav.getBoundingClientRect().bottom));
-      if (bottom > 0) {
-        document.documentElement.style.setProperty("--site-header-chrome-bottom", `${bottom}px`);
+      const chromeBottom = measureHeaderChromeBottom();
+      if (chromeBottom > 0) {
+        document.documentElement.style.setProperty("--site-header-chrome-bottom", `${chromeBottom}px`);
       }
+      syncHeaderFlyoutDimTop();
     };
 
     const finalizeHeaderSubmenuHide = (wrap) => {
-      wrap.hidden = true;
+      if (headerSubmenuUsesDomHidden()) {
+        wrap.hidden = true;
+      } else {
+        wrap.removeAttribute("hidden");
+      }
       wrap.setAttribute("aria-hidden", "true");
       setHeaderSubmenuState(wrap, "closed");
       wrap.classList.remove("site-header__submenu--opening", "site-header__submenu--switching");
@@ -11597,10 +12756,11 @@
       syncCategoryTabUI();
       clearHeaderSubmenuContent();
       clearHeaderSubmenuBackdropInset();
+      hideHeaderFlyoutDimIfIdle();
     };
 
     const hideHeaderSubmenu = () => {
-      cancelHeaderSubmenuHide();
+      cancelCloseMegaMenu();
       if (headerSubmenuSwitchAnimTimer) {
         clearTimeout(headerSubmenuSwitchAnimTimer);
         headerSubmenuSwitchAnimTimer = 0;
@@ -11608,9 +12768,9 @@
       const wrap = document.getElementById("site-header-submenu");
       if (!wrap) return;
 
-      const state = wrap.dataset.submenuState || (wrap.hidden ? "closed" : "open");
-      if ((state === "closed" || wrap.hidden) && state !== "closing") return;
+      const state = getHeaderSubmenuState(wrap);
       if (state === "closing") return;
+      if (state === "closed") return;
 
       if (headerSubmenuCloseAbort) {
         headerSubmenuCloseAbort();
@@ -11627,11 +12787,15 @@
       document.body.classList.remove("archive-ui--header-submenu-open");
       wrap.setAttribute("aria-hidden", "true");
 
-      headerSubmenuCloseAbort = twAfterMotion(wrap, TW_MOTION_MS, () => {
-        headerSubmenuCloseAbort = null;
-        document.body.classList.remove("archive-ui--header-submenu-closing");
-        finalizeHeaderSubmenuHide(wrap);
-      });
+      headerSubmenuCloseAbort = twAfterMotion(
+        wrap,
+        HEADER_SUBMENU_MOTION_MS,
+        () => {
+          headerSubmenuCloseAbort = null;
+          finalizeHeaderSubmenuHide(wrap);
+        },
+        ["clip-path", "opacity", "transform", "visibility"]
+      );
     };
 
     headerSubmenuHideAnimated = hideHeaderSubmenu;
@@ -11646,6 +12810,16 @@
     const headerSearchInput = /** @type {HTMLInputElement | null} */ (document.getElementById("filter-search"));
     /** @type {(() => void) | null} */
     let headerSearchCloseAbort = null;
+
+    const getHeaderSearchFlyoutState = (wrap) => {
+      if (!wrap) return "closed";
+      return String(wrap.dataset.searchState || "closed").trim() || "closed";
+    };
+
+    const setHeaderSearchFlyoutState = (wrap, state) => {
+      wrap.dataset.searchState = state;
+    };
+
     const closeHeaderSearch = ({ clear = false, submitted = false } = {}) => {
       if (!headerSearchWrap) return;
       const wasOpen = headerSearchWrap.classList.contains("is-open");
@@ -11661,10 +12835,15 @@
       const finishClose = () => {
         headerSearchCloseAbort = null;
         headerSearchWrap.setAttribute("aria-hidden", "true");
+        setHeaderSearchFlyoutState(headerSearchWrap, "closed");
+        if (!isHeaderCompactLayout()) {
+          headerSearchWrap.setAttribute("hidden", "");
+        }
         headerSearchBtn?.setAttribute("aria-expanded", "false");
         headerSearchBtn?.setAttribute("aria-label", "Open search");
-        document.body.classList.remove("archive-ui--header-search-open");
+        document.body.classList.remove("archive-ui--header-search-open", "archive-ui--header-search-closing");
         document.documentElement.style.removeProperty("--tw-search-dim-top");
+        hideHeaderFlyoutDimIfIdle();
         if (!clear && !submitted && snap != null && headerSearchInput) {
           headerSearchInput.value = snap;
         }
@@ -11695,7 +12874,20 @@
 
       headerSearchWrap.classList.remove("is-open");
 
+      if (!isHeaderCompactLayout() && !twPrefersReducedMotion()) {
+        setHeaderSearchFlyoutState(headerSearchWrap, "closing");
+        document.body.classList.add("archive-ui--header-search-closing");
+        document.body.classList.remove("archive-ui--header-search-open");
+        headerSearchWrap.setAttribute("aria-hidden", "true");
+        headerSearchCloseAbort = twAfterMotion(headerSearchWrap, HEADER_SEARCH_FLYOUT_MOTION_MS, () => {
+          document.body.classList.remove("archive-ui--header-search-closing");
+          finishClose();
+        });
+        return;
+      }
+
       if (isHeaderCompactLayout() && !twPrefersReducedMotion()) {
+        setHeaderSearchFlyoutState(headerSearchWrap, "closed");
         headerSearchCloseAbort = twAfterMotion(headerSearchWrap, TW_SEARCH_MOTION_MS, finishClose);
         return;
       }
@@ -11710,7 +12902,7 @@
       cancelSearchGridDebounce();
       cancelHeaderSearchOverlayUiDebounce();
       exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
-      seasonNavFilter = "All";
+      seasonNavFilter = null;
       try {
         persistSeasonNav();
       } catch {
@@ -11786,7 +12978,7 @@
         handleMobileCategoryNavigation(slot, "");
         return;
       }
-      title.textContent = categoryDisplayLabel(slot) || slot;
+      title.textContent = String(categoryDisplayLabel(slot) || slot).toUpperCase();
       list.replaceChildren();
       for (const { raw, label } of entries) {
         const li = document.createElement("li");
@@ -11813,31 +13005,25 @@
       });
     }
 
-    function scrollArchiveIntro() {
-      const intro = document.querySelector(".items-toolbar");
-      if (intro instanceof HTMLElement) {
-        try {
-          const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
-          intro.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-        } catch {
-          intro.scrollIntoView();
-        }
-        return;
-      }
-      scrollArchiveViewportTop();
-    }
-
     function handleMobileCategoryNavigation(jump, sub, { season } = {}) {
       clearArchiveKeywordColourNarrowing();
       if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
-      const seasonRaw = String(season ?? "").trim();
-      if (seasonRaw === "S/S" || seasonRaw === "A/W" || seasonRaw === "All") {
-        seasonNavFilter = seasonRaw;
+      const seasonRaw = normalizeSeason(season);
+      if (seasonRaw === "SS" || seasonRaw === "AW" || seasonRaw === "ALL") {
+        const selectedSeason = seasonRaw === "ALL" ? null : seasonRaw;
+        if (!document.getElementById("grid") && selectedSeason) {
+          navigateToArchiveSeason(seasonRaw);
+          closeMobileCategoryPanel();
+          collapseFiltersMenuPanel();
+          return;
+        }
+        seasonNavFilter = selectedSeason;
         try {
           persistSeasonNav();
         } catch {
           /* ignore */
         }
+        replaceArchiveSeasonQuery(seasonNavFilter);
         syncSeasonTabUI();
       }
       categoryNavFilter = resolveCategoryJump(jump);
@@ -11855,7 +13041,6 @@
       validateSubcategoryFilter();
       renderCategoryDrill();
       renderGrid();
-      scrollArchiveIntro();
       closeMobileCategoryPanel();
       collapseFiltersMenuPanel();
     }
@@ -11929,15 +13114,17 @@
     syncBrandSignatureBarHeight();
 
     const renderHeaderSubmenuPreview = (slot, subcategory) => {
+      stripDesktopMegaMenuDivisionHeading();
       const preview = document.getElementById("site-header-submenu-preview");
       if (!preview) return;
       const pool = items.filter((it) => itemPassesSeasonNav(it, seasonNavFilter) && itemSlot(it) === slot);
       const sub = String(subcategory ?? "").trim();
       const matches = pool
-        .filter((it) => (!sub ? true : recordCategoryForDrill(it, slot) === sub))
+        .filter((it) => (!sub ? true : itemMatchesDrillSubcategory(it, slot, sub)))
         .sort(compareGridItems)
         .slice(0, 4);
       preview.replaceChildren();
+      preview.classList.add("site-header__submenu-preview--editorial");
       if (!matches.length) {
         const empty = document.createElement("p");
         empty.className = "site-header__submenu-preview-empty";
@@ -11952,41 +13139,54 @@
         detailUrl.searchParams.set("id", String(item.id));
         a.href = detailUrl.toString();
         const media = document.createElement("div");
-        media.className = "site-header__submenu-preview-media";
+        media.className = "site-header__submenu-preview-media site-header__submenu-preview-media--contain";
         const im = document.createElement("img");
         im.alt = imageAltForItem(item);
         im.loading = "lazy";
         wireCoverImageWithFallbacks(im, item, {
           host: media,
           missingClass: "site-header__submenu-preview-media--missing",
-          coverRenderWidth: 474,
-          coverRenderHeight: 626,
-          coverRenderZoom: 1.06,
+          coverRenderWidth: 360,
+          coverRenderHeight: 480,
           coverRenderQuality: 86,
+          coverRenderResize: "contain",
         });
         media.appendChild(im);
-        const shade = document.createElement("div");
-        shade.className = "site-header__submenu-preview-shade";
-        shade.setAttribute("aria-hidden", "true");
-        const nm = document.createElement("p");
-        nm.className = "site-header__submenu-preview-name";
-        nm.textContent = `${item.brand} · ${displayNameWithoutLeadingColour(item)}`;
-        media.appendChild(shade);
-        media.appendChild(nm);
-        a.appendChild(media);
+        const caption = document.createElement("p");
+        caption.className = "site-header__submenu-preview-caption";
+        const brand = String(item.brand ?? "").trim();
+        const name = displayNameWithoutLeadingColour(item);
+        caption.textContent = brand ? `${brand} · ${name}` : name;
+        a.append(media, caption);
         preview.appendChild(a);
       }
     };
 
+    let headerSubmenuDimEl = document.getElementById("site-header-submenu-dim");
+    if (!headerSubmenuDimEl) {
+      headerSubmenuDimEl = document.createElement("button");
+      headerSubmenuDimEl.type = "button";
+      headerSubmenuDimEl.id = "site-header-submenu-dim";
+      headerSubmenuDimEl.className = "site-header__submenu-dim";
+      headerSubmenuDimEl.hidden = true;
+      headerSubmenuDimEl.setAttribute("aria-hidden", "true");
+      headerSubmenuDimEl.setAttribute("aria-label", "Close category menu");
+      headerSubmenuDimEl.tabIndex = -1;
+      headerSubmenuDimEl.addEventListener("click", () => {
+        closeMegaMenuNow();
+        closeHeaderSearch();
+      });
+      headerSubmenuDimEl.addEventListener("pointerenter", () => scheduleCloseMegaMenu());
+      document.body.appendChild(headerSubmenuDimEl);
+    }
+
     const showHeaderSubmenuForCategory = (jump) => {
-      cancelHeaderSubmenuHide();
       const searchW = document.getElementById("site-header-search-wrap");
       if (searchW?.classList.contains("is-open")) closeHeaderSearch();
       const slot = String(jump ?? "").trim();
       const wrap = document.getElementById("site-header-submenu");
-      const title = document.getElementById("site-header-submenu-title");
       const links = document.getElementById("site-header-submenu-links");
-      if (!wrap || !title || !links) return;
+      if (!wrap || !links) return;
       if (!slot || !SLOT_OPTIONS.includes(slot)) {
         hideHeaderSubmenu();
         return;
@@ -11999,13 +13199,18 @@
         headerSubmenuCloseAbort();
         headerSubmenuCloseAbort = null;
         document.body.classList.remove("archive-ui--header-submenu-closing");
+        document.body.classList.add("archive-ui--header-submenu-open");
+        setHeaderSubmenuState(wrap, "open");
+        wrap.classList.remove("site-header__submenu--opening", "site-header__submenu--switching");
+        if (headerSubmenuDimEl) {
+          headerSubmenuDimEl.hidden = false;
+          headerSubmenuDimEl.setAttribute("aria-hidden", "false");
+        }
       }
 
       const openingNow =
-        wrap.hidden ||
-        wrap.dataset.submenuState === "closed" ||
-        wrap.dataset.submenuState === "closing";
-      const switchingSlot = !wrap.hidden && headerNavOpenSlot && headerNavOpenSlot !== slot;
+        getHeaderSubmenuState(wrap) === "closed" || getHeaderSubmenuState(wrap) === "closing";
+      const switchingSlot = headerSubmenuIsOpen(wrap) && headerNavOpenSlot && headerNavOpenSlot !== slot;
       if (switchingSlot) {
         if (headerSubmenuSwitchAnimTimer) {
           clearTimeout(headerSubmenuSwitchAnimTimer);
@@ -12029,7 +13234,7 @@
 
       wrap.classList.remove("site-header__submenu--preview-only");
       links.replaceChildren();
-      title.textContent = "";
+      stripDesktopMegaMenuDivisionHeading();
 
       const subF = String(subcategoryFilter ?? "").trim();
 
@@ -12059,13 +13264,17 @@
         dedupedEntries.find((e) => subcategoryFilterMatchesEntry(e.raw, headerNavOpenSlot === slot ? subF : "")) ??
         dedupedEntries[0];
       renderHeaderSubmenuPreview(slot, initialPreview?.raw ?? "");
-      wrap.hidden = false;
+      if (headerSubmenuUsesDomHidden()) {
+        wrap.hidden = false;
+      } else {
+        wrap.removeAttribute("hidden");
+      }
       wrap.setAttribute("aria-hidden", "false");
       if (openingNow) {
         setHeaderSubmenuState(wrap, "opening");
         void wrap.offsetWidth;
         requestAnimationFrame(() => {
-          if (wrap.hidden) return;
+          if (getHeaderSubmenuState(wrap) !== "opening") return;
           setHeaderSubmenuState(wrap, "open");
         });
       } else {
@@ -12075,7 +13284,10 @@
       document.body.classList.remove("archive-ui--header-submenu-closing");
       headerNavOpenSlot = slot;
       syncCategoryTabUI();
-      syncHeaderSubmenuBackdropInset();
+      if (headerSubmenuDimEl) {
+        headerSubmenuDimEl.hidden = false;
+        headerSubmenuDimEl.setAttribute("aria-hidden", "false");
+      }
       requestAnimationFrame(() => {
         if (document.body.classList.contains("archive-ui--header-submenu-open")) {
           syncHeaderSubmenuBackdropInset();
@@ -12083,8 +13295,19 @@
       });
     };
 
-    const headerCategoryNav = document.querySelector(".site-header__primary-nav");
-    const headerBrandNav = document.querySelector(".site-header__brand-nav");
+    const openMegaMenu = (category) => {
+      cancelCloseMegaMenu();
+      showHeaderSubmenuForCategory(category);
+    };
+
+    const divisionHoverZoneRef = document.querySelector(".site-header__division-hover-zone");
+    const headerCategoryNav = document.querySelector(".site-header__primary-nav.main-nav");
+    const megaMenuRef = document.getElementById("site-header-submenu");
+
+    if (megaMenuRef && !headerSubmenuUsesDomHidden()) {
+      megaMenuRef.removeAttribute("hidden");
+      setHeaderSubmenuState(megaMenuRef, "closed");
+    }
     if (headerCategoryNav) {
       headerCategoryNav.addEventListener("click", (e) => {
         const link = e.target.closest("[data-category-jump]");
@@ -12095,34 +13318,47 @@
         hideHeaderSubmenu();
         closeHeaderSearch();
       });
-      headerCategoryNav.addEventListener("pointerover", (e) => {
-        if (isFiltersNarrowViewport()) return;
-        closeHeaderSearch();
-        const link = e.target.closest("[data-category-jump]");
-        if (!link) return;
-        const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
-        showHeaderSubmenuForCategory(jump);
-      });
       headerCategoryNav.addEventListener("focusin", (e) => {
         if (isFiltersNarrowViewport()) return;
-        const link = e.target.closest("[data-category-jump]");
+        const link = getHeaderDivisionLink(e.target);
         if (!link) return;
         const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
-        showHeaderSubmenuForCategory(jump);
+        if (jump) openMegaMenu(jump);
       });
     }
 
-    const bindHeaderSubmenuCloseOnPointerEnter = (el) => {
-      el?.addEventListener("pointerenter", () => {
+    if (divisionHoverZoneRef) {
+      divisionHoverZoneRef.addEventListener("mouseenter", () => {
         if (isFiltersNarrowViewport()) return;
-        hideHeaderSubmenu();
+        cancelCloseMegaMenu();
       });
-    };
+      divisionHoverZoneRef.addEventListener("mouseleave", (e) => {
+        if (isFiltersNarrowViewport()) return;
+        const to = e.relatedTarget;
+        if (isInMegaMenuHoverSafe(to)) return;
+        scheduleCloseMegaMenu();
+      });
+      divisionHoverZoneRef.querySelectorAll(HEADER_DIVISION_LINK_SELECTOR).forEach((link) => {
+        link.addEventListener("mouseenter", () => {
+          if (isFiltersNarrowViewport()) return;
+          closeHeaderSearch();
+          const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
+          if (jump) openMegaMenu(jump);
+        });
+      });
+    }
 
-    bindHeaderSubmenuCloseOnPointerEnter(document.querySelector(".site-header__nav-submenu-dismiss"));
-    bindHeaderSubmenuCloseOnPointerEnter(document.querySelector(".site-header__tools"));
-    bindHeaderSubmenuCloseOnPointerEnter(siteUtilityBarEl);
-    bindHeaderSubmenuCloseOnPointerEnter(document.getElementById("site-header-home"));
+    const utilityNavRef = document.querySelector(".site-header__tools");
+    const logoRef = document.querySelector(".site-title");
+
+    utilityNavRef?.addEventListener("mouseenter", () => {
+      if (isFiltersNarrowViewport()) return;
+      closeMegaMenuNow();
+    });
+    logoRef?.addEventListener("mouseenter", () => {
+      if (isFiltersNarrowViewport()) return;
+      closeMegaMenuNow();
+    });
 
     const headerHome = document.getElementById("site-header-home");
     headerHome?.addEventListener("click", (e) => {
@@ -12133,35 +13369,16 @@
       navigateToSiteHome();
     });
 
-    const headerSubmenuRoot = document.getElementById("site-header-submenu");
-
-    headerCategoryNav?.addEventListener("pointerenter", () => {
+    megaMenuRef?.addEventListener("mouseenter", () => {
       if (isFiltersNarrowViewport()) return;
-      cancelHeaderSubmenuHide();
+      cancelCloseMegaMenu();
     });
-
-    headerSubmenuRoot?.addEventListener("pointerenter", () => {
+    megaMenuRef?.addEventListener("mouseleave", (e) => {
       if (isFiltersNarrowViewport()) return;
-      cancelHeaderSubmenuHide();
+      const to = e.relatedTarget;
+      if (isInMegaMenuHoverSafe(to)) return;
+      scheduleCloseMegaMenu();
     });
-
-    headerSubmenuRoot?.addEventListener("pointerleave", onHeaderSubmenuHoverZonePointerLeave);
-    headerCategoryNav?.addEventListener("pointerleave", onHeaderSubmenuHoverZonePointerLeave);
-
-    /** Tap / click outside main-nav + mega-menu closes the panel. */
-    document.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (isFiltersNarrowViewport()) return;
-        const sub = document.getElementById("site-header-submenu");
-        if (!sub || sub.hidden) return;
-        const t = e.target;
-        if (!(t instanceof Element)) return;
-        if (isInHeaderSubmenuHoverZone(t)) return;
-        hideHeaderSubmenu();
-      },
-      true
-    );
 
     const headerSubmenuLinks = document.getElementById("site-header-submenu-links");
     headerSubmenuLinks?.addEventListener("click", (e) => {
@@ -12203,10 +13420,6 @@
     headerSearchBtn?.addEventListener("click", () => {
       if (!headerSearchWrap) return;
       const open = !headerSearchWrap.classList.contains("is-open");
-      headerSearchWrap.classList.toggle("is-open", open);
-      headerSearchWrap.setAttribute("aria-hidden", open ? "false" : "true");
-      headerSearchBtn.setAttribute("aria-expanded", open ? "true" : "false");
-      headerSearchBtn.setAttribute("aria-label", open ? "Close search" : "Open search");
       if (open) {
         if (headerSearchCloseAbort) {
           headerSearchCloseAbort();
@@ -12220,14 +13433,32 @@
         syncSearchKeywordChip();
         hideHeaderSubmenu();
         closeMobileCategoryPanel();
-        document.body.classList.remove("archive-ui--nav-folded");
+        document.body.classList.remove("archive-ui--nav-folded", "archive-ui--header-search-closing");
         syncHeaderSearchFeaturedSubcategoryCards();
+        headerSearchWrap.classList.add("is-open");
+        headerSearchWrap.removeAttribute("hidden");
+        headerSearchWrap.setAttribute("aria-hidden", "false");
+        headerSearchBtn.setAttribute("aria-expanded", "true");
+        headerSearchBtn.setAttribute("aria-label", "Close search");
         document.body.classList.add("archive-ui--header-search-open");
-        if (isHeaderCompactLayout()) syncMobileShellTop();
+        if (!isHeaderCompactLayout()) {
+          setHeaderSearchFlyoutState(headerSearchWrap, "opening");
+          syncHeaderSubmenuBackdropInset();
+          void headerSearchWrap.offsetWidth;
+          requestAnimationFrame(() => {
+            if (getHeaderSearchFlyoutState(headerSearchWrap) === "opening") {
+              setHeaderSearchFlyoutState(headerSearchWrap, "open");
+            }
+          });
+          showHeaderFlyoutDim();
+        } else {
+          setHeaderSearchFlyoutState(headerSearchWrap, "open");
+          syncMobileShellTop();
+        }
         relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
         queueMicrotask(() => {
           headerSearchInput?.focus();
-          syncHeaderSearchOverlayResultsPane();
+          resetHeaderSearchOverlayResultsDom();
           syncSearchOverlayBackdropTop();
           requestAnimationFrame(() => {
             syncSearchOverlayBackdropTop();
@@ -12291,11 +13522,6 @@
       jumpHeaderCategory(jump);
       hideHeaderSubmenu();
       closeHeaderSearch();
-    });
-    document.getElementById("site-header-search-results-grid")?.addEventListener("click", (e) => {
-      const a = e.target.closest("a.site-header__search-result-card");
-      if (!a || !headerSearchWrap?.contains(a)) return;
-      closeHeaderSearch({ clear: false });
     });
     headerMenuBtn?.addEventListener("click", () => {
       if (!mobileShell) return;
@@ -12366,8 +13592,7 @@
       if (headerSearchWrap?.classList.contains("is-open")) {
         closeHeaderSearch();
       }
-      const sub = document.getElementById("site-header-submenu");
-      if (sub && !sub.hidden) {
+      if (headerSubmenuIsOpen()) {
         hideHeaderSubmenu();
       }
     });
@@ -12375,8 +13600,8 @@
       if (!headerSearchWrap?.classList.contains("is-open")) return;
       const t = e.target;
       if (!(t instanceof Element)) return;
-      const mega = t.closest(".site-header__search-megamenu");
-      if (mega) return;
+      const flyoutInner = t.closest(".desktop-search-flyout-inner");
+      if (flyoutInner) return;
       if (headerSearchBtn?.contains(t)) return;
       closeHeaderSearch();
     });
@@ -12424,7 +13649,10 @@
     globalThis.addEventListener(
       "resize",
       () => {
-        if (document.body.classList.contains("archive-ui--header-submenu-open")) {
+        if (
+          document.body.classList.contains("archive-ui--header-submenu-open") ||
+          document.body.classList.contains("archive-ui--header-submenu-closing")
+        ) {
           syncHeaderSubmenuBackdropInset();
         }
         syncBrandSignatureBarHeight();
@@ -12439,8 +13667,12 @@
       const tab = e.target.closest(".site-header__season-mini-tab");
       if (!tab) return;
       const v = String(tab.dataset.seasonFilter ?? "").trim();
-      if (v !== "S/S" && v !== "A/W") return;
-      setSeasonNavFilter(v, { toggleSame: true });
+      if (!normalizeSeasonNavToken(v)) return;
+      if (!document.getElementById("grid")) {
+        navigateToArchiveSeason(v);
+        return;
+      }
+      setSeasonNavFilter(v);
     });
 
     const savedToggleBtn = document.getElementById("site-header-saved-toggle");
@@ -12473,16 +13705,16 @@
       const seasonTab = e.target.closest(".season-strip__tab");
       if (!seasonTab) return;
       const v = String(seasonTab.dataset.seasonFilter ?? "").trim();
-      if (v !== "S/S" && v !== "A/W" && v !== "All") return;
-      setSeasonNavFilter(v, { toggleSame: false });
+      if (!normalizeSeason(v)) return;
+      setSeasonNavFilter(v);
     });
 
     document.getElementById("archive-drawer-season-chips")?.addEventListener("click", (e) => {
       const chip = e.target.closest("button[data-season-filter]");
       if (!chip) return;
       const v = String(chip.dataset.seasonFilter ?? "").trim();
-      if (v !== "S/S" && v !== "A/W" && v !== "All") return;
-      setSeasonNavFilter(v, { toggleSame: false });
+      if (!normalizeSeason(v)) return;
+      setSeasonNavFilter(v);
     });
 
     const categoryDrill = document.getElementById("category-drill");
@@ -12498,10 +13730,12 @@
         const choice = e.target.closest(".category-drill__choice[data-subcategory]");
         if (!choice) return;
         const next = String(choice.dataset.subcategory ?? "").trim();
-        subcategoryFilter = subcategoryFilterMatchesEntry(next, subcategoryFilter) ? "" : next;
-        renderCategoryDrill();
-        renderGrid();
-        scrollArchiveViewportTop();
+        withPreservedArchiveScroll(() => {
+          subcategoryFilter = subcategoryFilterMatchesEntry(next, subcategoryFilter) ? "" : next;
+          validateSubcategoryFilter();
+          renderCategoryDrill();
+          renderGrid();
+        });
         collapseFiltersMenuPanel();
       });
     }
@@ -12652,62 +13886,6 @@
       });
     }
 
-    const storyToggleBtn = document.getElementById("items-toolbar-brand-story-toggle");
-    if (storyToggleBtn && storyToggleBtn.dataset.twWired !== "1") {
-      storyToggleBtn.dataset.twWired = "1";
-      storyToggleBtn.addEventListener("click", () => {
-        const root = document.getElementById("items-toolbar-brand-story");
-        if (!root) return;
-        const exp = root.classList.toggle("items-toolbar__brand-story--expanded");
-        storyToggleBtn.setAttribute("aria-expanded", exp ? "true" : "false");
-        const lab = storyToggleBtn.querySelector(".items-toolbar__brand-story-toggle-label");
-        if (lab) lab.textContent = exp ? "View Less" : "View More";
-      });
-    }
-
-    const brandStoryRoot = document.getElementById("items-toolbar-brand-story");
-    if (brandStoryRoot && brandStoryRoot.dataset.twWiredJump !== "1") {
-      brandStoryRoot.dataset.twWiredJump = "1";
-      brandStoryRoot.addEventListener("click", (e) => {
-        const link = e.target.closest("a[data-category-jump]");
-        if (!link || !brandStoryRoot.contains(link)) return;
-        e.preventDefault();
-        const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
-        const sub = String(link.getAttribute("data-subcategory-jump") ?? "").trim();
-        const season = String(link.getAttribute("data-season-filter") ?? "").trim();
-        if (season === "S/S" || season === "A/W" || season === "All") {
-          seasonNavFilter = season;
-          persistSeasonNav();
-          syncSeasonTabUI();
-        }
-        categoryNavFilter = resolveCategoryJump(jump);
-        noteArchiveSearchUserChoseMainSlotFilter();
-        /* All seasons + record type: clear drill first so the pool uses the new season before applying the sub-type
-           (avoids a stale S/A-W pool briefly invalidating e.g. Jackets when switching from a summer link). */
-        if (season === "All" && sub) {
-          subcategoryFilter = "";
-          validateSubcategoryFilter();
-          renderCategoryDrill();
-          subcategoryFilter = sub;
-        } else {
-          subcategoryFilter = sub;
-        }
-        closeHeaderSearch();
-        hideHeaderSubmenu();
-        syncCategoryTabUI();
-        if (!document.getElementById("grid")) {
-          validateSubcategoryFilter();
-          writeArchiveBrowseRestoreSnapshot();
-          navigateToArchiveMain();
-          return;
-        }
-        validateSubcategoryFilter();
-        renderCategoryDrill();
-        renderGrid();
-        scrollArchiveViewportTop();
-      });
-    }
-
     wireEditorialLandingPageArchiveLinks();
 
     initArchiveNavScrollFold();
@@ -12763,7 +13941,7 @@
     wardrobeBase = wardrobeBase.map((row) => {
       if (!row || row.id == null) return row;
       const hit = byId.get(String(row.id));
-      return hit ? { ...hit } : { ...row };
+      return hit ? carryForwardMediaNonce(row, hit) : { ...row };
     });
     const have = new Set(wardrobeBase.map((r) => String(r?.id ?? "")));
     for (const [iid, row] of byId) {
@@ -12778,16 +13956,31 @@
   function upsertWardrobeBaseRowInMemory(row) {
     const id = String(row?.id ?? "").trim();
     if (!id) return;
+    const existing = wardrobeBase.find((r) => String(r?.id ?? "") === id);
+    const next =
+      existing && !(typeof /** @type {any} */ (row).__displayNonce === "number")
+        ? carryForwardMediaNonce(existing, row)
+        : { ...row };
     let replaced = false;
     wardrobeBase = wardrobeBase.map((r) => {
       if (String(r?.id ?? "") !== id) return r;
       replaced = true;
-      return { ...row };
+      return next;
     });
-    if (!replaced) wardrobeBase.push({ ...row });
+    if (!replaced) wardrobeBase.push(next);
   }
 
-  async function refreshCloudBackedCustomItems() {
+  /**
+   * @param {{ pinnedRows?: object[] }} [opts] — rows just written to Supabase; kept when cloud fetch is still stale.
+   */
+  async function refreshCloudBackedCustomItems(opts = {}) {
+    const pinnedRows = Array.isArray(opts?.pinnedRows)
+      ? opts.pinnedRows.filter((r) => r && r.id != null)
+      : [];
+    /** @type {Map<string, object>} */
+    const pinnedById = new Map();
+    for (const r of pinnedRows) pinnedById.set(String(r.id), r);
+
     if (!isCloudModeActive()) {
       cloudBackedCustomItems = [];
       mergeWardrobeFromSources();
@@ -12802,10 +13995,34 @@
     if (cloudBackedCustomItems.length) {
       stripCustomIdsFromLocalStorage(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
       if (wardrobeCatalogueSource === "cloud") {
-        wardrobeBase = cloudBackedCustomItems.map((r) => ({ ...r }));
+        const prevById = new Map();
+        for (const r of wardrobeBase) {
+          if (r?.id != null) prevById.set(String(r.id), r);
+        }
+        wardrobeBase = cloudBackedCustomItems.map((r) => {
+          const id = String(r?.id ?? "");
+          const pinned = pinnedById.get(id);
+          if (pinned) return mergeCloudWardrobeRowWithPinnedSave(pinned, r);
+          const prev = prevById.get(id);
+          return prev ? carryForwardMediaNonce(prev, r) : { ...r };
+        });
+        const cloudIds = new Set(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
+        for (const [id, pinned] of pinnedById) {
+          if (!cloudIds.has(id)) upsertWardrobeBaseRowInMemory(pinned);
+        }
       } else {
         mergeWardrobeBaseWithFetchedCloudRows(cloudBackedCustomItems);
+        for (const pinned of pinnedById.values()) upsertWardrobeBaseRowInMemory(pinned);
       }
+    } else {
+      for (const pinned of pinnedById.values()) upsertWardrobeBaseRowInMemory(pinned);
+    }
+    for (const pinned of pinnedById.values()) {
+      const id = String(pinned.id);
+      cloudBackedCustomItems = [
+        pinned,
+        ...cloudBackedCustomItems.filter((x) => String(x?.id ?? "") !== id),
+      ];
     }
     mergeWardrobeFromSources();
     if (document.getElementById("grid")) {
@@ -12851,10 +14068,11 @@
     root.setAttribute("aria-label", "Loading");
     const inner = document.createElement("div");
     inner.className = "tw-page-loader__brand";
-    const mark = document.createElement("span");
+    const mark = document.createElement("img");
     mark.className = "tw-page-loader__mark";
-    mark.setAttribute("role", "img");
-    mark.setAttribute("aria-label", "Timeless Wardrobe");
+    mark.src = "/loading-logo.png";
+    mark.alt = "Timeless Wardrobe";
+    mark.decoding = "async";
     const wm = document.createElement("span");
     wm.className = "tw-page-loader__wordmark";
     wm.textContent = "Timeless Wardrobe";
@@ -13014,6 +14232,19 @@
       fileBackedCustomItems = await loadFileBackedCustomItems();
       cloudBackedCustomItems = [];
     }
+
+    const pinnedSave = consumePinnedWardrobeSaveFromSession();
+    if (pinnedSave) {
+      upsertWardrobeBaseRowInMemory(pinnedSave);
+      if (isCloudModeActive()) {
+        const pinId = String(pinnedSave.id);
+        cloudBackedCustomItems = [
+          pinnedSave,
+          ...cloudBackedCustomItems.filter((x) => String(x?.id ?? "") !== pinId),
+        ];
+      }
+    }
+
     const hasStylingBoardUi = Boolean(
       document.getElementById("outfit-strip") || document.getElementById("styling-board-drawer")
     );
@@ -13061,6 +14292,7 @@
       return;
     }
 
+    normalizeArchiveTopLanding();
     consumeArchiveBrowseStateForReturn();
     initFilters();
     wireEvents();
