@@ -1613,6 +1613,45 @@ body.theme-catalogue .site-header.site-header--overlay:focus-within {
   box-sizing: border-box;
 }
 
+/* Archive PLP: piece count (left) + Filter & Sort (right) on one row; chips below. */
+body.archive-page .items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 1.25rem;
+  row-gap: 8px;
+}
+
+body.archive-page .items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar > .items-toolbar__archive-summary,
+body.archive-page .items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar > .items-toolbar__archive-summary--under-title {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  align-self: center;
+}
+
+body.archive-page .items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar > .items-toolbar__filter-sort-btn {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+}
+
+body.archive-page .items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar > .items-toolbar__active-chips--browse {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  max-width: none;
+}
+
+body.archive-page
+  .items-toolbar
+  > .items-toolbar__actions
+  > .items-toolbar__control-bar:has(> .items-toolbar__active-chips--browse[hidden]) {
+  grid-template-rows: auto;
+}
+
 .items-toolbar__control-main {
   display: flex;
   flex-direction: column;
@@ -1833,12 +1872,6 @@ body.archive-ui--search-results-plp .items-toolbar > .items-toolbar__actions {
 }
 
 body.archive-ui--search-results-plp .items-toolbar__control-bar {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem 2rem;
   width: 100%;
   padding: 0.35rem 0 0.65rem;
   box-sizing: border-box;
@@ -9705,8 +9738,13 @@ a.item-detail__breadcrumb-current {
     margin-bottom: 10px;
   }
 
-  body.archive-page:not(.archive-ui--search-results-plp) .items-toolbar__archive-summary--under-title {
+  body.archive-page:not(.archive-ui--search-results-plp) .archive-heading .items-toolbar__archive-summary--under-title {
     margin: 0 0 28px;
+    padding: 0;
+  }
+
+  body.archive-page .items-toolbar__actions .items-toolbar__archive-summary--under-title {
+    margin: 0;
     padding: 0;
   }
 
@@ -9826,21 +9864,11 @@ a.item-detail__breadcrumb-current {
   }
 
   body.archive-page:not(.archive-ui--search-results-plp) .items-toolbar__actions .items-toolbar__control-bar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem 1.5rem;
     width: 100%;
     min-height: 38px;
     margin: 0;
     padding: 0;
-  }
-
-  body.archive-page:not(.archive-ui--search-results-plp)
-    .items-toolbar__actions
-    .items-toolbar__control-bar:has(.items-toolbar__active-chips--browse[hidden]) {
-    justify-content: flex-end;
+    column-gap: 1rem 1.5rem;
   }
 
   body.archive-page:not(.archive-ui--search-results-plp) .items-toolbar__chips.filters__count-row {
@@ -9890,16 +9918,16 @@ a.item-detail__breadcrumb-current {
     margin-top: 24px;
   }
 
-  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp) .items-toolbar__control-bar {
+  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp):not(.archive-page) .items-toolbar__control-bar {
     align-items: flex-start;
   }
 
-  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp) .items-toolbar__archive-summary,
-  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp) .items-toolbar__control-main {
+  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp):not(.archive-page) .items-toolbar__archive-summary,
+  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp):not(.archive-page) .items-toolbar__control-main {
     justify-content: flex-start;
   }
 
-  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp) .items-toolbar__filter-sort-btn {
+  body.theme-catalogue:not(.item-page):not(.archive-ui--search-results-plp):not(.archive-page) .items-toolbar__filter-sort-btn {
     align-self: flex-start;
     flex-shrink: 0;
     margin-top: 0;

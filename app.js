@@ -4552,10 +4552,19 @@
     const perDivision = typeof options.perDivision === "number" ? options.perDivision : 3;
     const maxTotal = typeof options.maxTotal === "number" ? options.maxTotal : 14;
     const list = Array.isArray(pool) ? pool : [];
+    /** @type {Set<string>} */
+    const reservedItemIds =
+      options.excludeItemIds instanceof Set
+        ? options.excludeItemIds
+        : new Set(
+            (Array.isArray(options.excludeItemIds) ? options.excludeItemIds : [])
+              .map((id) => String(id ?? "").trim())
+              .filter(Boolean)
+          );
     /** @type {{ item: object, displaySrc: string, slot: string }[]} */
     const plans = [];
     /** @type {Set<string>} */
-    const usedItemIds = new Set();
+    const usedItemIds = new Set(reservedItemIds);
     /** @type {Set<string>} */
     const usedUrls = new Set();
 
@@ -4809,10 +4818,11 @@
     syncUi();
   }
 
-  function mountHomeDivisionRail(pool) {
+  /** @param {object[]} pool @param {{ excludeItemIds?: Iterable<string> | Set<string> }} [options] */
+  function mountHomeDivisionRail(pool, options = {}) {
     const scroller = document.getElementById("ed-lp-division-rail");
     if (!scroller) return;
-    const plans = pickHomeDivisionRailPlans(pool);
+    const plans = pickHomeDivisionRailPlans(pool, options);
     scroller.replaceChildren();
     for (const plan of plans) {
       scroller.appendChild(buildHomeDivisionRailCard(plan));
@@ -5062,17 +5072,23 @@
   function renderEditorialLandingPage() {
     if (!document.body.classList.contains("home-page")) return;
     mountHomePageHero();
-    mountHomeDivisionRail(items);
     const root = document.getElementById("main");
     if (!root?.classList.contains("ed-lp")) return;
 
     const highHost = document.getElementById("ed-lp-highlights");
-    if (!highHost) return;
-
     const pool = items.filter((it) => buildCoverCandidates(it).length > 0);
     const hlPool = pool.length ? pool : items.slice();
     shuffleArrayInPlace(hlPool);
-    mountHomeEditorialProductSection(highHost, hlPool.slice(0, 8), { galleryMax: 4 });
+    const highlightItems = hlPool.slice(0, 8);
+    if (highHost) {
+      mountHomeEditorialProductSection(highHost, highlightItems, { galleryMax: 4 });
+    }
+
+    /** @type {Set<string>} */
+    const highlightItemIds = new Set(
+      highlightItems.map((it) => String(it?.id ?? "").trim()).filter(Boolean)
+    );
+    mountHomeDivisionRail(items, { excludeItemIds: highlightItemIds });
 
     mountHomeRecentlyViewedRail(items);
 
@@ -5995,26 +6011,15 @@
     }
   }
 
-  /** Browse PLP: count under category title; search PLP: count in the filter row (intro is hidden). */
+  /** Archive PLP: count + spend always share a row with Filter & Sort (chips on the row below). */
   function syncArchiveCountLinePlacement() {
     const summary = document.querySelector(".items-toolbar__archive-summary--under-title");
-    const heading = document.getElementById("archive-heading");
     const controlBar = document.querySelector(
       ".items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar"
     );
-    const title = document.getElementById("items-toolbar-page-title");
-    if (!summary || !heading) return;
-
-    const searchPlp = document.body.classList.contains("archive-ui--search-results-plp");
-    if (searchPlp && controlBar) {
-      if (summary.parentElement !== controlBar) {
-        controlBar.insertBefore(summary, controlBar.firstChild);
-      }
-      return;
-    }
-    if (summary.parentElement !== heading) {
-      if (title) title.insertAdjacentElement("afterend", summary);
-      else heading.appendChild(summary);
+    if (!summary || !controlBar || !document.body.classList.contains("archive-page")) return;
+    if (summary.parentElement !== controlBar) {
+      controlBar.insertBefore(summary, controlBar.firstChild);
     }
   }
 
