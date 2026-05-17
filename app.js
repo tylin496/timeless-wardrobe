@@ -13140,6 +13140,7 @@
     if (theme === "home") {
       body.classList.add("home-page");
       root.classList.add("theme-home");
+      root.style.colorScheme = "light";
       return;
     }
 

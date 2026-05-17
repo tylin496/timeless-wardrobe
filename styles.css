@@ -2419,8 +2419,8 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     width: 100%;
     max-width: var(--desktop-layout-max-width);
     margin: 0 auto;
-    padding: 40px max(var(--desktop-layout-inline-pad), env(safe-area-inset-right, 0px)) 56px
-      max(var(--desktop-layout-inline-pad), env(safe-area-inset-left, 0px));
+    padding: 40px max(var(--header-x, 48px), env(safe-area-inset-right, 0px)) 56px
+      max(var(--header-x, 48px), env(safe-area-inset-left, 0px));
     box-sizing: border-box;
     background: #ffffff;
     border: none;
@@ -2456,14 +2456,14 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     align-items: center;
     gap: 18px;
     width: 100%;
-    min-height: 56px;
-    height: auto;
+    min-height: 76px;
+    height: 76px;
     margin: 0;
-    padding: 0 1rem 0 1.125rem;
-    border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--line));
-    border-radius: 2px;
-    background: #ffffff;
-    box-shadow: 0 1px 2px rgba(20, 19, 18, 0.04);
+    padding: 0 28px;
+    border: none;
+    border-radius: 0;
+    background: #f5f4f0;
+    box-shadow: none;
     box-sizing: border-box;
     cursor: text;
   }
@@ -2491,22 +2491,22 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
   .site-header__search-wrap.desktop-search-flyout .site-header__search-field-icon {
     display: inline-block;
     position: relative;
-    width: 22px;
-    height: 22px;
+    width: 12px;
+    height: 12px;
     flex: none;
     flex-shrink: 0;
-    opacity: 0.62;
+    opacity: 0.45;
     color: color-mix(in srgb, var(--ink) 48%, var(--ink-muted));
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-field-icon::before {
     content: "";
     position: absolute;
-    left: 1px;
-    top: 1px;
-    width: 11px;
-    height: 11px;
-    border: 1.5px solid currentColor;
+    left: 0;
+    top: 0;
+    width: 7px;
+    height: 7px;
+    border: 1.15px solid currentColor;
     border-radius: 50%;
   }
 
@@ -2514,9 +2514,9 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     content: "";
     position: absolute;
     right: 0;
-    bottom: 2px;
-    width: 8px;
-    height: 1.5px;
+    bottom: 1px;
+    width: 5px;
+    height: 1.15px;
     background: currentColor;
     transform: rotate(42deg);
     transform-origin: right center;
@@ -2533,8 +2533,8 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     border-radius: 0;
     background: transparent;
     box-shadow: none;
-    font-family: var(--tw-search-font-display);
-    font-size: 28px;
+    font-family: var(--font-serif);
+    font-size: 32px;
     font-weight: 400;
     line-height: 1;
     letter-spacing: 0.01em;
@@ -2542,8 +2542,8 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
   }
 
   .site-header__search-wrap.desktop-search-flyout .filters__search-field input[type="search"]::placeholder {
-    font-family: var(--tw-search-font-display);
-    font-size: 28px;
+    font-family: var(--font-serif);
+    font-size: 32px;
     font-weight: 400;
     line-height: 1;
     color: color-mix(in srgb, var(--ink) 42%, var(--ink-muted));
@@ -2556,15 +2556,15 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     z-index: auto;
     flex: none;
     flex-shrink: 0;
-    width: 28px;
-    height: 28px;
+    width: auto;
+    height: auto;
     margin: 0 0 0 auto;
     padding: 0;
     border: none;
     background: transparent;
     color: var(--ink);
-    opacity: 1;
-    font-size: 1.65rem;
+    opacity: 0.65;
+    font-size: 24px;
     font-weight: 400;
     line-height: 1;
     cursor: pointer;
@@ -2595,10 +2595,12 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     max-width: none;
     padding: 0;
     margin: 0;
+    box-sizing: border-box;
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-heading {
-    margin: 0 0 14px;
+    margin: 0 0 28px;
+    margin-left: 0;
     font-family: var(--tw-search-font-ui);
     font-size: 11px;
     font-weight: 600;
@@ -2620,13 +2622,45 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-aside-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: stretch;
     padding-left: 0;
+    margin: 0;
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-row {
-    padding-left: 0;
-    font-size: 12px;
-    line-height: 1.8;
+    padding: 0 0 0 24px;
+    margin: 0 0 20px;
+    gap: 12px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-chip-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.45;
+  }
+
+  .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-chip-icon::before {
+    left: 0;
+    top: 0;
+    width: 7px;
+    height: 7px;
+    border-width: 1.15px;
+  }
+
+  .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-chip-icon::after {
+    right: 0;
+    bottom: 1px;
+    width: 5px;
+    height: 1.15px;
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-category-grid {
@@ -10436,6 +10470,7 @@ a.item-detail__breadcrumb-current {
    --------------------------------------------------------------------------- */
 
 body.home-page {
+  color-scheme: light;
   --ed-parchment: var(--tw-brand-ivory);
   --ed-season-parchment: #f8f5ee;
   --ed-ivory: var(--tw-brand-ivory);
@@ -10448,7 +10483,11 @@ body.home-page {
   --ed-lp-section-title-gap: clamp(1.25rem, 2.5vw, 1.75rem);
   --bg: var(--ed-parchment);
   --bg-elevated: var(--ed-chalk);
+  --ink: var(--tw-brand-wordmark);
+  --ink-muted: #6a645c;
   --line: #e0d8cc;
+  --accent: #2f3540;
+  color: var(--ink);
   background-color: var(--ed-parchment);
   background-image:
     radial-gradient(120% 80% at 50% -20%, rgba(255, 252, 245, 0.9) 0%, transparent 55%),
@@ -10495,6 +10534,32 @@ body.home-page .ed-lp__division-rail-title {
 
 body.home-page .ed-lp__band-head {
   margin-bottom: var(--ed-lp-section-title-gap);
+}
+
+/* Homepage is always editorial light — do not inherit OS dark :root text tokens. */
+@media (prefers-color-scheme: dark) {
+  html.theme-home,
+  body.home-page {
+    color-scheme: light;
+    --bg: var(--ed-parchment);
+    --bg-elevated: var(--ed-chalk);
+    --ink: var(--tw-brand-wordmark);
+    --ink-muted: #6a645c;
+    --line: #e0d8cc;
+    --accent: #2f3540;
+    --tint-strong: rgba(255, 255, 255, 0.96);
+    --tint-mid: rgba(255, 255, 255, 0.78);
+    --tint-soft: rgba(243, 239, 230, 0.92);
+    --frost-bg: rgba(255, 255, 255, 0.94);
+    --frost-border: rgba(20, 19, 18, 0.08);
+    background-color: var(--ed-parchment);
+    color: var(--ink);
+  }
+
+  body.home-page #main.ed-lp {
+    background-color: transparent;
+    color: var(--ink);
+  }
 }
 
 /* Homepage: brand masthead → primary hero (flush) → overlay nav. */
