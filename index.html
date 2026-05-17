@@ -36,6 +36,229 @@
         <span class="site-utility-bar__right">Since 2020</span>
       </div>
     </div>
+    <div class="site-header-shell site-header-shell--home-overlay">
+    <header class="site-header site-header--overlay">
+    <div class="site-header__container site-header__inner">
+      <div class="site-header__flyout">
+      <div class="site-header__bar site-header__brand-nav" aria-label="Primary header">
+        <div class="site-title site-brand">
+          <a href="/" id="site-header-home" class="site-title__primary">
+            <span class="site-title__mark" role="img" aria-label="Timeless Wardrobe"></span>
+            <span class="site-title__text-stack site-brand-wordmark">
+              <span class="site-title__wordmark-line">Timeless</span>
+              <span class="site-title__wordmark-line">Wardrobe</span>
+            </span>
+          </a>
+        </div>
+        <div class="site-header__division-hover-zone">
+          <nav
+            id="site-header-primary-nav"
+            class="site-header__primary-nav main-nav"
+            aria-label="Main categories"
+          >
+            <a href="/archive.html" class="site-header__nav-link" data-category-jump="Clothing">Clothing</a>
+            <a href="/archive.html" class="site-header__nav-link" data-category-jump="Accessories">Accessories</a>
+            <a href="/archive.html" class="site-header__nav-link" data-category-jump="Watches">Watches</a>
+            <a href="/archive.html" class="site-header__nav-link" data-category-jump="Fragrance">Fragrance</a>
+          </nav>
+        </div>
+        <div class="site-header__nav-submenu-dismiss" aria-hidden="true"></div>
+        <div class="site-header__tools">
+          <div class="site-header__season-mini" id="season-nav-mini" aria-label="Season quick filter">
+            <button
+              type="button"
+              class="site-header__season-mini-tab season-toggle"
+              data-season-filter="S/S"
+              id="season-mini-ss"
+              aria-label="S/S"
+            >
+              S/S
+            </button>
+            <button
+              type="button"
+              class="site-header__season-mini-tab season-toggle"
+              data-season-filter="A/W"
+              id="season-mini-aw"
+              aria-label="A/W"
+            >
+              A/W
+            </button>
+          </div>
+          <button
+            type="button"
+            id="site-header-search-btn"
+            class="site-header__search-btn"
+            aria-expanded="false"
+            aria-controls="site-header-search-wrap"
+            aria-label="Open search"
+            title="Search"
+          >
+            <span class="site-header__search-icon" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            id="site-header-saved-toggle"
+            class="site-header__styling-board-btn"
+            aria-expanded="false"
+            aria-controls="styling-board-drawer"
+            aria-label="Open Styling Board"
+            title="Styling Board"
+          >
+            <span class="site-header__styling-board-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="7.5" height="7.5" rx="1" stroke="currentColor" stroke-width="1.75" />
+                <rect x="13.5" y="3" width="7.5" height="5" rx="1" stroke="currentColor" stroke-width="1.75" />
+                <rect x="13.5" y="10" width="7.5" height="11" rx="1" stroke="currentColor" stroke-width="1.75" />
+                <rect x="3" y="12.5" width="7.5" height="8.5" rx="1" stroke="currentColor" stroke-width="1.75" />
+              </svg>
+            </span>
+            <span class="site-header__styling-board-label">Styling Board</span>
+            <span id="styling-board-count" class="site-header__styling-board-count" hidden></span>
+          </button>
+          <button
+            type="button"
+            id="site-header-menu-btn"
+            class="site-header__menu-btn"
+            aria-expanded="false"
+            aria-controls="site-mobile-shell"
+            aria-label="Open categories menu"
+            title="Open categories"
+          >
+            <span class="site-header__menu-icon" aria-hidden="true">
+              <span class="site-header__menu-line site-header__menu-line--top"></span>
+              <span class="site-header__menu-line site-header__menu-line--bottom"></span>
+            </span>
+          </button>
+        </div>
+      </div>
+      <div
+        id="site-header-submenu"
+        class="site-header__submenu mega-menu desktop-mega-menu"
+        data-submenu-state="closed"
+        aria-hidden="true"
+        hidden
+      >
+        <div class="desktop-mega-menu-inner mega-menu-inner site-header__submenu-body">
+          <aside
+            id="site-header-submenu-links"
+            class="desktop-mega-menu-left mega-menu-left site-header__submenu-links site-header__submenu-zone site-header__submenu-zone--nav"
+            aria-label="Browse types"
+          ></aside>
+          <section
+            class="desktop-mega-menu-content mega-menu-content site-header__submenu-content site-header__submenu-zone site-header__submenu-zone--preview"
+            aria-label="Category preview"
+          >
+            <div id="site-header-submenu-preview" class="site-header__submenu-preview"></div>
+          </section>
+        </div>
+      </div>
+      </div>
+      <div
+        id="site-header-search-wrap"
+        class="site-header__search-wrap desktop-search-flyout"
+        data-search-state="closed"
+        aria-hidden="true"
+        hidden
+      >
+        <div class="site-header__search-dim" aria-hidden="true"></div>
+        <div class="desktop-search-flyout-inner site-header__search-megamenu-inner">
+          <div class="site-header__search-surface">
+            <div class="site-header__search-head">
+              <div class="site-header__search-row site-header__search-field--rl">
+                <span class="site-header__search-field-icon" aria-hidden="true"></span>
+                <label class="site-header__search-input-label" for="filter-search">
+                  <span class="filters__search-field">
+                  <input
+                    id="filter-search"
+                    type="search"
+                    aria-label="Search wardrobe"
+                    placeholder="Search"
+                    autocomplete="off"
+                    spellcheck="false"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    enterkeyhint="search"
+                    title="Search wardrobe by brand, name, category, season, colour, notes…"
+                  />
+                  <button
+                    type="button"
+                    id="filter-search-clear"
+                    class="filters__search-clear"
+                    aria-label="Clear search"
+                    hidden
+                  >
+                    <span class="filters__search-clear-icon" aria-hidden="true">×</span>
+                  </button>
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  id="site-header-search-close"
+                  class="site-header__search-close"
+                  aria-label="Close search"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+            </div>
+            <div id="site-header-search-browse" class="site-header__search-browse">
+              <div class="site-header__search-dropdown-body">
+                <div class="site-header__search-dropdown-aside">
+                  <p class="site-header__search-trending-heading">Trending Searches</p>
+                  <nav class="site-header__search-trending-aside-nav" aria-label="Trending searches">
+                    <button type="button" class="site-header__search-trending-row" data-trending-search="Polo shirt">
+                      <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                      <span>Polo Shirt</span>
+                    </button>
+                    <button type="button" class="site-header__search-trending-row" data-trending-search="Bags">
+                      <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                      <span>Bags</span>
+                    </button>
+                    <button type="button" class="site-header__search-trending-row" data-trending-search="Watches">
+                      <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                      <span>Watches</span>
+                    </button>
+                    <button type="button" class="site-header__search-trending-row" data-trending-search="Fragrance">
+                      <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
+                      <span>Fragrance</span>
+                    </button>
+                  </nav>
+                </div>
+                <div class="site-header__search-dropdown-main">
+                  <p class="site-header__search-main-heading">Popular Categories</p>
+                  <div
+                    id="site-header-search-featured-subcats"
+                    class="site-header__search-category-grid"
+                    role="list"
+                    aria-label="Featured subcategories"
+                  ></div>
+                </div>
+              </div>
+            </div>
+            <div
+              id="site-header-search-results-pane"
+              class="site-header__search-results-pane"
+              hidden
+              aria-live="polite"
+            >
+              <div id="site-header-search-results-empty" class="site-header__search-results-empty" hidden>
+                <p class="site-header__search-results-empty__title">No results found</p>
+                <p class="site-header__search-results-empty__hint">Try another search term.</p>
+              </div>
+              <div
+                id="site-header-search-results-grid"
+                class="site-header__search-results-grid"
+                role="list"
+                aria-label="Search results"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </header>
+    </div>
+
     <div class="site-home-stage">
       <section class="ed-lp__hero" aria-labelledby="ed-lp-hero-heading">
         <div class="ed-lp__hero-layers" id="ed-lp-hero-layers" aria-hidden="true"></div>
@@ -75,230 +298,101 @@
           </div>
         </div>
       </section>
-      <div class="site-header-shell site-header-shell--home-overlay">
-    <header class="site-header site-header--overlay">
-      <div class="site-header__container site-header__inner">
-        <div class="site-header__flyout">
-        <div class="site-header__bar site-header__brand-nav" aria-label="Primary header">
-          <div class="site-title site-brand">
-            <a href="/" id="site-header-home" class="site-title__primary">
-              <span class="site-title__mark" role="img" aria-label="Timeless Wardrobe"></span>
-              <span class="site-title__text-stack site-brand-wordmark">
-                <span class="site-title__wordmark-line">Timeless</span>
-                <span class="site-title__wordmark-line">Wardrobe</span>
-              </span>
-            </a>
-          </div>
-          <div class="site-header__division-hover-zone">
-            <nav
-              id="site-header-primary-nav"
-              class="site-header__primary-nav main-nav"
-              aria-label="Main categories"
-            >
-              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Clothing">Clothing</a>
-              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Accessories">Accessories</a>
-              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Watches">Watches</a>
-              <a href="/archive.html" class="site-header__nav-link" data-category-jump="Fragrance">Fragrance</a>
-            </nav>
-          </div>
-          <div class="site-header__nav-submenu-dismiss" aria-hidden="true"></div>
-          <div class="site-header__tools">
-            <div class="site-header__season-mini" id="season-nav-mini" aria-label="Season quick filter">
-              <button
-                type="button"
-                class="site-header__season-mini-tab season-toggle"
-                data-season-filter="S/S"
-                id="season-mini-ss"
-                aria-label="S/S"
-              >
-                S/S
-              </button>
-              <button
-                type="button"
-                class="site-header__season-mini-tab season-toggle"
-                data-season-filter="A/W"
-                id="season-mini-aw"
-                aria-label="A/W"
-              >
-                A/W
-              </button>
-            </div>
-            <button
-              type="button"
-              id="site-header-search-btn"
-              class="site-header__search-btn"
-              aria-expanded="false"
-              aria-controls="site-header-search-wrap"
-              aria-label="Open search"
-              title="Search"
-            >
-              <span class="site-header__search-icon" aria-hidden="true"></span>
-            </button>
-            <button
-              type="button"
-              id="site-header-saved-toggle"
-              class="site-header__styling-board-btn"
-              aria-expanded="false"
-              aria-controls="styling-board-drawer"
-              aria-label="Open Styling Board"
-              title="Styling Board"
-            >
-              <span class="site-header__styling-board-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="3" width="7.5" height="7.5" rx="1" stroke="currentColor" stroke-width="1.75" />
-                  <rect x="13.5" y="3" width="7.5" height="5" rx="1" stroke="currentColor" stroke-width="1.75" />
-                  <rect x="13.5" y="10" width="7.5" height="11" rx="1" stroke="currentColor" stroke-width="1.75" />
-                  <rect x="3" y="12.5" width="7.5" height="8.5" rx="1" stroke="currentColor" stroke-width="1.75" />
-                </svg>
-              </span>
-              <span class="site-header__styling-board-label">Styling Board</span>
-              <span id="styling-board-count" class="site-header__styling-board-count" hidden></span>
-            </button>
-            <button
-              type="button"
-              id="site-header-menu-btn"
-              class="site-header__menu-btn"
-              aria-expanded="false"
-              aria-controls="site-mobile-shell"
-              aria-label="Open categories menu"
-              title="Open categories"
-            >
-              <span class="site-header__menu-icon" aria-hidden="true">
-                <span class="site-header__menu-line site-header__menu-line--top"></span>
-                <span class="site-header__menu-line site-header__menu-line--bottom"></span>
-              </span>
-            </button>
-          </div>
-        </div>
-        <div
-          id="site-header-submenu"
-          class="site-header__submenu mega-menu desktop-mega-menu"
-          data-submenu-state="closed"
-          aria-hidden="true"
-          hidden
-        >
-          <div class="desktop-mega-menu-inner mega-menu-inner site-header__submenu-body">
-            <aside
-              id="site-header-submenu-links"
-              class="desktop-mega-menu-left mega-menu-left site-header__submenu-links site-header__submenu-zone site-header__submenu-zone--nav"
-              aria-label="Browse types"
-            ></aside>
-            <section
-              class="desktop-mega-menu-content mega-menu-content site-header__submenu-content site-header__submenu-zone site-header__submenu-zone--preview"
-              aria-label="Category preview"
-            >
-              <div id="site-header-submenu-preview" class="site-header__submenu-preview"></div>
-            </section>
-          </div>
-        </div>
-        </div>
-        <div
-          id="site-header-search-wrap"
-          class="site-header__search-wrap desktop-search-flyout"
-          data-search-state="closed"
-          aria-hidden="true"
-          hidden
-        >
-          <div class="site-header__search-dim" aria-hidden="true"></div>
-          <div class="desktop-search-flyout-inner site-header__search-megamenu-inner">
-            <div class="site-header__search-surface">
-              <div class="site-header__search-head">
-                <div class="site-header__search-row site-header__search-field--rl">
-                  <span class="site-header__search-field-icon" aria-hidden="true"></span>
-                  <label class="site-header__search-input-label" for="filter-search">
-                    <span class="filters__search-field">
-                    <input
-                      id="filter-search"
-                      type="search"
-                      aria-label="Search wardrobe"
-                      placeholder="Search"
-                      autocomplete="off"
-                      spellcheck="false"
-                      autocorrect="off"
-                      autocapitalize="off"
-                      enterkeyhint="search"
-                      title="Search wardrobe by brand, name, category, season, colour, notes…"
-                    />
-                    <button
-                      type="button"
-                      id="filter-search-clear"
-                      class="filters__search-clear"
-                      aria-label="Clear search"
-                      hidden
-                    >
-                      <span class="filters__search-clear-icon" aria-hidden="true">×</span>
-                    </button>
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    id="site-header-search-close"
-                    class="site-header__search-close"
-                    aria-label="Close search"
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                </div>
-              </div>
-              <div id="site-header-search-browse" class="site-header__search-browse">
-                <div class="site-header__search-dropdown-body">
-                  <div class="site-header__search-dropdown-aside">
-                    <p class="site-header__search-trending-heading">Trending Searches</p>
-                    <nav class="site-header__search-trending-aside-nav" aria-label="Trending searches">
-                      <button type="button" class="site-header__search-trending-row" data-trending-search="Polo shirt">
-                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                        <span>Polo Shirt</span>
-                      </button>
-                      <button type="button" class="site-header__search-trending-row" data-trending-search="Bags">
-                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                        <span>Bags</span>
-                      </button>
-                      <button type="button" class="site-header__search-trending-row" data-trending-search="Watches">
-                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                        <span>Watches</span>
-                      </button>
-                      <button type="button" class="site-header__search-trending-row" data-trending-search="Fragrance">
-                        <span class="site-header__search-trending-chip-icon" aria-hidden="true"></span>
-                        <span>Fragrance</span>
-                      </button>
-                    </nav>
-                  </div>
-                  <div class="site-header__search-dropdown-main">
-                    <p class="site-header__search-main-heading">Popular Categories</p>
-                    <div
-                      id="site-header-search-featured-subcats"
-                      class="site-header__search-category-grid"
-                      role="list"
-                      aria-label="Featured subcategories"
-                    ></div>
-                  </div>
-                </div>
-              </div>
-              <div
-                id="site-header-search-results-pane"
-                class="site-header__search-results-pane"
-                hidden
-                aria-live="polite"
-              >
-                <div id="site-header-search-results-empty" class="site-header__search-results-empty" hidden>
-                  <p class="site-header__search-results-empty__title">No results found</p>
-                  <p class="site-header__search-results-empty__hint">Try another search term.</p>
-                </div>
-                <div
-                  id="site-header-search-results-grid"
-                  class="site-header__search-results-grid"
-                  role="list"
-                  aria-label="Search results"
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-    </div>
-    </div>
 
+      <section class="ed-lp__season-duo" aria-label="Shop by season">
+        <div class="ed-lp__season-duo-grid">
+          <a
+            href="/archive.html?season=SS"
+            class="ed-lp__season-duo-card"
+            data-ed-archive="1"
+            data-ed-seasonal-entry="1"
+            data-season-filter="S/S"
+            aria-label="Browse S/S Mediterranean Leisure"
+          >
+            <div class="ed-lp__season-duo-media" aria-hidden="true">
+              <img
+                class="ed-lp__season-duo-img"
+                src="images/season-duo/summer.png"
+                alt=""
+                width="1200"
+                height="1500"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+            <div class="ed-lp__season-duo-scrim" aria-hidden="true"></div>
+            <div class="ed-lp__season-duo-copy">
+              <span class="ed-lp__season-duo-eyebrow">Collection</span>
+              <span class="ed-lp__season-duo-title">S/S</span>
+              <p class="ed-lp__season-duo-desc">
+                Linen, cotton, and relaxed Mediterranean pieces for warmer days.
+              </p>
+            </div>
+          </a>
+          <a
+            href="/archive.html?season=AW"
+            class="ed-lp__season-duo-card"
+            data-ed-archive="1"
+            data-ed-seasonal-entry="1"
+            data-season-filter="A/W"
+            aria-label="Browse A/W English Heritage"
+          >
+            <div class="ed-lp__season-duo-media" aria-hidden="true">
+              <img
+                class="ed-lp__season-duo-img"
+                src="images/season-duo/winter.png"
+                alt=""
+                width="1200"
+                height="1500"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+            <div class="ed-lp__season-duo-scrim" aria-hidden="true"></div>
+            <div class="ed-lp__season-duo-copy">
+              <span class="ed-lp__season-duo-eyebrow">Collection</span>
+              <span class="ed-lp__season-duo-title">A/W</span>
+              <p class="ed-lp__season-duo-desc">
+                English tailoring, knitwear, and layered classics for the cold season.
+              </p>
+            </div>
+          </a>
+        </div>
+      </section>
+
+      <section
+        class="ed-lp__division-rail"
+        data-ed-lp-horizontal-rail
+        aria-labelledby="ed-lp-division-rail-heading"
+      >
+        <div class="ed-lp__division-rail-inner">
+          <header class="ed-lp__division-rail-head">
+            <h2 id="ed-lp-division-rail-heading" class="ed-lp__division-rail-title">Shop by Category</h2>
+          </header>
+          <div class="ed-lp__division-rail-scroller-wrap">
+            <div
+              class="ed-lp__division-rail-scroller"
+              id="ed-lp-division-rail"
+              role="list"
+              aria-label="Pieces from each division"
+            ></div>
+          </div>
+          <div
+            class="ed-lp__division-rail-progress ed-lp__rail-progress"
+            id="ed-lp-division-rail-track"
+            role="slider"
+            aria-label="Scroll category gallery"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            tabindex="0"
+            hidden
+          >
+            <span class="ed-lp__division-rail-progress-bar ed-lp__rail-progress-bar" id="ed-lp-division-rail-progress"></span>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <aside
       id="local-data-risk-banner"

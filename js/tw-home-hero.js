@@ -2,7 +2,7 @@
  * Early homepage hero pick + preload (runs in <head> before paint).
  * Keeps sessionStorage in sync with app.js `pickHomeHeroImagePath`.
  */
-(function () {
+(async function () {
   const FALLBACK_HOME_HERO_IMAGES = [
     "images/heroes/hero-country-classics.png",
     "images/heroes/hero-editorial-01.png",
@@ -22,10 +22,12 @@
   function homeHeroMediaUrl(src) {
     const path = String(src ?? "").trim();
     if (!path) return "";
-    return path
+    const encoded = path
       .split("/")
       .map((part) => encodeURIComponent(part))
       .join("/");
+    const bust = window.TW_DEV_ASSET?.bustKnownUrl?.(encoded);
+    return bust || encoded;
   }
 
   function pickHomeHeroImagePath() {
@@ -45,7 +47,10 @@
   }
 
   const hero = pickHomeHeroImagePath();
-  const href = homeHeroMediaUrl(hero);
+  let href = homeHeroMediaUrl(hero);
+  if (window.TW_DEV_ASSET?.isLocalDev && window.TW_DEV_ASSET.bustUrl) {
+    href = await window.TW_DEV_ASSET.bustUrl(hero);
+  }
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = isHomeHeroVideoPath(hero) ? "video" : "image";

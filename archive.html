@@ -321,6 +321,10 @@
               <div class="archive-heading" id="archive-heading" aria-label="Collection">
                 <div class="archive-heading__context" id="archive-heading-context"></div>
                 <h2 class="archive-heading__title items-toolbar__page-title" id="items-toolbar-page-title"></h2>
+                <div class="items-toolbar__archive-summary items-toolbar__archive-summary--under-title" aria-live="polite">
+                  <p class="items-toolbar__count-line" id="filter-count"></p>
+                  <p class="items-toolbar__spend-line" id="filter-spend-total" hidden></p>
+                </div>
               </div>
               <nav
                 id="season-nav"
@@ -344,19 +348,15 @@
             </div>
           </div>
         </div>
-        <div
-          id="items-toolbar-active-filter-chips"
-          class="items-toolbar__active-chips items-toolbar__active-chips--browse"
-          role="group"
-          aria-label="Active filters"
-          hidden
-        ></div>
         <div class="items-toolbar__actions">
           <div class="items-toolbar__control-bar">
-            <div class="items-toolbar__control-main items-toolbar__archive-summary" aria-live="polite">
-              <p class="items-toolbar__count-line" id="filter-count"></p>
-              <p class="items-toolbar__spend-line" id="filter-spend-total" hidden></p>
-            </div>
+            <div
+              id="items-toolbar-active-filter-chips"
+              class="items-toolbar__active-chips items-toolbar__active-chips--browse"
+              role="group"
+              aria-label="Active filters"
+              hidden
+            ></div>
             <button
               type="button"
               class="items-toolbar__filter-sort-btn"
@@ -627,7 +627,7 @@
       <button type="button" class="btn btn--ghost archive-actions__add" id="add-item-open">Add a piece</button>
     </section>
 
-    <section class="data-load-note tw-admin-only" hidden aria-label="Where this data comes from">
+    <section class="data-load-note tw-admin-only" aria-label="Where this data comes from">
       <h2 class="data-load-note__title">Where this data comes from</h2>
       <p class="data-load-note__lead">
         Each reload builds one merged wardrobe list: rows you added are merged first, then the catalogue (from
@@ -659,12 +659,19 @@
         </li>
       </ul>
       <p class="data-load-note__backup">
+        <button type="button" class="btn btn--small btn--ghost" id="data-note-text-to-localstorage">
+          Save all text to localStorage
+        </button>
+        <button type="button" class="btn btn--small btn--ghost" id="data-note-download-text-json">
+          Download text JSON
+        </button>
         <button type="button" class="btn btn--small btn--ghost" id="data-note-backup-json">
           Download browser backup JSON
         </button>
         <span class="data-load-note__backup-hint">
-          — full snapshot: custom rows, catalogue overrides, hidden ids, outfits, and display prefs (keep this file
-          somewhere safe when you are not on cloud sync).
+          — <strong>Text JSON</strong> = every piece’s text fields for review (no images). Project export:
+          <code>npm run db:export-wardrobe</code> → <code>data/local/wardrobe-text.json</code>, then
+          <code>npm run db:apply-local-text</code> after edits. Backup JSON also includes overrides, outfits, and prefs.
         </span>
       </p>
     </section>

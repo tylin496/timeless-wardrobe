@@ -6,6 +6,9 @@
     "build": "node scripts/vercel-build.mjs",
     "dev": "node scripts/tw-dev-server.mjs",
     "export:wardrobe-json": "node scripts/export_wardrobe_json.mjs",
+    "db:export-wardrobe": "node scripts/export_wardrobe_from_supabase.mjs",
+    "db:freeze-catalogue": "node scripts/freeze_catalogue_from_supabase.mjs",
+    "db:apply-local-text": "node scripts/apply_local_wardrobe_text.mjs",
     "db:import-seed": "node scripts/import_seed_to_supabase.mjs",
     "storage:prune-orphans": "node scripts/prune_wardrobe_storage_orphans.mjs"
   },

@@ -505,6 +505,8 @@
   /** After item save + full navigation, pin the saved row so a stale cloud read cannot revert new images. */
   const WARDROBE_SAVE_PIN_KEY = "timeless-wardrobe-save-pin-v1";
   const WARDROBE_SAVE_PIN_TTL_MS = 3 * 60 * 1000;
+  /** Full wardrobe text snapshot for offline review (browser localStorage). */
+  const WARDROBE_TEXT_LOCAL_KEY = "timeless-wardrobe-text-local-v1";
   const TW_ADMIN_MODE_STORAGE_KEY = "adminMode";
 
   /** Local dev hosts (`npm run dev` uses 127.0.0.1). */
@@ -573,6 +575,7 @@
     applyTwAdminModeUi();
     if (on) {
       installLocalDataRiskBanner();
+      installWardrobeTextLocalExportActions();
       initAddItemForm();
     }
     if (typeof showToast === "function") {
@@ -2203,14 +2206,34 @@
     return t;
   }
 
-  /** Keep in-memory cache-bust nonce when cloud list refresh returns the same `id`. */
+  /** Stable key for cover + gallery URLs (path only — ignores `cb` query). */
+  function wardrobeMediaUrlSignature(item) {
+    if (!item || typeof item !== "object") return "";
+    const parts = [String(item.image ?? "").trim().split("?")[0]];
+    for (const u of itemGalleryList(item)) parts.push(String(u).split("?")[0]);
+    return parts.filter(Boolean).join("|");
+  }
+
+  /** Keep cache-bust nonce only when media URLs are unchanged; new uploads at the same path need a fresh nonce. */
   function carryForwardMediaNonce(fromRow, toRow) {
     const next = { ...toRow };
+    const sameMedia = wardrobeMediaUrlSignature(fromRow) === wardrobeMediaUrlSignature(toRow);
     const n = fromRow?.__displayNonce;
-    if (typeof n === "number" && Number.isFinite(n)) {
+    if (sameMedia && typeof n === "number" && Number.isFinite(n)) {
       /** @type {any} */ (next).__displayNonce = Math.floor(n);
+      return next;
     }
-    return next;
+    return stampWardrobeItemMediaNonce(next, Date.now());
+  }
+
+  /** Ensure Supabase Storage URLs get a `cb` token when loading edit / detail views. */
+  function ensureItemMediaCacheBust(item) {
+    if (!item || typeof item !== "object") return item;
+    const o = /** @type {any} */ (item);
+    if (typeof o.__displayNonce === "number" && Number.isFinite(o.__displayNonce)) return item;
+    const ts = String(o.updatedAt ?? o.updated_at ?? "").trim();
+    const nonce = ts ? Date.parse(ts) || Date.now() : Date.now();
+    return stampWardrobeItemMediaNonce(o, nonce);
   }
 
   /** Persist a just-saved row across `item.html` → archive navigation (cloud list can lag). */
@@ -2267,7 +2290,11 @@
         ? pinned.colourVariants
         : cloudRow.colourVariants,
     });
-    return carryForwardMediaNonce(pinned, merged);
+    const out = carryForwardMediaNonce(pinned, merged);
+    if (typeof /** @type {any} */ (pinned).__displayNonce === "number") {
+      /** @type {any} */ (out).__displayNonce = Math.floor(/** @type {any} */ (pinned).__displayNonce);
+    }
+    return out;
   }
 
   function storagePathFromWardrobeImageUrl(url) {
@@ -2654,15 +2681,105 @@
     showToast("Save as data/custom-items.json in the project to version custom pieces.");
   }
 
+  /** Text-only row for local audit (no image URLs). */
+  function itemToLocalTextRecord(item) {
+    if (!item || item.id == null) return null;
+    const meta =
+      item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+        ? { ...item.metadata }
+        : {};
+    const mrows = getMeasurementRows(item)
+      .filter((r) => String(r.label ?? "").trim() || String(r.value ?? "").trim())
+      .map((r) => ({ label: String(r.label ?? ""), value: String(r.value ?? "") }));
+    const cv = getItemColourVariants(item);
+    const colourVariants = cv
+      ? cv.map((v) => ({
+          key: v.key,
+          label: v.label,
+          colour: v.colour,
+          colourCode: v.colourCode,
+          notes: v.notes,
+          basicColour: v.basicColour,
+        }))
+      : [];
+    const pNum = parsePriceAmountFlexible(item.price != null ? item.price : meta?.price);
+    const image = String(item.image ?? "").trim();
+    const gallery = itemGalleryList(item);
+    return {
+      id: String(item.id),
+      brand: String(item.brand ?? "").trim(),
+      name: String(item.name ?? "").trim(),
+      pillar: String(item.pillar ?? "").trim(),
+      section: String(item.section ?? "").trim(),
+      category: String(item.category ?? "").trim(),
+      season: String(item.season ?? "").trim(),
+      colour: String(item.colour ?? "").trim(),
+      colourCode: itemColourCode(item),
+      fabric: String(item.fabric ?? "").trim(),
+      weight: String(item.weight ?? "").trim(),
+      size: String(item.size ?? "").trim(),
+      measuredDimensions: String(item.measuredDimensions ?? "").trim(),
+      purchaseDate: String(item.purchaseDate ?? "").trim(),
+      notes: String(item.notes ?? "").trim(),
+      price: Number.isFinite(pNum) ? pNum : null,
+      priceCurrency: String(item.priceCurrency ?? meta.priceCurrency ?? "TWD").trim(),
+      basicColour: String(item.basicColour ?? meta.basicColour ?? "").trim(),
+      measurementRows: mrows,
+      measurementUnit: getMeasurementUnit(item),
+      colourVariants,
+      _media: { hasCover: Boolean(image), galleryCount: gallery.length },
+    };
+  }
+
+  function buildWardrobeTextLocalPayload() {
+    const rows = getAllWardrobeItems().map(itemToLocalTextRecord).filter(Boolean);
+    return {
+      _schema: WARDROBE_TEXT_LOCAL_KEY,
+      exportedAt: new Date().toISOString(),
+      source: wardrobeCatalogueSource,
+      rowCount: rows.length,
+      items: rows,
+    };
+  }
+
+  function persistAllWardrobeTextToLocalStorage() {
+    const payload = buildWardrobeTextLocalPayload();
+    try {
+      localStorage.setItem(WARDROBE_TEXT_LOCAL_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn(e);
+      showToast("Could not save to localStorage — storage may be full.");
+      return;
+    }
+    showToast(`Saved text for ${payload.rowCount} pieces to localStorage (${WARDROBE_TEXT_LOCAL_KEY}).`);
+  }
+
+  function downloadWardrobeTextLocalJson() {
+    const payload = buildWardrobeTextLocalPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const a = document.createElement("a");
+    const u = URL.createObjectURL(blob);
+    a.href = u;
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `timeless-wardrobe-text-local-${stamp}.json`;
+    a.rel = "noopener";
+    a.click();
+    URL.revokeObjectURL(u);
+    showToast(`Downloaded text for ${payload.rowCount} pieces — edit in data/local/ or apply with npm run db:apply-local-text.`);
+  }
+
   /**
    * One-file snapshot of browser-only state (custom rows, archive overrides, hidden ids, outfits, UI prefs).
    * Does not replace Supabase sync — use when cloud is off or as an extra safety copy.
    */
   function downloadBrowserWardrobeBackupJson() {
+    const textLocal = buildWardrobeTextLocalPayload();
     const payload = {
       _schema: "timeless-wardrobe-browser-backup-v1",
       exportedAt: new Date().toISOString(),
       supabaseConfigured: Boolean(isSupabaseReady()),
+      wardrobeItemsText: textLocal.items,
+      wardrobeTextLocal: textLocal,
       customItems: loadCustomItems(),
       archiveOverrides: loadArchiveOverrides(),
       archiveHiddenIds: [...loadArchiveHiddenIds()],
@@ -2734,6 +2851,27 @@
     });
     document.getElementById("data-note-backup-json")?.addEventListener("click", () => {
       downloadBrowserWardrobeBackupJson();
+    });
+  }
+
+  /** @type {boolean} */
+  let wardrobeTextLocalExportWired = false;
+
+  function installWardrobeTextLocalExportActions() {
+    if (!isTwAdminMode()) return;
+    if (wardrobeTextLocalExportWired) return;
+    wardrobeTextLocalExportWired = true;
+    document.getElementById("data-note-text-to-localstorage")?.addEventListener("click", () => {
+      persistAllWardrobeTextToLocalStorage();
+    });
+    document.getElementById("data-note-download-text-json")?.addEventListener("click", () => {
+      downloadWardrobeTextLocalJson();
+    });
+    document.getElementById("local-data-text-to-localstorage")?.addEventListener("click", () => {
+      persistAllWardrobeTextToLocalStorage();
+    });
+    document.getElementById("local-data-download-text-json")?.addEventListener("click", () => {
+      downloadWardrobeTextLocalJson();
     });
   }
 
@@ -3230,7 +3368,8 @@
 
     for (const row of picks) {
       const title = popularBrowseCardTitleFromPool(row.sub, row.pool);
-      const pick = pickStrongPopularBrowseCoverItem(row.pool);
+      const galleryPick = pickRandomHeaderSearchGalleryFromPool(row.pool);
+      const pick = galleryPick?.item ?? pickStrongPopularBrowseCoverItem(row.pool);
 
       const a = document.createElement("a");
       a.href = mainHref;
@@ -3257,10 +3396,11 @@
         wireCoverImageWithFallbacks(img, pick, {
           host: media,
           missingClass: "site-header__search-category-card__media--missing",
+          preferredUrl: galleryPick?.url,
           coverRenderWidth: popularCoverW,
           coverRenderHeight: popularCoverH,
           coverRenderQuality: popularCoverQuality,
-          coverRenderResize: "contain",
+          coverRenderResize: "cover",
         });
       } else {
         media.classList.add("site-header__search-category-card__media--missing");
@@ -3332,10 +3472,22 @@
   function homeHeroMediaUrl(src) {
     const path = String(src ?? "").trim();
     if (!path) return "";
-    return path
+    const encoded = path
       .split("/")
       .map((part) => encodeURIComponent(part))
       .join("/");
+    const bust = globalThis.TW_DEV_ASSET?.bustKnownUrl?.(encoded);
+    return bust || encoded;
+  }
+
+  function scheduleDevLocalImageCacheBust(/** @type {HTMLImageElement | HTMLVideoElement | null} */ el, /** @type {string} */ rawPath) {
+    const dev = globalThis.TW_DEV_ASSET;
+    if (!dev?.isLocalDev || !dev.bustUrl || !(el instanceof HTMLImageElement)) return;
+    const raw = String(rawPath ?? "").trim();
+    if (!raw || /^https?:\/\//i.test(raw)) return;
+    void dev.bustUrl(raw).then((next) => {
+      if (next && el.src !== next) el.src = next;
+    });
   }
 
   function homeHeroVideoMime(path) {
@@ -3424,6 +3576,7 @@
       const img = new Image();
       img.decoding = "async";
       img.src = url;
+      scheduleDevLocalImageCacheBust(img, path);
     } catch {
       /* ignore */
     }
@@ -3455,6 +3608,7 @@
     img.className = "ed-lp__hero-layer-img";
     img.alt = "";
     img.src = url;
+    scheduleDevLocalImageCacheBust(img, src);
     img.fetchPriority = priority;
     img.loading = eager ? "eager" : "lazy";
     img.decoding = "async";
@@ -3788,29 +3942,59 @@
     return slice.slice(0, use);
   }
 
-  function collectFeaturedSubcategoryPicksForHome() {
-    /** @type {{ slot: string, sub: string, pool: object[], score: number }[]} */
-    const candidates = [];
-    const seenKeys = new Set();
-    for (const slot of SLOT_OPTIONS) {
-      const keys = drillSubcategoryKeysFromPool(slot, items);
-      for (const { raw: dk, label } of collapseRecordTypeKeysByDisplayLabel(keys, slot)) {
-        if (!dk || isBannedPopularCategoryTitleLabel(dk) || isBannedPopularCategoryTitleLabel(label)) continue;
-        const k = `${slot}\0${label.toLowerCase()}`;
-        if (seenKeys.has(k)) continue;
-        seenKeys.add(k);
-        const pool = poolItemsMatchingRecordTypeDrill(items, slot, dk);
-        if (!pool.length) continue;
-        const coverN = pool.filter((it) => buildCoverCandidates(it).length > 0).length;
-        const score = pool.length * 10 + coverN * 16;
-        candidates.push({ slot, sub: dk, pool, score });
-      }
+  const RECENTLY_VIEWED_STORAGE_KEY = "twRecentlyViewed-v1";
+  const RECENTLY_VIEWED_MAX = 12;
+
+  /** @param {string} itemId */
+  function recordRecentlyViewedItem(itemId) {
+    const id = String(itemId ?? "").trim();
+    if (!id) return;
+    let ids = [];
+    try {
+      const raw = localStorage.getItem(RECENTLY_VIEWED_STORAGE_KEY);
+      if (raw) ids = JSON.parse(raw);
+    } catch {
+      /* ignore */
     }
-    candidates.sort((a, b) => b.score - a.score);
-    const tier = Math.min(28, Math.max(6, candidates.length));
-    const short = candidates.slice(0, tier);
-    shuffleArrayInPlace(short);
-    return short.slice(0, 4);
+    if (!Array.isArray(ids)) ids = [];
+    ids = ids.filter((x) => String(x) !== id);
+    ids.unshift(id);
+    ids = ids.slice(0, RECENTLY_VIEWED_MAX);
+    try {
+      localStorage.setItem(RECENTLY_VIEWED_STORAGE_KEY, JSON.stringify(ids));
+    } catch {
+      /* private mode / quota */
+    }
+  }
+
+  /** @param {object[]} pool @returns {object[]} */
+  function getRecentlyViewedItemsFromPool(pool) {
+    let ids = [];
+    try {
+      const raw = localStorage.getItem(RECENTLY_VIEWED_STORAGE_KEY);
+      if (raw) ids = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    if (!Array.isArray(ids)) return [];
+    const byId = new Map(
+      (Array.isArray(pool) ? pool : [])
+        .map((it) => [String(it?.id ?? "").trim(), it])
+        .filter(([k]) => k)
+    );
+    const out = [];
+    for (const id of ids) {
+      const it = byId.get(String(id));
+      if (it) out.push(it);
+    }
+    return out;
+  }
+
+  /** @param {object[]} pool @param {number} [fallbackN] */
+  function resolveHomeRecentlyViewedItems(pool, fallbackN = 8) {
+    const viewed = getRecentlyViewedItemsFromPool(pool);
+    if (viewed.length) return viewed;
+    return pickRecentAcquisitionItems(pool, fallbackN);
   }
 
   function pickRecentAcquisitionItems(pool, n) {
@@ -3959,6 +4143,7 @@
       if (itemMatchesSeasonalKeywords(item, [kw])) s += 14;
     }
     if (buildCoverCandidates(item).length > 0) s += 6;
+    if (buildCoverCandidates(item).some((u) => isLikelySeasonalCutoutImageUrl(u))) s += 10;
     return s;
   }
 
@@ -3994,12 +4179,12 @@
 
   /** @param {"A/W" | "S/S"} seasonToken @param {{ preferredKeywords?: string[] }} config */
   function buildSeasonalCardPool(seasonToken, config) {
-    return getAllWardrobeItems().filter(
-      (it) =>
-        itemMatchesStrictSeasonForSeasonalCard(it, seasonToken) &&
-        seasonalCardCategoryAllowed(it, seasonToken) &&
-        buildCoverCandidates(it).length > 0
-    );
+    return getAllWardrobeItems().filter((it) => {
+      if (!itemMatchesStrictSeasonForSeasonalCard(it, seasonToken)) return false;
+      if (!seasonalCardCategoryAllowed(it, seasonToken)) return false;
+      const covers = buildCoverCandidates(it);
+      return covers.some((u) => isLikelySeasonalCutoutImageUrl(u));
+    });
   }
 
   function seasonalCardCompositionSig(items) {
@@ -4066,8 +4251,10 @@
     const layouts = SEASONAL_STILL_LAYOUTS[n] || SEASONAL_STILL_LAYOUTS[4];
     const pieces = items.slice(0, n);
     shuffleArrayInPlace(pieces);
+    const displayPlans = assignSeasonalCardDisplayPlans(pieces);
 
-    pieces.forEach((item, i) => {
+    displayPlans.forEach((plan, i) => {
+      const item = plan.item;
       const layout = layouts[i % layouts.length];
       const piece = document.createElement("div");
       piece.className = "ed-lp__season-piece";
@@ -4086,7 +4273,7 @@
       img.decoding = "async";
       piece.appendChild(img);
       still.appendChild(piece);
-      wireCoverImageWithFallbacks(img, item, { host: piece, missingClass: null });
+      wireHomeEditorialCardImage(img, item, plan.displaySrc, { host: piece, missingClass: null });
     });
 
     host.appendChild(still);
@@ -4121,12 +4308,615 @@
     return u.toString();
   }
 
-  function buildEditorialHomeProductCard(item) {
-    const slot = itemSlot(item);
+  /** Homepage curated grids only — archive PLP always uses cover. */
+  function homeEditorialCoverSrc(item) {
+    const candidates = buildCoverCandidates(item);
+    return candidates[0] || String(item?.image ?? "").trim();
+  }
+
+  /** Season still-life tiles need isolated product art — not lifestyle gallery frames. */
+  function isLikelySeasonalCutoutImageUrl(url) {
+    const u = String(url ?? "").toLowerCase();
+    if (!isDisplayableCloudImageUrl(url)) return false;
+    const cutoutHints = [
+      "cutout",
+      "isolate",
+      "isolated",
+      "packshot",
+      "pack-shot",
+      "ghost",
+      "nobg",
+      "no-bg",
+      "transparent",
+      "flat-lay",
+      "flatlay",
+    ];
+    if (cutoutHints.some((h) => u.includes(h))) return true;
+    if (/\.png($|\?|#)/i.test(u)) return true;
+    const lifestyleHints = [
+      "on-body",
+      "onbody",
+      "worn",
+      "wearing",
+      "outfit",
+      "lookbook",
+      "lifestyle",
+      "editorial",
+      "street",
+      "mirror",
+      "styled",
+      "full",
+      "fit",
+    ];
+    if (lifestyleHints.some((h) => u.includes(h))) return false;
+    return false;
+  }
+
+  /** Cover-only display pick for seasonal cards (never `item.gallery`). */
+  function seasonalCardDisplaySrc(item) {
+    const candidates = buildCoverCandidates(item);
+    const cutouts = candidates.filter((u) => isLikelySeasonalCutoutImageUrl(u));
+    if (cutouts.length) {
+      return cutouts[Math.floor(Math.random() * cutouts.length)];
+    }
+    return homeEditorialCoverSrc(item);
+  }
+
+  /**
+   * Season cards: one cover/cutout URL per piece, no gallery mixing.
+   * @param {object[]} items
+   * @returns {{ item: object, displaySrc: string }[]}
+   */
+  function assignSeasonalCardDisplayPlans(items) {
+    const list = Array.isArray(items) ? items : [];
+    /** @type {Set<string>} */
+    const usedUrls = new Set();
+    return list.map((item) => {
+      const candidates = buildCoverCandidates(item).filter((u) => isLikelySeasonalCutoutImageUrl(u));
+      const pool = candidates.length
+        ? candidates
+        : [homeEditorialCoverSrc(item)].filter(Boolean);
+      let displaySrc = pool.find((u) => !usedUrls.has(u)) || pool[0] || "";
+      if (!displaySrc) displaySrc = seasonalCardDisplaySrc(item);
+      if (displaySrc) usedUrls.add(displaySrc);
+      return { item, displaySrc };
+    });
+  }
+
+  /** Prefer on-body / outfit / detail gallery frames over duplicate cutouts. */
+  function scoreHomeEditorialGalleryUrl(url, coverUrl) {
+    const u = String(url ?? "").toLowerCase();
+    if (!url || url === coverUrl) return -100;
+    let s = 12;
+    const positive = [
+      "on-body",
+      "onbody",
+      "worn",
+      "wearing",
+      "outfit",
+      "lookbook",
+      "styled",
+      "style",
+      "detail",
+      "close-up",
+      "closeup",
+      "macro",
+      "texture",
+      "angle",
+      "lifestyle",
+      "editorial",
+      "street",
+      "mirror",
+      "full",
+      "fit",
+    ];
+    const negative = [
+      "cutout",
+      "isolate",
+      "packshot",
+      "pack-shot",
+      "ghost",
+      "flat-lay",
+      "flatlay",
+      "product-only",
+      "white-bg",
+      "transparent",
+    ];
+    for (const k of positive) {
+      if (u.includes(k)) s += 9;
+    }
+    for (const k of negative) {
+      if (u.includes(k)) s -= 20;
+    }
+    if (/\.png($|\?)/i.test(u) && !positive.some((k) => u.includes(k))) s -= 5;
+    return s;
+  }
+
+  /** @param {string[]} candidates @param {string} coverUrl */
+  function pickWeightedHomeEditorialGalleryUrl(candidates, coverUrl) {
+    const scored = candidates
+      .map((url) => ({ url, score: Math.max(1, scoreHomeEditorialGalleryUrl(url, coverUrl)) }))
+      .sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, Math.min(5, scored.length));
+    if (!top.length) return candidates[0] || "";
+    const total = top.reduce((sum, row) => sum + row.score, 0);
+    let r = Math.random() * total;
+    for (const row of top) {
+      r -= row.score;
+      if (r <= 0) return row.url;
+    }
+    return top[0].url;
+  }
+
+  function homeEditorialGalleryPool(item) {
+    const cover = homeEditorialCoverSrc(item);
+    return itemGalleryList(item).filter((u) => u && u !== cover && isDisplayableCloudImageUrl(u));
+  }
+
+  /**
+   * Whole section uses one mode — never mix cutout covers with lifestyle gallery in the same row.
+   * @param {object[]} items
+   */
+  function pickHomeEditorialSectionMode(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (list.length < 2) return "cover";
+    const withGallery = list.filter((it) => homeEditorialGalleryPool(it).length > 0);
+    if (withGallery.length >= Math.max(2, Math.ceil(list.length * 0.5))) return "gallery";
+    return "cover";
+  }
+
+  /**
+   * @param {object[]} items
+   * @param {{ mode?: "cover" | "gallery", galleryMax?: number }} [options]
+   * @returns {{ mode: "cover" | "gallery", plans: { item: object, displaySrc: string, displayKind: "cover" | "gallery" }[] }}
+   */
+  function assignHomeSectionDisplayPlans(items, options = {}) {
+    const list = Array.isArray(items) ? items : [];
+    let mode = options.mode === "gallery" || options.mode === "cover" ? options.mode : pickHomeEditorialSectionMode(list);
+
+    let working = list;
+    if (mode === "gallery") {
+      working = list.filter((it) => homeEditorialGalleryPool(it).length > 0);
+      if (working.length < 2) {
+        mode = "cover";
+        working = list;
+      }
+    }
+
+    if (mode === "gallery" && typeof options.galleryMax === "number" && options.galleryMax > 0) {
+      working = working.slice(0, options.galleryMax);
+    }
+
+    /** @type {Set<string>} */
+    const usedUrls = new Set();
+
+    const plans = working.map((item) => {
+      const cover = homeEditorialCoverSrc(item);
+      let displaySrc = cover;
+      let displayKind = /** @type {"cover" | "gallery"} */ ("cover");
+
+      if (mode === "gallery") {
+        const galleryPool = homeEditorialGalleryPool(item);
+        const available = galleryPool.filter((u) => !usedUrls.has(u));
+        const pickFrom = available.length ? available : galleryPool;
+        displaySrc = pickWeightedHomeEditorialGalleryUrl(pickFrom, cover) || cover;
+        displayKind = "gallery";
+      }
+
+      if (usedUrls.has(displaySrc)) {
+        if (mode === "gallery") {
+          const alt = homeEditorialGalleryPool(item).find((u) => !usedUrls.has(u));
+          if (alt) displaySrc = alt;
+        } else if (cover && !usedUrls.has(cover)) {
+          displaySrc = cover;
+        }
+      }
+
+      if (displaySrc) usedUrls.add(displaySrc);
+      return { item, displaySrc, displayKind };
+    });
+
+    return { mode, plans };
+  }
+
+  /** @param {HTMLElement | null} host @param {"cover" | "gallery"} mode */
+  function syncHomeEditorialProductGridLayout(host, mode) {
+    if (!host) return;
+    host.classList.toggle("ed-lp__product-grid--gallery", mode === "gallery");
+    host.dataset.displayMode = mode;
+  }
+
+  /**
+   * @param {HTMLElement | null} host
+   * @param {object[]} items
+   * @param {{ galleryMax?: number }} [options]
+   */
+  function mountHomeEditorialProductSection(host, items, options = {}) {
+    if (!host) return;
+    const section = assignHomeSectionDisplayPlans(items, options);
+    syncHomeEditorialProductGridLayout(host, section.mode);
+    host.replaceChildren();
+    for (const plan of section.plans) {
+      host.appendChild(buildEditorialHomeProductCard(plan.item, plan.displaySrc, plan.displayKind));
+    }
+  }
+
+  const HOME_DIVISION_RAIL_SLOTS = [SLOT_CLOTHING, SLOT_ACCESSORIES, SLOT_WATCHES, SLOT_FRAGRANCE];
+
+  /**
+   * Random pieces per browse division — gallery frames only.
+   * @param {object[]} pool
+   * @param {{ perDivision?: number, maxTotal?: number }} [options]
+   */
+  function pickHomeDivisionRailPlans(pool, options = {}) {
+    const perDivision = typeof options.perDivision === "number" ? options.perDivision : 3;
+    const maxTotal = typeof options.maxTotal === "number" ? options.maxTotal : 14;
+    const list = Array.isArray(pool) ? pool : [];
+    /** @type {{ item: object, displaySrc: string, slot: string }[]} */
+    const plans = [];
+    /** @type {Set<string>} */
+    const usedItemIds = new Set();
+    /** @type {Set<string>} */
+    const usedUrls = new Set();
+
+    for (const slot of HOME_DIVISION_RAIL_SLOTS) {
+      const candidates = list.filter((it) => {
+        const id = String(it?.id ?? "").trim();
+        if (!id || usedItemIds.has(id)) return false;
+        if (itemSlot(it) !== slot) return false;
+        return homeEditorialGalleryPool(it).length > 0;
+      });
+      shuffleArrayInPlace(candidates);
+      for (const item of candidates.slice(0, Math.max(1, perDivision))) {
+        const galleryPool = homeEditorialGalleryPool(item);
+        const available = galleryPool.filter((u) => !usedUrls.has(u));
+        const pickFrom = available.length ? available : galleryPool;
+        const displaySrc =
+          pickWeightedHomeEditorialGalleryUrl(pickFrom, homeEditorialCoverSrc(item)) || pickFrom[0] || "";
+        if (!displaySrc) continue;
+        const id = String(item.id ?? "").trim();
+        usedItemIds.add(id);
+        usedUrls.add(displaySrc);
+        plans.push({ item, displaySrc, slot });
+      }
+    }
+
+    shuffleArrayInPlace(plans);
+    return plans.slice(0, maxTotal);
+  }
+
+  /** @param {{ item: object, displaySrc: string, slot: string }} plan */
+  function buildHomeDivisionRailCard(plan) {
+    const { item, displaySrc, slot } = plan;
     const recKey = recordCategoryForDrill(item, slot);
+    const label = friendlyRecordCategory(recKey) || recordTypeDisplayLabel(recKey) || categoryDisplayLabel(slot);
+
     const a = document.createElement("a");
     a.href = buildItemDetailHrefFromId(item.id);
-    a.className = "ed-lp__pcard";
+    a.draggable = false;
+    a.className = "ed-lp__division-rail-card";
+    a.setAttribute("role", "listitem");
+    a.setAttribute(
+      "aria-label",
+      `${displayNameWithoutLeadingColour(item)} — ${label} in ${categoryDisplayLabel(slot)}`
+    );
+
+    const media = document.createElement("div");
+    media.className = "ed-lp__division-rail-media";
+    const img = document.createElement("img");
+    img.className = "ed-lp__division-rail-img";
+    img.alt = imageAltForItem(item);
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.draggable = false;
+    media.appendChild(img);
+    wireHomeEditorialCardImage(img, item, displaySrc, {
+      host: media,
+      missingClass: "ed-lp__division-rail-media--missing",
+      coverRenderWidth: 512,
+      coverRenderHeight: 640,
+      coverRenderQuality: 86,
+      coverRenderResize: "cover",
+    });
+
+    const cap = document.createElement("span");
+    cap.className = "ed-lp__division-rail-label";
+    cap.textContent = String(label).trim().toUpperCase();
+
+    a.appendChild(media);
+    a.appendChild(cap);
+    return a;
+  }
+
+  /** @param {HTMLElement} scroller */
+  function prepareHomeHorizontalRailScroller(scroller) {
+    scroller.querySelectorAll("img").forEach((img) => {
+      img.setAttribute("draggable", "false");
+    });
+    scroller.querySelectorAll("a").forEach((link) => {
+      link.setAttribute("draggable", "false");
+    });
+  }
+
+  /** @param {HTMLElement | null} scroller */
+  function wireHomeHorizontalRailScroller(scroller) {
+    if (!scroller) return;
+    prepareHomeHorizontalRailScroller(scroller);
+    const section = scroller.closest("[data-ed-lp-horizontal-rail]");
+    const track = section?.querySelector(".ed-lp__rail-progress");
+    const thumb = section?.querySelector(".ed-lp__rail-progress-bar");
+    if (scroller.dataset.horizontalRailWired === "1") return;
+    scroller.dataset.horizontalRailWired = "1";
+
+    scroller.addEventListener(
+      "dragstart",
+      (e) => {
+        e.preventDefault();
+      },
+      true
+    );
+
+    let trackDragActive = false;
+    /** @type {number | null} */
+    let trackDragPointerId = null;
+    let scrollerDragActive = false;
+    /** @type {number | null} */
+    let scrollerDragPointerId = null;
+    let scrollerDragStartX = 0;
+    let scrollerDragStartScroll = 0;
+    let scrollerDragMoved = false;
+
+    function scrollMax() {
+      return Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    }
+
+    /** @param {number} ratio 0–1 */
+    function scrollToRatio(ratio) {
+      const max = scrollMax();
+      scroller.scrollLeft = Math.max(0, Math.min(max, ratio * max));
+    }
+
+    function scrollRatio() {
+      const max = scrollMax();
+      return max > 0 ? scroller.scrollLeft / max : 0;
+    }
+
+    /** @param {number} clientX */
+    function ratioFromClientX(clientX) {
+      if (!(track instanceof HTMLElement) || !(thumb instanceof HTMLElement)) return 0;
+      const rect = track.getBoundingClientRect();
+      const thumbW = thumb.offsetWidth;
+      const travel = Math.max(1, rect.width - thumbW);
+      const x = clientX - rect.left - thumbW / 2;
+      return Math.max(0, Math.min(1, x / travel));
+    }
+
+    function syncThumb() {
+      if (!(thumb instanceof HTMLElement) || !(track instanceof HTMLElement) || scroller.scrollWidth <= 0) return;
+      const thumbFrac = Math.max(0.12, scroller.clientWidth / scroller.scrollWidth);
+      const travel = 1 - thumbFrac;
+      const offset = scrollMax() > 0 ? scrollRatio() * travel : 0;
+      thumb.style.width = `${thumbFrac * 100}%`;
+      thumb.style.transform = `translateY(-50%) translateX(${offset * 100}%)`;
+    }
+
+    function syncUi() {
+      const max = scrollMax();
+      const canScroll = max > 4;
+      if (track instanceof HTMLElement) {
+        track.hidden = !canScroll;
+        const pct = Math.round(scrollRatio() * 100);
+        track.setAttribute("aria-valuenow", String(pct));
+        track.setAttribute("aria-valuetext", `${pct}%`);
+      }
+      if (!trackDragActive) syncThumb();
+    }
+
+    function endScrollerDrag() {
+      if (!scrollerDragActive) return;
+      scrollerDragActive = false;
+      scroller.classList.remove("is-dragging");
+      if (scrollerDragPointerId != null) {
+        try {
+          scroller.releasePointerCapture(scrollerDragPointerId);
+        } catch {
+          /* ignore */
+        }
+        scrollerDragPointerId = null;
+      }
+      if (scrollerDragMoved) {
+        const blockClick = (/** @type {MouseEvent} */ ev) => {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+        };
+        scroller.addEventListener("click", blockClick, { capture: true, once: true });
+      }
+      scrollerDragMoved = false;
+      syncUi();
+    }
+
+    scroller.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || trackDragActive || e.pointerType === "touch") return;
+      e.preventDefault();
+      scrollerDragActive = true;
+      scrollerDragMoved = false;
+      scrollerDragStartX = e.clientX;
+      scrollerDragStartScroll = scroller.scrollLeft;
+      scrollerDragPointerId = e.pointerId;
+      scroller.classList.add("is-dragging");
+      scroller.setPointerCapture(e.pointerId);
+    });
+
+    scroller.addEventListener("pointermove", (e) => {
+      if (!scrollerDragActive) return;
+      const dx = e.clientX - scrollerDragStartX;
+      if (Math.abs(dx) > 3) scrollerDragMoved = true;
+      scroller.scrollLeft = scrollerDragStartScroll - dx;
+      syncThumb();
+      syncUi();
+    });
+
+    scroller.addEventListener("pointerup", endScrollerDrag);
+    scroller.addEventListener("pointercancel", endScrollerDrag);
+    scroller.addEventListener("lostpointercapture", endScrollerDrag);
+
+    scroller.addEventListener("scroll", syncUi, { passive: true });
+    window.addEventListener("resize", syncUi);
+
+    if (track instanceof HTMLElement && thumb instanceof HTMLElement) {
+      const endTrackDrag = () => {
+        trackDragActive = false;
+        track.classList.remove("is-dragging");
+        thumb.classList.remove("is-dragging");
+        if (trackDragPointerId != null) {
+          try {
+            track.releasePointerCapture(trackDragPointerId);
+          } catch {
+            /* ignore */
+          }
+          trackDragPointerId = null;
+        }
+        syncThumb();
+        syncUi();
+      };
+
+      const onTrackPointerMove = (/** @type {PointerEvent} */ e) => {
+        if (!trackDragActive) return;
+        scrollToRatio(ratioFromClientX(e.clientX));
+        syncThumb();
+        syncUi();
+      };
+
+      track.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        trackDragActive = true;
+        track.classList.add("is-dragging");
+        thumb.classList.add("is-dragging");
+        trackDragPointerId = e.pointerId;
+        track.setPointerCapture(e.pointerId);
+        scrollToRatio(ratioFromClientX(e.clientX));
+        syncThumb();
+        syncUi();
+        e.preventDefault();
+      });
+
+      track.addEventListener("pointermove", onTrackPointerMove);
+      track.addEventListener("pointerup", endTrackDrag);
+      track.addEventListener("pointercancel", endTrackDrag);
+      track.addEventListener("lostpointercapture", endTrackDrag);
+    }
+
+    syncUi();
+  }
+
+  function mountHomeDivisionRail(pool) {
+    const scroller = document.getElementById("ed-lp-division-rail");
+    if (!scroller) return;
+    const plans = pickHomeDivisionRailPlans(pool);
+    scroller.replaceChildren();
+    for (const plan of plans) {
+      scroller.appendChild(buildHomeDivisionRailCard(plan));
+    }
+    wireHomeHorizontalRailScroller(scroller);
+  }
+
+  /** @param {object} item */
+  function buildHomeRecentlyViewedCard(item) {
+    const a = document.createElement("a");
+    a.href = buildItemDetailHrefFromId(item.id);
+    a.draggable = false;
+    a.className = "ed-lp__viewed-card";
+    a.setAttribute("role", "listitem");
+    a.setAttribute("aria-label", `${String(item.brand ?? "").trim() || "—"} — ${displayNameWithoutLeadingColour(item)}`);
+
+    const media = document.createElement("div");
+    media.className = "ed-lp__viewed-card-media";
+    const img = document.createElement("img");
+    img.className = "ed-lp__viewed-card-img";
+    img.alt = imageAltForItem(item);
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.draggable = false;
+    media.appendChild(img);
+    wireHomeEditorialCardImage(img, item, homeEditorialCoverSrc(item), {
+      host: media,
+      missingClass: "ed-lp__viewed-card-media--missing",
+      coverRenderWidth: 640,
+      coverRenderHeight: 853,
+      coverRenderQuality: 86,
+      coverRenderResize: "contain",
+    });
+
+    const body = document.createElement("div");
+    body.className = "ed-lp__viewed-card-body";
+    const brand = document.createElement("p");
+    brand.className = "ed-lp__viewed-card-brand";
+    brand.textContent = String(item.brand ?? "").trim() || "—";
+    const title = document.createElement("p");
+    title.className = "ed-lp__viewed-card-title";
+    title.textContent = displayNameWithoutLeadingColour(item);
+    const price = document.createElement("p");
+    price.className = "ed-lp__viewed-card-price";
+    const priceLine = formattedArchivePriceLine(item, { brief: true });
+    if (priceLine) price.textContent = priceLine;
+    else price.hidden = true;
+    body.appendChild(brand);
+    body.appendChild(title);
+    if (!price.hidden) body.appendChild(price);
+
+    a.appendChild(media);
+    a.appendChild(body);
+    return a;
+  }
+
+  /** @param {object[]} pool */
+  function mountHomeRecentlyViewedRail(pool) {
+    const section = document.getElementById("ed-lp-viewed-rail");
+    const scroller = document.getElementById("ed-lp-recently-viewed");
+    if (!section || !scroller) return;
+
+    const list = resolveHomeRecentlyViewedItems(pool, 10).filter((it) => buildCoverCandidates(it).length > 0);
+    if (!list.length) {
+      section.hidden = true;
+      return;
+    }
+
+    section.hidden = false;
+    scroller.replaceChildren();
+    for (const item of list) {
+      scroller.appendChild(buildHomeRecentlyViewedCard(item));
+    }
+    wireHomeHorizontalRailScroller(scroller);
+  }
+
+  /**
+   * @param {HTMLImageElement} img
+   * @param {object} item
+   * @param {string} displaySrc
+   * @param {Parameters<typeof wireCoverImageWithFallbacks>[2]} wireOpts
+   */
+  function wireHomeEditorialCardImage(img, item, displaySrc, wireOpts) {
+    img.classList.remove("is-loaded");
+    const row = displaySrc ? { ...item, image: displaySrc } : item;
+    const userResolved = wireOpts?.onResolved;
+    wireCoverImageWithFallbacks(img, row, {
+      ...wireOpts,
+      onResolved: (url) => {
+        img.classList.add("is-loaded");
+        userResolved?.(url);
+      },
+    });
+    if (img.complete && img.naturalWidth > 0) img.classList.add("is-loaded");
+  }
+
+  /** @param {object} item @param {string} [displaySrc] @param {"cover" | "gallery"} [displayKind] */
+  function buildEditorialHomeProductCard(item, displaySrc, displayKind = "cover") {
+    const slot = itemSlot(item);
+    const recKey = recordCategoryForDrill(item, slot);
+    const isGallery = displayKind === "gallery";
+    const a = document.createElement("a");
+    a.href = buildItemDetailHrefFromId(item.id);
+    a.className = `ed-lp__pcard ed-lp__pcard--${isGallery ? "gallery" : "cover"}`;
     a.setAttribute("role", "listitem");
     const media = document.createElement("div");
     media.className = "ed-lp__pcard-media";
@@ -4136,13 +4926,13 @@
     img.loading = "lazy";
     img.decoding = "async";
     media.appendChild(img);
-    wireCoverImageWithFallbacks(img, item, {
+    wireHomeEditorialCardImage(img, item, displaySrc || homeEditorialCoverSrc(item), {
       host: media,
       missingClass: "ed-lp__pcard-media--missing",
-      coverRenderWidth: ARCHIVE_GRID_CARD_RENDER.width,
-      coverRenderHeight: ARCHIVE_GRID_CARD_RENDER.height,
-      coverRenderQuality: ARCHIVE_GRID_CARD_RENDER.quality,
-      coverRenderResize: ARCHIVE_GRID_CARD_RENDER.resize,
+      coverRenderWidth: isGallery ? 840 : ARCHIVE_GRID_CARD_RENDER.width,
+      coverRenderHeight: isGallery ? 1050 : ARCHIVE_GRID_CARD_RENDER.height,
+      coverRenderQuality: isGallery ? 88 : ARCHIVE_GRID_CARD_RENDER.quality,
+      coverRenderResize: isGallery ? "cover" : ARCHIVE_GRID_CARD_RENDER.resize,
     });
     const body = document.createElement("div");
     body.className = "ed-lp__pcard-body";
@@ -4183,7 +4973,11 @@
     if (!hero || !siteHeader || !shell) return;
 
     const syncHeights = () => {
-      document.body.style.setProperty("--home-header-nav-height", `${siteHeader.offsetHeight}px`);
+      syncBrandSignatureBarHeight();
+      const navH = siteHeader.offsetHeight;
+      const shellH = shell.offsetHeight;
+      document.body.style.setProperty("--home-header-nav-height", `${navH}px`);
+      document.body.style.setProperty("--home-header-shell-height", `${shellH}px`);
     };
 
     let homeHeaderRowHover = false;
@@ -4232,11 +5026,13 @@
     brandNavRow?.addEventListener("mouseleave", onHomeHeaderRowLeave);
     /** @type {ResizeObserver | null} */
     let ro = null;
+    const utilityBar = document.querySelector(".site-utility-bar");
     if (typeof ResizeObserver !== "undefined") {
       ro = new ResizeObserver(update);
       ro.observe(shell);
       ro.observe(siteHeader);
       ro.observe(hero);
+      utilityBar && ro.observe(utilityBar);
     }
     window.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update, { passive: true });
@@ -4251,6 +5047,7 @@
       ro?.disconnect();
       mo.disconnect();
       document.body.style.removeProperty("--home-header-nav-height");
+      document.body.style.removeProperty("--home-header-shell-height");
     };
   }
 
@@ -4265,82 +5062,19 @@
   function renderEditorialLandingPage() {
     if (!document.body.classList.contains("home-page")) return;
     mountHomePageHero();
+    mountHomeDivisionRail(items);
     const root = document.getElementById("main");
     if (!root?.classList.contains("ed-lp")) return;
 
-    const catsHost = document.getElementById("ed-lp-featured-cats");
     const highHost = document.getElementById("ed-lp-highlights");
-    const recentHost = document.getElementById("ed-lp-recent");
-    const awMedia = document.getElementById("ed-lp-season-aw-media");
-    const ssMedia = document.getElementById("ed-lp-season-ss-media");
-    if (!catsHost || !highHost || !recentHost) return;
+    if (!highHost) return;
 
-    catsHost.replaceChildren();
-    const catPicks = collectFeaturedSubcategoryPicksForHome();
-    const archiveHref = ARCHIVE_HOME_MAIN_URL;
-    for (const row of catPicks) {
-      const title = popularBrowseCardTitleFromPool(row.sub, row.pool);
-      const pick = pickStrongPopularBrowseCoverItem(row.pool);
-      const a = document.createElement("a");
-      a.href = archiveHref;
-      a.className = "ed-lp__cat-card";
-      a.setAttribute("role", "listitem");
-      a.setAttribute("data-ed-archive", "1");
-      a.setAttribute("data-category-jump", row.slot);
-      a.setAttribute("data-subcategory-jump", row.sub);
-      a.setAttribute("aria-label", `Browse ${title} in ${categoryDisplayLabel(row.slot) || row.slot}`);
-      const media = document.createElement("div");
-      media.className = "ed-lp__cat-card-media";
-      const shade = document.createElement("div");
-      shade.className = "ed-lp__cat-card-shade";
-      shade.setAttribute("aria-hidden", "true");
-      const cap = document.createElement("div");
-      cap.className = "ed-lp__cat-card-cap";
-      const h = document.createElement("span");
-      h.className = "ed-lp__cat-card-title";
-      h.textContent = title;
-      const cta = document.createElement("span");
-      cta.className = "ed-lp__cat-card-cta";
-      cta.textContent = "Browse";
-      cap.appendChild(h);
-      cap.appendChild(cta);
-      if (pick) {
-        const img = document.createElement("img");
-        img.className = "ed-lp__cat-card-img";
-        img.alt = "";
-        img.loading = "lazy";
-        img.decoding = "async";
-        media.appendChild(img);
-        wireCoverImageWithFallbacks(img, pick, {
-          host: media,
-          missingClass: "ed-lp__cat-card-media--missing",
-          coverRenderWidth: 600,
-          coverRenderHeight: 800,
-          coverRenderQuality: 86,
-          coverRenderResize: "contain",
-        });
-      } else {
-        media.classList.add("ed-lp__cat-card-media--missing");
-      }
-      media.appendChild(shade);
-      media.appendChild(cap);
-      a.appendChild(media);
-      catsHost.appendChild(a);
-    }
-
-    highHost.replaceChildren();
     const pool = items.filter((it) => buildCoverCandidates(it).length > 0);
     const hlPool = pool.length ? pool : items.slice();
     shuffleArrayInPlace(hlPool);
-    for (const it of hlPool.slice(0, 8)) {
-      highHost.appendChild(buildEditorialHomeProductCard(it));
-    }
+    mountHomeEditorialProductSection(highHost, hlPool.slice(0, 8), { galleryMax: 4 });
 
-    recentHost.replaceChildren();
-    const recent = pickRecentAcquisitionItems(items, 4);
-    for (const it of recent) {
-      recentHost.appendChild(buildEditorialHomeProductCard(it));
-    }
+    mountHomeRecentlyViewedRail(items);
 
     refreshHomeSeasonalCards();
     startSeasonalCardAutoRefresh();
@@ -5261,6 +5995,29 @@
     }
   }
 
+  /** Browse PLP: count under category title; search PLP: count in the filter row (intro is hidden). */
+  function syncArchiveCountLinePlacement() {
+    const summary = document.querySelector(".items-toolbar__archive-summary--under-title");
+    const heading = document.getElementById("archive-heading");
+    const controlBar = document.querySelector(
+      ".items-toolbar > .items-toolbar__actions > .items-toolbar__control-bar"
+    );
+    const title = document.getElementById("items-toolbar-page-title");
+    if (!summary || !heading) return;
+
+    const searchPlp = document.body.classList.contains("archive-ui--search-results-plp");
+    if (searchPlp && controlBar) {
+      if (summary.parentElement !== controlBar) {
+        controlBar.insertBefore(summary, controlBar.firstChild);
+      }
+      return;
+    }
+    if (summary.parentElement !== heading) {
+      if (title) title.insertAdjacentElement("afterend", summary);
+      else heading.appendChild(summary);
+    }
+  }
+
   function syncArchiveSearchResultsPlpUi() {
     const wrap = document.getElementById("archive-search-results-plp");
     const heading = document.getElementById("archive-search-results-heading");
@@ -5269,6 +6026,7 @@
     if (heading) heading.replaceChildren();
     if (pills) pills.replaceChildren();
     syncToolbarActiveFilterChips();
+    syncArchiveCountLinePlacement();
   }
 
   function noteArchiveSearchUserChoseMainSlotFilter() {
@@ -5506,7 +6264,8 @@
         rm.type = "button";
         rm.className = "items-toolbar__active-chip__remove";
         rm.setAttribute("aria-label", def.removeLabel || `Remove ${def.label}`);
-        rm.innerHTML = "<span aria-hidden=\"true\">×</span>";
+        rm.innerHTML =
+          "<svg width=\"10\" height=\"10\" viewBox=\"0 0 10 10\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M1.25 1.25 8.75 8.75M8.75 1.25 1.25 8.75\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/></svg>";
         rm.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -6583,7 +7342,9 @@
 
   function isDisplayableCloudImageUrl(u) {
     const s = String(u ?? "").trim();
-    return s.startsWith("data:") || s.startsWith("blob:") || /^https?:\/\//i.test(s);
+    if (!s) return false;
+    if (s.startsWith("data:") || s.startsWith("blob:") || /^https?:\/\//i.test(s)) return true;
+    return /^(?:\/)?images\//i.test(s);
   }
 
   /**
@@ -6615,7 +7376,17 @@
     }
 
     if (!isDisplayableCloudImageUrl(primary)) {
-      return [];
+      for (const u of itemGalleryList(item)) {
+        if (isDisplayableCloudImageUrl(u)) add(u);
+      }
+      const vars = getItemColourVariants(item);
+      if (vars) {
+        for (const v of vars) {
+          const u = String(v?.image ?? "").trim();
+          if (isDisplayableCloudImageUrl(u)) add(u);
+        }
+      }
+      return out.map((u) => withWardrobeImageCacheBust(u, item));
     }
 
     add(primary);
@@ -6639,6 +7410,23 @@
     const source = withCover.length ? withCover : pool;
     const idx = Math.floor(Math.random() * source.length);
     return source[idx] ?? null;
+  }
+
+  /** Search megamenu tiles: prefer a random extra gallery frame from the subcategory pool. */
+  function pickRandomHeaderSearchGalleryFromPool(pool) {
+    if (!Array.isArray(pool) || pool.length === 0) return null;
+    /** @type {{ item: object, url: string }[]} */
+    const entries = [];
+    for (const it of pool) {
+      for (const u of itemGalleryList(it)) {
+        if (isDisplayableCloudImageUrl(u)) entries.push({ item: it, url: String(u).trim() });
+      }
+    }
+    if (!entries.length) return null;
+    if (!globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      shuffleArrayInPlace(entries);
+    }
+    return entries[Math.floor(Math.random() * entries.length)] ?? entries[0] ?? null;
   }
 
   function effectiveCoverSrc(item) {
@@ -6692,7 +7480,7 @@
 
   /**
    * Try `buildCoverCandidates` in order until one loads. Optionally cache working URL on `item.id`.
-   * @param {{ host?: HTMLElement, missingClass?: string | null, onResolved?: (url: string) => void, onExhausted?: () => void, coverRenderWidth?: number, coverRenderHeight?: number, coverRenderZoom?: number, coverRenderQuality?: number, coverRenderResize?: "cover" | "contain" }} [opts]
+   * @param {{ host?: HTMLElement, missingClass?: string | null, onResolved?: (url: string) => void, onExhausted?: () => void, preferredUrl?: string, coverRenderWidth?: number, coverRenderHeight?: number, coverRenderZoom?: number, coverRenderQuality?: number, coverRenderResize?: "cover" | "contain" }} [opts]
    */
   function wireCoverImageWithFallbacks(img, item, opts) {
     const prevAbort = /** @type {(() => void) | undefined} */ (/** @type {any} */ (img).__twCoverWireAbort);
@@ -6709,6 +7497,15 @@
     const onResolved = opts?.onResolved;
     const onExhausted = opts?.onExhausted;
     let candidates = buildCoverCandidates(item);
+    const preferredRaw = String(opts?.preferredUrl ?? "").trim();
+    if (preferredRaw && isDisplayableCloudImageUrl(preferredRaw)) {
+      const bust = withWardrobeImageCacheBust(preferredRaw, item);
+      const prefKey = bust.split("?")[0];
+      candidates = [
+        bust,
+        ...candidates.filter((u) => String(u).split("?")[0] !== prefKey),
+      ];
+    }
     const rw = opts?.coverRenderWidth;
     const rh = opts?.coverRenderHeight;
     if (typeof rw === "number" && typeof rh === "number" && rw > 0 && rh > 0) {
@@ -6718,14 +7515,25 @@
         opts?.coverRenderResize === "contain" || opts?.coverRenderResize === "cover"
           ? opts.coverRenderResize
           : "contain";
-      candidates = candidates.map((u) =>
-        withSupabaseWardrobeImageRenderSize(u, rw, rh, {
+      const expanded = [];
+      const seenExpanded = new Set();
+      const pushCandidate = (u) => {
+        const x = String(u ?? "").trim();
+        if (!x || seenExpanded.has(x)) return;
+        seenExpanded.add(x);
+        expanded.push(x);
+      };
+      for (const u of candidates) {
+        const rendered = withSupabaseWardrobeImageRenderSize(u, rw, rh, {
           item,
           resize,
           zoom: typeof z === "number" && z > 1 && z <= 3 ? z : undefined,
           quality: typeof q === "number" && q >= 20 ? q : undefined,
-        })
-      );
+        });
+        pushCandidate(rendered);
+        if (rendered !== u) pushCandidate(u);
+      }
+      candidates = expanded;
     }
     if (!candidates.length) {
       /** @type {any} */ (img).__twCoverWireAbort = undefined;
@@ -6809,6 +7617,10 @@
     img.addEventListener("load", onLoad);
     img.addEventListener("error", onErr);
     img.src = candidates[0];
+    if (img.complete && img.naturalWidth > 0) {
+      finishSuccess();
+      return;
+    }
 
     /** @type {any} */ (img).__twCoverWireAbort = () => {
       cleanup();
@@ -7358,9 +8170,47 @@
   }
 
   /**
+   * Sync the edit-page “Current cover” column with the first tile in the photo manager.
+   * @param {HTMLElement | null} previewCol
+   * @param {HTMLElement | null} photosHost
+   * @param {object} item
+   */
+  function syncItemEditCoverPreview(previewCol, photosHost, item) {
+    const previewImg = previewCol?.querySelector(".card__media-img");
+    if (!(previewImg instanceof HTMLImageElement)) return;
+    const entries = Array.isArray(photosHost?.__twPhotoEntries) ? photosHost.__twPhotoEntries : [];
+    if (!entries.length) {
+      previewImg.removeAttribute("src");
+      return;
+    }
+    const first = entries[0];
+    let src = "";
+    if (first?.kind === "url" && first.url) {
+      src = withWardrobeImageCacheBust(String(first.url), item);
+    } else if (first?.kind === "file" && first.previewUrl) {
+      src = String(first.previewUrl);
+    }
+    if (!src) return;
+    clearCoverResolutionCacheForItem(String(item?.id ?? ""));
+    if (first?.kind === "url") {
+      wireCoverImageWithFallbacks(previewImg, item, {
+        host: previewCol?.querySelector(".item-detail__media") ?? undefined,
+        missingClass: "card__media--missing",
+        preferredUrl: src,
+        coverRenderWidth: ITEM_DETAIL_GALLERY_RENDER.width,
+        coverRenderHeight: ITEM_DETAIL_GALLERY_RENDER.height,
+        coverRenderQuality: ITEM_DETAIL_GALLERY_RENDER.quality,
+        coverRenderResize: ITEM_DETAIL_GALLERY_RENDER.resize,
+      });
+      return;
+    }
+    previewImg.src = src;
+  }
+
+  /**
    * Unified photo strip: one upload control, first tile = cover, rest = gallery, drag to reorder.
    * @param {HTMLElement} host
-   * @param {{ coverUrl?: string, galleryUrls?: string[], maxPhotos?: number, uploadLabel?: string, hint?: string, onDirty?: () => void }} [opts]
+   * @param {{ item?: object, coverUrl?: string, galleryUrls?: string[], maxPhotos?: number, uploadLabel?: string, hint?: string, onDirty?: () => void }} [opts]
    */
   function mountItemEditPhotoManager(host, opts = {}) {
     revokeItemEditPhotoManager(host);
@@ -7371,6 +8221,7 @@
       ITEM_EDIT_PHOTO_MAX,
       Math.max(1, Math.floor(Number(opts.maxPhotos) || ITEM_EDIT_PHOTO_MAX))
     );
+    const bustItem = opts.item && typeof opts.item === "object" ? opts.item : null;
     /** @type {any[]} */
     const entries = [];
     const cover0 = String(opts.coverUrl ?? "").trim();
@@ -7442,8 +8293,18 @@
         img.className = "item-edit-photo-tile__img";
         img.draggable = false;
         img.alt = index === 0 ? "Cover" : `Photo ${index + 1}`;
-        if (entry.kind === "url") img.src = entry.url;
-        else img.src = entry.previewUrl;
+        if (entry.kind === "url") {
+          wireCoverImageWithFallbacks(img, bustItem || { image: entry.url }, {
+            missingClass: null,
+            preferredUrl: entry.url,
+            coverRenderWidth: 220,
+            coverRenderHeight: 293,
+            coverRenderQuality: 82,
+            coverRenderResize: "contain",
+          });
+        } else {
+          img.src = entry.previewUrl;
+        }
 
         const grip = document.createElement("span");
         grip.className = "item-edit-photo-tile__grip";
@@ -9074,6 +9935,7 @@
     syncArchiveFilterDrawerDoneLabel(filtered.length);
     syncFilterSearchFieldDomPlacement();
     syncArchiveSearchResultsPlpUi();
+    syncArchiveCountLinePlacement();
     syncArchiveToolbarHeading();
     syncBasicColourFilterChipUi();
     syncArchiveBrandFilterChipUi();
@@ -9917,11 +10779,17 @@
 
     let image = String(prev.image ?? "").trim();
     let gallery = [...itemGalleryList(prev)];
+    const prevImage = image;
+    const prevGallerySig = itemGalleryList(prev)
+      .map((u) => String(u).split("?")[0])
+      .join("|");
+    let hadNewPhotoFiles = false;
     if (!(variantsMode && colourVariantsBuilt?.length)) {
       const photoHost = document.getElementById("item-edit-photos");
       if (photoHost) {
         const entryCount = Array.isArray(photoHost.__twPhotoEntries) ? photoHost.__twPhotoEntries.length : 0;
         const { slots } = readItemEditPhotoManager(photoHost);
+        hadNewPhotoFiles = slots.some((s) => s.kind === "file");
         if (entryCount === 0) {
           image = "";
           gallery = [];
@@ -10020,6 +10888,15 @@
     if (Object.keys(prevMeta).length) updated.metadata = prevMeta;
     else delete updated.metadata;
 
+    const nextGallerySig = gallery
+      .map((u) => String(u).split("?")[0])
+      .join("|");
+    const mediaTouched =
+      hadNewPhotoFiles ||
+      String(image).split("?")[0] !== String(prevImage).split("?")[0] ||
+      nextGallerySig !== prevGallerySig;
+    if (mediaTouched) stampWardrobeItemMediaNonce(updated);
+
     /** When saving a custom piece, whether `data/custom-items.json` was updated (npm run dev). */
     let customProjectSynced = true;
     let customCloudSynced = false;
@@ -10039,7 +10916,12 @@
 
       try {
         const saved = await saveWardrobeItemToCloud(updated);
-        const mediaBust = stampWardrobeItemMediaNonce(saved);
+        const mediaBust = stampWardrobeItemMediaNonce(
+          saved,
+          typeof /** @type {any} */ (updated).__displayNonce === "number"
+            ? /** @type {any} */ (updated).__displayNonce
+            : Date.now()
+        );
         upsertWardrobeBaseRowInMemory(saved);
         stripCustomIdsFromLocalStorage([id]);
         await mirrorLocalCustomItemsToProjectFile();
@@ -10130,7 +11012,12 @@
       try {
         const mergedForCloud = normalizeItemDerivedFields(mergeArchivePatchIntoFullItem(prev, patch));
         const saved = await saveWardrobeItemToCloud(mergedForCloud);
-        const mediaBust = stampWardrobeItemMediaNonce(saved);
+        const mediaBust = stampWardrobeItemMediaNonce(
+          saved,
+          typeof /** @type {any} */ (updated).__displayNonce === "number"
+            ? /** @type {any} */ (updated).__displayNonce
+            : Date.now()
+        );
         archiveCloudRowSaved = true;
         upsertWardrobeBaseRowInMemory(saved);
         try {
@@ -10342,17 +11229,18 @@
     const edit = Boolean(opts.edit) && isTwAdminMode();
     detailItemId = item.id;
     root.innerHTML = "";
+    const itemForMedia = ensureItemMediaCacheBust({ ...item });
 
     const media = document.createElement("div");
     media.className = "card__media item-detail__media";
-    const detailVariants = getItemColourVariants(item);
+    const detailVariants = getItemColourVariants(itemForMedia);
     if (detailVariants?.length) media.classList.add("card__media--variant-colours");
     const img = document.createElement("img");
     img.className = "card__media-img";
-    img.alt = imageAltForItem(item);
+    img.alt = imageAltForItem(itemForMedia);
     img.decoding = "async";
     img.draggable = false;
-    wireCoverImageWithFallbacks(img, item, {
+    wireCoverImageWithFallbacks(img, itemForMedia, {
       host: media,
       coverRenderWidth: ITEM_DETAIL_GALLERY_RENDER.width,
       coverRenderHeight: ITEM_DETAIL_GALLERY_RENDER.height,
@@ -10365,9 +11253,9 @@
     });
     media.appendChild(img);
     if (!detailVariants?.length) {
-      mountHeroGalleryStrip(media, img, item);
-    } else if (itemGalleryList(item).length) {
-      mountHeroGalleryStrip(media, img, item);
+      mountHeroGalleryStrip(media, img, itemForMedia);
+    } else if (itemGalleryList(itemForMedia).length) {
+      mountHeroGalleryStrip(media, img, itemForMedia);
     }
 
     if (root.classList.contains("item-detail__root--page")) {
@@ -10377,9 +11265,13 @@
     const isPageEdit = edit && root.classList.contains("item-detail__root--page");
     if (isPageEdit) root.classList.add("item-detail__root--edit");
 
+    /** @type {HTMLElement | null} */
+    let editPreviewCol = null;
+
     if (isPageEdit) {
       const previewCol = document.createElement("div");
       previewCol.className = "item-edit-preview";
+      editPreviewCol = previewCol;
       previewCol.appendChild(media);
       const previewCaption = document.createElement("p");
       previewCaption.className = "item-edit-preview__caption";
@@ -10458,10 +11350,13 @@
       photosHost.id = "item-edit-photos";
       if (!initialVariants) {
         mountItemEditPhotoManager(photosHost, {
-          coverUrl: String(item.image ?? "").trim(),
-          galleryUrls: itemGalleryList(item),
+          item: itemForMedia,
+          coverUrl: String(itemForMedia.image ?? "").trim(),
+          galleryUrls: itemGalleryList(itemForMedia),
           uploadLabel: "Upload photos",
+          onDirty: () => syncItemEditCoverPreview(editPreviewCol, photosHost, itemForMedia),
         });
+        syncItemEditCoverPreview(editPreviewCol, photosHost, itemForMedia);
       }
       photosFieldWrap.appendChild(photosLabel);
       photosFieldWrap.appendChild(photosHost);
@@ -11489,6 +12384,7 @@
     }
 
     document.title = `${item.brand} — ${displayNameWithoutLeadingColour(item)} · Timeless Wardrobe`;
+    recordRecentlyViewedItem(item.id);
     const wantEditRequested = wantEdit;
     let allowEdit = wantEditRequested && isTwAdminMode();
     if (wantEditRequested && !isTwAdminMode()) {
@@ -12015,6 +12911,29 @@
     }
   }
 
+  /** Align desktop search flyout content with the first main-nav link (e.g. Clothing). */
+  function syncSearchFlyoutPadLeft() {
+    try {
+      if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+        document.documentElement.style.removeProperty("--search-flyout-pad-left");
+        return;
+      }
+      const navLink =
+        document.querySelector(
+          ".site-header__primary-nav .site-header__nav-link[data-category-jump]"
+        ) || document.querySelector(".site-header__primary-nav .site-header__nav-link");
+      if (!navLink) return;
+      const left = Math.max(0, Math.round(navLink.getBoundingClientRect().left));
+      document.documentElement.style.setProperty("--search-flyout-pad-left", `${left}px`);
+    } catch {
+      try {
+        document.documentElement.style.removeProperty("--search-flyout-pad-left");
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   /** Viewport Y below utility + primary header row (flyout panels sit above the dim). */
   function measureHeaderChromeBottom() {
     const util = document.querySelector(".site-utility-bar");
@@ -12030,8 +12949,10 @@
     try {
       if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
         document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
+        document.documentElement.style.removeProperty("--search-flyout-pad-left");
         return;
       }
+      syncSearchFlyoutPadLeft();
       const submenuOpen =
         document.body.classList.contains("archive-ui--header-submenu-open") ||
         document.body.classList.contains("archive-ui--header-submenu-closing");
@@ -13457,10 +14378,12 @@
         }
         relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
         queueMicrotask(() => {
+          syncSearchFlyoutPadLeft();
           headerSearchInput?.focus();
           resetHeaderSearchOverlayResultsDom();
           syncSearchOverlayBackdropTop();
           requestAnimationFrame(() => {
+            syncSearchFlyoutPadLeft();
             syncSearchOverlayBackdropTop();
           });
         });
@@ -13649,6 +14572,7 @@
     globalThis.addEventListener(
       "resize",
       () => {
+        syncSearchFlyoutPadLeft();
         if (
           document.body.classList.contains("archive-ui--header-submenu-open") ||
           document.body.classList.contains("archive-ui--header-submenu-closing")
@@ -13661,6 +14585,8 @@
       },
       { passive: true }
     );
+
+    queueMicrotask(() => syncSearchFlyoutPadLeft());
 
     const seasonMini = document.getElementById("season-nav-mini");
     seasonMini?.addEventListener("click", (e) => {
@@ -13916,6 +14842,45 @@
       : [];
   }
 
+  /** @type {{ count: number, ids: Set<string>, frozenAt: string } | null} */
+  let catalogueLockManifest = null;
+
+  async function loadCatalogueLockManifest() {
+    try {
+      const res = await fetch("data/wardrobe-catalogue-lock.json", { cache: "no-store" });
+      if (!res.ok) return null;
+      const p = await res.json();
+      if (String(p?._schema ?? "") !== "timeless-wardrobe-catalogue-lock-v1") return null;
+      const ids = Array.isArray(p.ids) ? p.ids.map((x) => String(x)).filter(Boolean) : [];
+      const count = Number(p.count) || ids.length;
+      if (!count || !ids.length) return null;
+      return { count, ids: new Set(ids), frozenAt: String(p.frozenAt ?? "") };
+    } catch (e) {
+      console.warn("wardrobe-catalogue-lock.json", e);
+      return null;
+    }
+  }
+
+  /**
+   * If cloud returns fewer rows than the frozen lock, merge seed + cloud instead of showing a shrunk list.
+   * Pieces are only removed from Supabase via explicit Admin delete — not by a partial fetch.
+   * @param {object[]} cloudItems
+   * @returns {object[]}
+   */
+  function resolveWardrobeBaseFromCloudFetch(cloudItems) {
+    const rows = Array.isArray(cloudItems) ? cloudItems : [];
+    if (!catalogueLockManifest || rows.length >= catalogueLockManifest.count) {
+      return rows;
+    }
+    console.warn(
+      `[catalogue lock] Cloud returned ${rows.length} rows but lock expects ${catalogueLockManifest.count} (frozen ${catalogueLockManifest.frozenAt || "—"}). Using seed merge — nothing was deleted unless you used Admin Delete.`
+    );
+    wardrobeCatalogueSource = "seed";
+    wardrobeBase = seedItemsFromScript().map((r) => ({ ...r }));
+    mergeWardrobeBaseWithFetchedCloudRows(rows);
+    return wardrobeBase.slice();
+  }
+
   async function loadFileBackedCustomItems() {
     try {
       const res = await fetch("data/custom-items.json", { cache: "no-store" });
@@ -14118,6 +15083,12 @@
     const twLoaderPageStarted = performance.now();
     try {
     let deferredSeedSyncSnapshot = /** @type {object[] | null} */ (null);
+    catalogueLockManifest = await loadCatalogueLockManifest();
+    if (catalogueLockManifest) {
+      console.info(
+        `[catalogue lock] Frozen catalogue: ${catalogueLockManifest.count} pieces (${catalogueLockManifest.frozenAt || "—"}).`
+      );
+    }
     const cfg = globalThis.APP_CONFIG || {};
     const url = String(cfg.SUPABASE_URL || globalThis.__TW_SUPABASE_URL__ || "").trim();
     const key = String(cfg.SUPABASE_ANON_KEY || globalThis.__TW_SUPABASE_ANON_KEY__ || "").trim();
@@ -14133,9 +15104,10 @@
           let outfitsFetchPromise = null;
           const res = await api.fetchWardrobeItems(supabaseClient);
           if (res.ok && res.items.length) {
-            wardrobeBase = res.items;
+            const resolved = resolveWardrobeBaseFromCloudFetch(res.items);
+            wardrobeBase = resolved;
             wardrobeFromSupabase = true;
-            wardrobeCatalogueSource = "cloud";
+            if (wardrobeCatalogueSource !== "seed") wardrobeCatalogueSource = "cloud";
             deferredSeedSyncSnapshot = wardrobeBase.slice();
             outfitsFetchPromise = api.fetchOutfits(supabaseClient);
           } else {
@@ -14143,10 +15115,13 @@
               console.warn("Supabase wardrobe_items:", res.error);
             } else {
               console.warn(
-                "Supabase wardrobe_items returned 0 rows — falling back to data/wardrobe.js; run npm run db:import-seed."
+                catalogueLockManifest
+                  ? `[catalogue lock] Cloud returned 0 rows — using frozen seed (${catalogueLockManifest.count} pieces).`
+                  : "Supabase wardrobe_items returned 0 rows — falling back to data/wardrobe.js; run npm run db:import-seed."
               );
             }
-            wardrobeBase = seedItemsFromScript();
+            wardrobeBase = seedItemsFromScript().map((r) => ({ ...r }));
+            if (catalogueLockManifest) wardrobeCatalogueSource = "seed";
             const cloudBackfillReportBlocking = await syncMissingRowsToSupabase([]);
             if (cloudBackfillReportBlocking && (cloudBackfillReportBlocking.synced > 0 || cloudBackfillReportBlocking.failed > 0)) {
               console.info(
@@ -14308,8 +15283,19 @@
     if (document.getElementById("local-data-risk-banner")) {
       installLocalDataRiskBanner();
     }
+    installWardrobeTextLocalExportActions();
     if (document.body.classList.contains("home-page")) {
+      const devAsset = globalThis.TW_DEV_ASSET;
+      if (devAsset?.isLocalDev) {
+        await devAsset.primeTokens([
+          "images/season-duo/summer.png",
+          "images/season-duo/winter.png",
+          ...HOME_HERO_IMAGES,
+        ]);
+        devAsset.refreshDomImages();
+      }
       renderEditorialLandingPage();
+      devAsset?.refreshDomImages?.();
     }
     } finally {
       await completeTwInitialPageLoader(twLoaderPageStarted);

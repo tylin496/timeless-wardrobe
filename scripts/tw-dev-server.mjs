@@ -102,7 +102,7 @@ async function serveFaviconAsset(/** @type {http.IncomingMessage} */ req, /** @t
     const ext = path.extname(absFile).toLowerCase();
     res.writeHead(200, {
       "Content-Type": MIME[ext] || "application/octet-stream",
-      "Cache-Control": "public, max-age=86400",
+      "Cache-Control": "no-cache, must-revalidate",
       "Content-Length": String(st.size),
     });
     if (req.method === "HEAD") {
@@ -203,12 +203,26 @@ async function handleStatic(/** @type {http.IncomingMessage} */ req, /** @type {
   }
   const ext = path.extname(filePath).toLowerCase();
   const type = MIME[ext] || "application/octet-stream";
-  if (req.method === "HEAD") {
-    res.writeHead(200, { "Content-Type": type, "Content-Length": String(st.size) });
+  const etag = `"${Math.floor(st.mtimeMs)}-${st.size}"`;
+  const lastModified = st.mtime.toUTCString();
+  const cacheControl = "no-cache, must-revalidate";
+  const baseHeaders = {
+    "Content-Type": type,
+    "Cache-Control": cacheControl,
+    "Last-Modified": lastModified,
+    ETag: etag,
+  };
+  if (req.headers["if-none-match"] === etag) {
+    res.writeHead(304, baseHeaders);
     res.end();
     return;
   }
-  res.writeHead(200, { "Content-Type": type });
+  if (req.method === "HEAD") {
+    res.writeHead(200, { ...baseHeaders, "Content-Length": String(st.size) });
+    res.end();
+    return;
+  }
+  res.writeHead(200, { ...baseHeaders, "Content-Length": String(st.size) });
   createReadStream(filePath).pipe(res);
 }
 
