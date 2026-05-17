@@ -9,7 +9,7 @@
  *
  * Images: full `https://…` public URLs (Supabase `wardrobe-images` bucket).
  * Optional `gallery`: string[] of extra image URLs; `image` is always the cover.
- * Optional `colourVariants`: same product in multiple colours — one archive row.
+ * Optional `colourVariants`: same product in multiple colours — one collection row.
  * Optional `size`, `measuredDimensions`, and `purchaseDate`.
  */
 

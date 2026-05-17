@@ -166,8 +166,6 @@ async function handleStatic(/** @type {http.IncomingMessage} */ req, /** @type {
     rel = "item.html";
   } else if (pathname === "/collection" || pathname === "/collection.html") {
     rel = "collection.html";
-  } else if (pathname === "/archive" || pathname === "/archive.html") {
-    rel = "collection.html";
   } else if (pathname.startsWith("/collection/")) {
     const rest = pathname.slice("/collection/".length);
     const segment = rest.split("/")[0].toLowerCase();
@@ -179,8 +177,6 @@ async function handleStatic(/** @type {http.IncomingMessage} */ req, /** @type {
       /* `/collection/styles.css` etc. when HTML lacks `<base href="/">` */
       rel = rest;
     }
-  } else if (rel === "archive") {
-    rel = "archive.html";
   } else if (rel === "collection") {
     rel = "collection.html";
   }

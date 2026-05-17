@@ -35,7 +35,6 @@ function buildHomeHeroManifestSource() {
 const rootFiles = [
   "index.html",
   "collection.html",
-  "archive.html",
   "item.html",
   "app.js",
   "styles.css",

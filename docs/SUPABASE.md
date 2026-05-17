@@ -2,7 +2,7 @@
 
 ## What this gives you
 
-- **`wardrobe_items`**: canonical archive rows (large seed imported once with the service role).
+- **`wardrobe_items`**: canonical collection rows (large seed imported once with the service role).
 - **`outfits` / `outfit_items`**: saved looks with stable order (`sort_order`).
 - **Browser**: loads `@supabase/supabase-js` from `esm.sh` via `js/supabase-client.js` (dynamic `import()`). If URL/key are missing or wardrobe fetch returns no rows, the app falls back to `data/wardrobe.js` + `localStorage` as before.
 
@@ -46,7 +46,7 @@ The migration enables RLS with **prototype** policies:
 - **`wardrobe_items`**: `anon` / `authenticated` may **SELECT** only. Writes use **`service_role`** (bypasses RLS) for the import script — keep that key secret.
 - **`outfits` / `outfit_items`**: `anon` may **insert/update/delete** so a static site with only the anon key can manage outfits.
 
-**Security:** anyone who has your **anon key** and project URL can change outfits tables. For a private archive this is often acceptable; if the key leaks, rotate it in the dashboard. **Replace these policies with auth (e.g. magic link) or Edge Functions + service role before a public deploy.** Comments in the SQL file repeat this.
+**Security:** anyone who has your **anon key** and project URL can change outfits tables. For a private collection this is often acceptable; if the key leaks, rotate it in the dashboard. **Replace these policies with auth (e.g. magic link) or Edge Functions + service role before a public deploy.** Comments in the SQL file repeat this.
 
 ## 5. Offline behaviour
 

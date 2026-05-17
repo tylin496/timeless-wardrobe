@@ -1,6 +1,6 @@
 # Timeless Wardrobe
 
-Static archive UI for a personal wardrobe: filters, outfit builder, saved looks.
+Static collection UI for a personal wardrobe: filters, outfit builder, saved looks.
 
 ## Quick start
 

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="A personal wardrobe archive — browse pieces by category and season, track spend, build outfits, and save looks."
+      content="A personal wardrobe collection — browse pieces by category and season, track spend, build outfits, and save looks."
     />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161514" />
@@ -23,7 +23,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="theme-catalogue archive-page">
+  <body class="theme-catalogue collection-page">
     <a class="skip-link" href="#main">Skip to collection</a>
     <a class="skip-link" href="#filter-search">Skip to search</a>
     <a class="skip-link tw-admin-only" href="#add-item-open">Skip to add item</a>
@@ -281,34 +281,34 @@
         </div>
       </div>
     </aside>
-<main id="main" tabindex="-1">
-      <div class="archive-container">
+<main id="main" tabindex="-1" class="min-h-screen">
+      <div class="collection-container mx-auto w-full max-w-none">
       <section
-        id="archive-search-results-plp"
-        class="archive-search-results-plp"
+        id="collection-search-results-plp"
+        class="collection-search-results-plp"
         hidden
         aria-label="Search results"
       >
-        <div class="archive-search-results-plp__bar">
-          <span class="archive-search-results-plp__search-icon" aria-hidden="true"></span>
-          <div id="archive-search-results-plp-field-anchor" class="archive-search-results-plp__field-anchor"></div>
+        <div class="collection-search-results-plp__bar">
+          <span class="collection-search-results-plp__search-icon" aria-hidden="true"></span>
+          <div id="collection-search-results-plp-field-anchor" class="collection-search-results-plp__field-anchor"></div>
           <button
             type="button"
-            id="archive-search-results-clear"
-            class="archive-search-results-plp__clear"
+            id="collection-search-results-clear"
+            class="collection-search-results-plp__clear"
           >
             CLEAR
           </button>
         </div>
-        <h2 id="archive-search-results-heading" class="archive-search-results-plp__heading"></h2>
+        <h2 id="collection-search-results-heading" class="collection-search-results-plp__heading"></h2>
         <div
-          id="archive-search-results-pills"
-          class="archive-search-results-plp__pills"
+          id="collection-search-results-pills"
+          class="collection-search-results-plp__pills"
           role="tablist"
           aria-label="Filter by type in search results"
         ></div>
         <div
-          id="archive-search-results-active-chips"
+          id="collection-search-results-active-chips"
           class="items-toolbar__active-chips items-toolbar__active-chips--search-plp"
           role="group"
           aria-label="Active search filters"
@@ -319,10 +319,10 @@
         <div class="items-toolbar__head">
           <div class="items-toolbar__intro-lead">
             <div class="items-toolbar__intro">
-              <div class="archive-heading" id="archive-heading" aria-label="Collection">
-                <div class="archive-heading__context" id="archive-heading-context"></div>
-                <h2 class="archive-heading__title items-toolbar__page-title" id="items-toolbar-page-title"></h2>
-                <div class="items-toolbar__archive-summary items-toolbar__archive-summary--under-title" aria-live="polite">
+              <div class="collection-heading" id="collection-heading" aria-label="Collection">
+                <div class="collection-heading__context" id="collection-heading-context"></div>
+                <h2 class="collection-heading__title items-toolbar__page-title" id="items-toolbar-page-title"></h2>
+                <div class="items-toolbar__collection-summary items-toolbar__collection-summary--under-title" aria-live="polite">
                   <p class="items-toolbar__count-line" id="filter-count"></p>
                   <p class="items-toolbar__spend-line" id="filter-spend-total" hidden></p>
                 </div>
@@ -361,9 +361,9 @@
             <button
               type="button"
               class="items-toolbar__filter-sort-btn"
-                id="archive-filter-drawer-open"
+                id="collection-filter-drawer-open"
               aria-haspopup="dialog"
-              aria-controls="archive-filter-drawer"
+              aria-controls="collection-filter-drawer"
               aria-expanded="false"
             >
               <span class="items-toolbar__filter-sort-icon" aria-hidden="true">
@@ -517,78 +517,78 @@
       <p id="outfit-toast" class="styling-board-drawer__toast outfit-toast" role="status" aria-live="polite" hidden></p>
     </div>
 
-    <div id="archive-filter-drawer" class="archive-filter-drawer" hidden aria-hidden="true">
+    <div id="collection-filter-drawer" class="collection-filter-drawer" hidden aria-hidden="true">
       <button
         type="button"
-        class="archive-filter-drawer__backdrop"
-        id="archive-filter-drawer-backdrop"
+        class="collection-filter-drawer__backdrop"
+        id="collection-filter-drawer-backdrop"
         tabindex="-1"
         aria-label="Close filter and sort"
       ></button>
       <div
-        class="archive-filter-drawer__sheet"
+        class="collection-filter-drawer__sheet"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="archive-filter-drawer-title"
+        aria-labelledby="collection-filter-drawer-title"
         tabindex="-1"
       >
-        <div class="archive-filter-drawer__header">
-          <h2 class="archive-filter-drawer__title" id="archive-filter-drawer-title">Filter &amp; Sort</h2>
+        <div class="collection-filter-drawer__header">
+          <h2 class="collection-filter-drawer__title" id="collection-filter-drawer-title">Filter &amp; Sort</h2>
           <button
             type="button"
-            class="archive-filter-drawer__close"
-            id="archive-filter-drawer-close"
+            class="collection-filter-drawer__close"
+            id="collection-filter-drawer-close"
             aria-label="Close"
           >
             ×
           </button>
         </div>
-        <div class="archive-filter-drawer__body">
-          <section class="archive-filter-drawer__block archive-filter-drawer__block--sort" aria-labelledby="archive-drawer-sort-heading">
-            <h3 class="archive-filter-drawer__section-heading" id="archive-drawer-sort-heading">Sort by</h3>
+        <div class="collection-filter-drawer__body">
+          <section class="collection-filter-drawer__block collection-filter-drawer__block--sort" aria-labelledby="collection-drawer-sort-heading">
+            <h3 class="collection-filter-drawer__section-heading" id="collection-drawer-sort-heading">Sort by</h3>
             <div
-              id="archive-drawer-sort-chips"
-              class="archive-filter-drawer__chip-row archive-filter-drawer__chip-row--sort"
+              id="collection-drawer-sort-chips"
+              class="collection-filter-drawer__chip-row collection-filter-drawer__chip-row--sort"
               role="group"
-              aria-labelledby="archive-drawer-sort-heading"
+              aria-labelledby="collection-drawer-sort-heading"
             >
               <button
                 type="button"
-                class="archive-drawer-sort-chip is-active"
-                data-archive-sort="date-desc"
-                data-archive-sort-default="true"
+                class="collection-drawer-sort-chip is-active"
+                data-collection-sort="date-desc"
+                data-collection-sort-default="true"
                 aria-pressed="true"
               >
                 Newest
               </button>
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="date-asc" aria-pressed="false">
+              <button type="button" class="collection-drawer-sort-chip" data-collection-sort="date-asc" aria-pressed="false">
                 Oldest
               </button>
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="price-asc" aria-pressed="false">
+              <button type="button" class="collection-drawer-sort-chip" data-collection-sort="price-asc" aria-pressed="false">
                 Price low–high
               </button>
-              <button type="button" class="archive-drawer-sort-chip" data-archive-sort="price-desc" aria-pressed="false">
+              <button type="button" class="collection-drawer-sort-chip" data-collection-sort="price-desc" aria-pressed="false">
                 Price high–low
               </button>
             </div>
           </section>
           <section
-            class="archive-filter-drawer__block archive-filter-drawer__block--season"
-            aria-labelledby="archive-drawer-season-heading"
+            class="collection-filter-drawer__block collection-filter-drawer__block--season"
+            aria-labelledby="collection-drawer-season-heading"
           >
-            <h3 class="archive-filter-drawer__section-heading" id="archive-drawer-season-heading">Season</h3>
+            <h3 class="collection-filter-drawer__section-heading" id="collection-drawer-season-heading">Season</h3>
             <div
-              id="archive-drawer-season-chips"
-              class="archive-filter-drawer__chip-row"
+              id="collection-drawer-season-chips"
+              class="collection-filter-drawer__chip-row"
               role="group"
-              aria-labelledby="archive-drawer-season-heading"
+              aria-labelledby="collection-drawer-season-heading"
             >
-              <button type="button" class="archive-drawer-sort-chip" data-season-filter="All" aria-pressed="false">
+              <button type="button" class="collection-drawer-sort-chip" data-season-filter="All" aria-pressed="false">
                 All seasons
               </button>
               <button
                 type="button"
-                class="archive-drawer-sort-chip season-toggle"
+                class="collection-drawer-sort-chip season-toggle"
                 data-season-filter="A/W"
                 aria-pressed="false"
                 aria-label="A/W"
@@ -597,7 +597,7 @@
               </button>
               <button
                 type="button"
-                class="archive-drawer-sort-chip season-toggle"
+                class="collection-drawer-sort-chip season-toggle"
                 data-season-filter="S/S"
                 aria-pressed="false"
                 aria-label="S/S"
@@ -607,52 +607,52 @@
             </div>
           </section>
           <section
-            id="archive-drawer-record-types"
-            class="archive-filter-drawer__block archive-filter-drawer__block--categories archive-filter-drawer__record-types"
-            aria-labelledby="archive-drawer-record-types-label"
+            id="collection-drawer-record-types"
+            class="collection-filter-drawer__block collection-filter-drawer__block--categories collection-filter-drawer__record-types"
+            aria-labelledby="collection-drawer-record-types-label"
             hidden
           >
-            <h3 class="archive-filter-drawer__section-heading" id="archive-drawer-record-types-label">Categories</h3>
+            <h3 class="collection-filter-drawer__section-heading" id="collection-drawer-record-types-label">Categories</h3>
             <div
-              class="archive-filter-drawer__chip-row archive-filter-drawer__record-type-chips"
-              id="archive-drawer-record-type-chips"
+              class="collection-filter-drawer__chip-row collection-filter-drawer__record-type-chips"
+              id="collection-drawer-record-type-chips"
               role="group"
-              aria-labelledby="archive-drawer-record-types-label"
+              aria-labelledby="collection-drawer-record-types-label"
             ></div>
           </section>
           <section
-            class="archive-filter-drawer__block archive-filter-drawer__block--colour"
-            aria-labelledby="archive-colour-filter-label"
+            class="collection-filter-drawer__block collection-filter-drawer__block--colour"
+            aria-labelledby="collection-colour-filter-label"
           >
-            <h3 class="archive-filter-drawer__section-heading" id="archive-colour-filter-label">Colour</h3>
+            <h3 class="collection-filter-drawer__section-heading" id="collection-colour-filter-label">Colour</h3>
             <div
-              class="archive-filter-drawer__chip-row archive-filter-drawer__colour-chips"
+              class="collection-filter-drawer__chip-row collection-filter-drawer__colour-chips"
               role="group"
-              aria-labelledby="archive-colour-filter-label"
-              id="archive-colour-chips"
+              aria-labelledby="collection-colour-filter-label"
+              id="collection-colour-chips"
             ></div>
           </section>
           <section
-            class="archive-filter-drawer__block archive-filter-drawer__block--brands"
-            aria-labelledby="archive-drawer-brands-heading"
+            class="collection-filter-drawer__block collection-filter-drawer__block--brands"
+            aria-labelledby="collection-drawer-brands-heading"
           >
-            <h3 class="archive-filter-drawer__section-heading" id="archive-drawer-brands-heading">Brands</h3>
+            <h3 class="collection-filter-drawer__section-heading" id="collection-drawer-brands-heading">Brands</h3>
             <div
-              id="archive-drawer-brand-chips"
-              class="archive-filter-drawer__chip-row archive-filter-drawer__brand-chips"
+              id="collection-drawer-brand-chips"
+              class="collection-filter-drawer__chip-row collection-filter-drawer__brand-chips"
               role="group"
-              aria-labelledby="archive-drawer-brands-heading"
+              aria-labelledby="collection-drawer-brands-heading"
             ></div>
           </section>
         </div>
-        <div class="archive-filter-drawer__footer">
-          <button type="button" class="archive-filter-drawer__done" id="archive-filter-drawer-done">Done</button>
+        <div class="collection-filter-drawer__footer">
+          <button type="button" class="collection-filter-drawer__done" id="collection-filter-drawer-done">Done</button>
         </div>
       </div>
     </div>
 
-    <section class="archive-actions tw-admin-only" hidden aria-label="Archive actions">
-      <button type="button" class="btn btn--ghost archive-actions__add" id="add-item-open">Add a piece</button>
+    <section class="collection-actions tw-admin-only" hidden aria-label="Collection actions">
+      <button type="button" class="btn btn--ghost collection-actions__add" id="add-item-open">Add a piece</button>
     </section>
 
     <section class="data-load-note tw-admin-only" aria-label="Where this data comes from">
@@ -671,13 +671,13 @@
         <li>
           <strong>Your wardrobe in the browser</strong> — Extra rows and any edits not yet in the cloud live under
           <code>localStorage</code> keys such as <code>timeless-wardrobe-custom-items-v1</code>,
-          <code>timeless-wardrobe-archive-overrides-v1</code>, and <code>timeless-wardrobe-archive-hidden-v1</code>, plus
+          <code>timeless-wardrobe-collection-overrides-v1</code>, and <code>timeless-wardrobe-collection-hidden-v1</code>, plus
           optional <code>data/custom-items.json</code> when you use <code>npm run dev</code>.
         </li>
         <li>
           <strong>Supabase sync (same bar for every piece)</strong> — With cloud configured, new pieces and edits are
           written to <code>wardrobe_items</code> (catalogue pieces you changed are mirrored there like any other row).
-          Hidden archive ids and any legacy per-id override blobs still round-trip through
+          Hidden collection ids and any legacy per-id override blobs still round-trip through
           <code>wardrobe_app_state</code> row <code>id = default</code> when needed.
         </li>
         <li>
@@ -766,7 +766,7 @@
               </label>
               <label class="field">
                 <span class="field__label">Broad colour (optional)</span>
-                <select id="add-item-basic-colour" name="basicColour" aria-label="Broad colour for archive filters">
+                <select id="add-item-basic-colour" name="basicColour" aria-label="Broad colour for collection filters">
                   <option value="__omit__">None (not filtered by colour)</option>
                   <option value="" selected>Auto (from name / code / hex)</option>
                   <option value="blue">Blue</option>

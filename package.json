@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/vercel-build.mjs",
+    "css:build": "node scripts/build-css.mjs",
+    "css:migrate-margins": "node scripts/migrate-margins-to-tailwind.mjs",
+    "predev": "node scripts/build-css.mjs",
+    "build": "node scripts/build-css.mjs && node scripts/vercel-build.mjs",
     "dev": "node scripts/tw-dev-server.mjs",
     "export:wardrobe-json": "node scripts/export_wardrobe_json.mjs",
     "db:export-wardrobe": "node scripts/export_wardrobe_from_supabase.mjs",
@@ -16,6 +19,8 @@
     "@supabase/supabase-js": "^2.49.8"
   },
   "devDependencies": {
-    "image-size": "^2.0.2"
+    "@tailwindcss/cli": "^4.3.0",
+    "image-size": "^2.0.2",
+    "tailwindcss": "^4.3.0"
   }
 }

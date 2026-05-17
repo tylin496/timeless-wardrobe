@@ -3,7 +3,7 @@
  * Prune Supabase Storage bucket `wardrobe-images`:
  *
  * 1. Deletes objects not referenced by `wardrobe_items` (image, gallery, metadata) or
- *    `wardrobe_app_state.archive_overrides`.
+ *    `wardrobe_app_state.collection_overrides`.
  * 2. Deletes referenced objects whose pixel size is below a minimum (short side), then strips
  *    those URLs from `wardrobe_items` and `wardrobe_app_state` so rows do not point at 404s.
  *
@@ -238,7 +238,7 @@ async function main() {
   const { data: st, error: e2 } = await admin.from("wardrobe_app_state").select("*").eq("id", "default").maybeSingle();
   if (e2 && e2.code !== "PGRST116") console.warn("wardrobe_app_state:", e2.message);
   const ovStrings = [];
-  collectStrings(st?.archive_overrides, ovStrings);
+  collectStrings(st?.collection_overrides, ovStrings);
   for (const s of ovStrings) {
     if (/^https?:\/\//i.test(s)) refUrl(s);
   }
@@ -288,7 +288,7 @@ async function main() {
     if (patch) rowPatches.push(patch);
   }
 
-  let nextOverrides = st?.archive_overrides;
+  let nextOverrides = st?.collection_overrides;
   if (lowResReferenced.size && nextOverrides && typeof nextOverrides === "object") {
     nextOverrides = stripUrlsDeep(nextOverrides, lowResReferenced);
   }
@@ -296,12 +296,12 @@ async function main() {
   const stateDirty =
     st &&
     lowResReferenced.size &&
-    JSON.stringify(st.archive_overrides) !== JSON.stringify(nextOverrides);
+    JSON.stringify(st.collection_overrides) !== JSON.stringify(nextOverrides);
 
   if (dryRun) {
     console.info("DRY_RUN — no writes.");
     if (rowPatches.length) console.info(`Would update wardrobe_items rows: ${rowPatches.length}`);
-    if (stateDirty) console.info("Would update wardrobe_app_state.archive_overrides");
+    if (stateDirty) console.info("Would update wardrobe_app_state.collection_overrides");
     return;
   }
 
@@ -319,7 +319,7 @@ async function main() {
     const { error } = await admin
       .from("wardrobe_app_state")
       .update({
-        archive_overrides: nextOverrides,
+        collection_overrides: nextOverrides,
         updated_at: new Date().toISOString(),
       })
       .eq("id", "default");
@@ -327,7 +327,7 @@ async function main() {
       console.error("wardrobe_app_state update failed:", error.message);
       process.exit(1);
     }
-    console.info("Updated wardrobe_app_state.archive_overrides");
+    console.info("Updated wardrobe_app_state.collection_overrides");
   }
 
   const deleteList = [...toDelete];

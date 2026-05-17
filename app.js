@@ -5,7 +5,7 @@
   const OUTFIT_STORAGE_VERSION = 2;
   const STYLING_BOARD_DRAFT_VERSION = 1;
 
-  /** Split archive rows merged into one id — remap saved outfit lines. */
+  /** Split collection rows merged into one id — remap saved outfit lines. */
   const LEGACY_OUTFIT_ITEM_TO_SLOT = new Map([
     ["uniqlo-ocbd-shirt-blue", { itemId: "uniqlo-ocbd-shirt", colourKey: "blue" }],
     ["uniqlo-ocbd-shirt-white", { itemId: "uniqlo-ocbd-shirt", colourKey: "white" }],
@@ -20,12 +20,12 @@
     return String(item.colourCode ?? item.colorCode ?? item.colour_code ?? item.color_code ?? "").trim();
   }
 
-  /** Broad colour families — archive colour chips + optional per-item / per-variant override. */
+  /** Broad colour families — collection colour chips + optional per-item / per-variant override. */
   const BASIC_COLOUR_FAMILY_KEYS = ["blue", "brown", "red", "white", "black", "beige", "gold", "silver", "green", "grey"];
 
   /**
    * Stored in `item.basicColour` or `metadata.basicColour`: piece opts out of broad-colour buckets —
-   * no inference from colour text / hex, excluded from archive colour chips and colour filter matches.
+   * no inference from colour text / hex, excluded from collection colour chips and colour filter matches.
    */
   const BASIC_COLOUR_CLASSIFICATION_OMIT = "__omit__";
 
@@ -47,7 +47,7 @@
     return BASIC_COLOUR_FAMILY_KEYS.includes(v) ? v : "";
   }
 
-  /** Uploaded swatch (`previewImage` / `swatchImage`). When set and displayable, grid swatches show it before hex fill, colour-code text, or variant cover. */
+  /** Uploaded swatch (`previewImage` / `swatchImage`) — edit form only; collection card circles use hex fills. */
   function variantSwatchImageUrl(v) {
     if (!v || typeof v !== "object") return "";
     return String(v.previewImage ?? v.swatchImage ?? "").trim();
@@ -185,7 +185,26 @@
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
-  /** Refined swatch fills for archive grid tray (editorial, not literal product hues). */
+  /** Apply a solid hex fill to a circular swatch (collection tray / picker). */
+  function applySwatchHexFill(el, fillHex) {
+    const hex = String(fillHex ?? "").trim();
+    if (!hex || !(el instanceof HTMLElement)) return false;
+    el.style.backgroundColor = hex;
+    if (hexFillLuminance(hex) < 0.28) {
+      el.style.boxShadow =
+        "inset 0 0 0 1px rgba(255, 255, 255, 0.38), 0 0 0 1px rgba(255, 255, 255, 0.22)";
+    } else {
+      el.style.boxShadow = "inset 0 0 0 1px rgba(0, 0, 0, 0.2)";
+    }
+    return true;
+  }
+
+  /** Hex for collection colour circles — code/name first, then broad-colour mapping. */
+  function variantSwatchFillHex(v) {
+    return extractSwatchHexFromVariant(v) || luxurySwatchHexFromVariant(v) || "";
+  }
+
+  /** Refined swatch fills for collection grid tray (editorial, not literal product hues). */
   const LUXURY_SWATCH_HEX = {
     blue: "#1f3554",
     brown: "#6d4c3b",
@@ -325,21 +344,21 @@
 
   /**
    * Colour dots for `colourVariants`. When `heroImg` + `heroHost` are set, tap switches the main photo to that variant’s cover (`image`).
-   * On the archive grid, use the card’s “+” to add to an outfit. When `addToOutfitOnPick` is true (e.g. item detail page), tap also adds that colour to the outfit if eligible.
+   * On the collection grid, use the card’s “+” to add to an outfit. When `addToOutfitOnPick` is true (e.g. item detail page), tap also adds that colour to the outfit if eligible.
    * If only `outfitPick` is set (no hero), tap adds the colour to the outfit.
    * @param {HTMLElement} mountEl
    * @param {object} item
    * @param {{ outfitPick?: boolean, heroImg?: HTMLImageElement | null, heroHost?: HTMLElement | null, addToOutfitOnPick?: boolean, showHeroGallery?: boolean, gridCaption?: "compact", gridColourTray?: boolean, heroInitialColourKey?: string }} [opts]
-   * `heroInitialColourKey` — when set (e.g. archive colour filter), marks that variant active and matches hero if it already shows that cover.
-   * `gridCaption: "compact"` — archive grid only: short caption for multi-colour rows (swatches carry the rest).
-   * `gridColourTray` — archive grid only: translucent bottom tray on the card image (requires 2+ variants).
+   * `heroInitialColourKey` — when set (e.g. collection colour filter), marks that variant active and matches hero if it already shows that cover.
+   * `gridCaption: "compact"` — collection grid only: short caption for multi-colour rows (swatches carry the rest).
+   * `gridColourTray` — collection grid only: translucent bottom tray on the card image (requires 2+ variants).
    * `itemDetailPicker` — item PDP: “Colour: Navy” label + large swatches in the copy column.
    */
   function mountVariantSwatchStrip(mountEl, item, opts = {}) {
     const variants = getItemColourVariants(item);
     if (!variants?.length) return;
     const gridColourTray = Boolean(opts.gridColourTray);
-    if (gridColourTray && variants.length <= 1) return;
+    if (gridColourTray && variants.length < 1) return;
     const itemDetailPicker = Boolean(opts.itemDetailPicker);
     const heroImg = opts.heroImg ?? null;
     const heroHost = opts.heroHost ?? null;
@@ -391,7 +410,7 @@
       const projected = itemProjectionForOutfitSlot(item, { itemId: String(item.id), colourKey: String(colourKey) });
       heroHost.querySelector(".card__gallery-strip")?.remove();
       const heroRender =
-        heroHost.classList.contains("item-detail__media") ? ITEM_DETAIL_GALLERY_RENDER : ARCHIVE_GRID_CARD_RENDER;
+        heroHost.classList.contains("item-detail__media") ? ITEM_DETAIL_GALLERY_RENDER : COLLECTION_GRID_CARD_RENDER;
       wireCoverImageWithFallbacks(heroImg, projected, {
         host: heroHost,
         coverRenderWidth: heroRender.width,
@@ -403,7 +422,7 @@
           const ti = heroHost.querySelector(".card__gallery-strip .card__gallery-thumb.is-active img");
           if (ti) ti.src = url;
           if (heroHost.closest("#grid")) {
-            heroHost.dispatchEvent(new CustomEvent("tw-archive-cover-change", { bubbles: true }));
+            heroHost.dispatchEvent(new CustomEvent("tw-collection-cover-change", { bubbles: true }));
           }
         },
       });
@@ -446,24 +465,21 @@
         el.title = tip + (outfitPick ? " — Add this colour to outfit" : "");
         el.setAttribute("aria-label", outfitPick ? `Add ${lbl} to outfit` : lbl);
       }
+      const fillHex = variantSwatchFillHex(v);
       const vu = String(variantSwatchImageUrl(v) ?? "").trim();
       const showPreview = vu && isDisplayableCloudImageUrl(vu);
-      const fillHex = hex || luxurySwatchHexFromVariant(v);
 
-      if (showPreview) {
+      if (gridColourTray) {
+        el.classList.add("card__swatch--colour-fill");
+        applySwatchHexFill(el, fillHex);
+      } else if (showPreview) {
         const si = document.createElement("img");
         si.src = withWardrobeImageCacheBust(vu, item);
         si.alt = "";
         si.setAttribute("aria-hidden", "true");
         el.appendChild(si);
-      } else if (fillHex) {
-        el.style.backgroundColor = fillHex;
-        if (hexFillLuminance(fillHex) < 0.28) {
-          el.style.boxShadow =
-            "inset 0 0 0 1px rgba(255, 255, 255, 0.38), 0 0 0 1px rgba(255, 255, 255, 0.22)";
-        } else {
-          el.style.boxShadow = "inset 0 0 0 1px rgba(0, 0, 0, 0.2)";
-        }
+      } else if (applySwatchHexFill(el, fillHex)) {
+        el.classList.add("card__swatch--colour-fill");
       } else {
         const fallback = String(v.image ?? "").trim();
         if (fallback && isDisplayableCloudImageUrl(fallback)) {
@@ -619,14 +635,14 @@
 
   const CUSTOM_ITEMS_KEY = "timeless-wardrobe-custom-items-v1";
   /** Merged on top of each `wardrobeBase` row with matching `id` (this browser only). */
-  const ITEM_ARCHIVE_OVERRIDES_KEY = "timeless-wardrobe-archive-overrides-v1";
+  const ITEM_COLLECTION_OVERRIDES_KEY = "timeless-wardrobe-collection-overrides-v1";
   /** Seed / Supabase row ids removed from the grid in this browser only (not deleted from disk or cloud). */
-  const ARCHIVE_HIDDEN_IDS_KEY = "timeless-wardrobe-archive-hidden-v1";
+  const COLLECTION_HIDDEN_IDS_KEY = "timeless-wardrobe-collection-hidden-v1";
   const SEASON_NAV_STORAGE_KEY = "timeless-wardrobe-season-nav-v1";
   /** Same-tab return from `item.html` → restore main list scroll (short TTL avoids stale jumps). */
-  const ARCHIVE_SCROLL_RESTORE_KEY = "timeless-wardrobe-archive-scroll-v1";
+  const COLLECTION_SCROLL_RESTORE_KEY = "timeless-wardrobe-collection-scroll-v1";
   /** Same-tab return → restore category / season / type / search (same TTL as scroll). */
-  const ARCHIVE_BROWSE_RESTORE_KEY = "timeless-wardrobe-archive-browse-v1";
+  const COLLECTION_BROWSE_RESTORE_KEY = "timeless-wardrobe-collection-browse-v1";
   /** After item save + full navigation, pin the saved row so a stale cloud read cannot revert new images. */
   const WARDROBE_SAVE_PIN_KEY = "timeless-wardrobe-save-pin-v1";
   const WARDROBE_SAVE_PIN_TTL_MS = 3 * 60 * 1000;
@@ -765,91 +781,91 @@
     }
   }
   /** @deprecated Legacy bookmark; dev/Vercel still resolve to the collection PLP. */
-  const ARCHIVE_PAGE_PATH = "/archive.html";
+  const COLLECTION_PAGE_PATH = "/collection.html";
   const COLLECTION_HOME_URL = COLLECTION_BASE_PATH;
-  const ARCHIVE_HOME_MAIN_URL = COLLECTION_HOME_URL;
-  const ARCHIVE_SCROLL_TTL_MS = 20 * 60 * 1000;
+  const COLLECTION_HOME_MAIN_URL = COLLECTION_HOME_URL;
+  const COLLECTION_SCROLL_TTL_MS = 20 * 60 * 1000;
 
-  const ARCHIVE_SORT_MODE_KEY = "timeless-wardrobe-archive-sort-v1";
+  const COLLECTION_SORT_MODE_KEY = "timeless-wardrobe-collection-sort-v1";
   /** User hid the “browser-only storage” banner; clearing this key shows it again. */
   const LOCAL_DATA_RISK_BANNER_DISMISSED_KEY = "timeless-wardrobe-dismiss-local-risk-v1";
   const PRICE_CURRENCY_CODES = ["TWD", "USD", "JPY", "CNY"];
-  const ARCHIVE_SORT_MODES = ["price-asc", "price-desc", "date-desc", "date-asc"];
-  const ARCHIVE_DEFAULT_SORT_MODE = "date-desc";
-  const ARCHIVE_SORT_LABELS = {
+  const COLLECTION_SORT_MODES = ["price-asc", "price-desc", "date-desc", "date-asc"];
+  const COLLECTION_DEFAULT_SORT_MODE = "date-desc";
+  const COLLECTION_SORT_LABELS = {
     "date-desc": "Newest",
     "date-asc": "Oldest",
     "price-asc": "Price low–high",
     "price-desc": "Price high–low",
   };
-  /** Basic colour archive filter: uses stored `basicColour` only when set; otherwise infers from colour / fabric / codes. */
+  /** Basic colour collection filter: uses stored `basicColour` only when set; otherwise infers from colour / fabric / codes. */
   const BASIC_COLOUR_FILTER_KEY = "timeless-wardrobe-basic-colour-v1";
 
   /** Approximate FX vs USD — display + cross-currency sort only (not live rates). */
   const FX_TO_USD = { USD: 1, TWD: 0.031, JPY: 0.0067, CNY: 0.14 };
 
-  function loadPersistedArchiveSortMode() {
+  function loadPersistedCollectionSortMode() {
     try {
-      const v = String(localStorage.getItem(ARCHIVE_SORT_MODE_KEY) || "").trim();
-      if (ARCHIVE_SORT_MODES.includes(v)) return v;
-      if (v === "archive" || v === "brand-asc" || v === "brand-desc") {
-        return persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
+      const v = String(localStorage.getItem(COLLECTION_SORT_MODE_KEY) || "").trim();
+      if (COLLECTION_SORT_MODES.includes(v)) return v;
+      if (v === "collection" || v === "brand-asc" || v === "brand-desc") {
+        return persistCollectionSortMode(COLLECTION_DEFAULT_SORT_MODE);
       }
     } catch {
       /* */
     }
-    return persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
+    return persistCollectionSortMode(COLLECTION_DEFAULT_SORT_MODE);
   }
 
-  function normalizeArchiveSortMode(mode) {
+  function normalizeCollectionSortMode(mode) {
     const v = String(mode ?? "").trim();
-    return ARCHIVE_SORT_MODES.includes(v) ? v : ARCHIVE_DEFAULT_SORT_MODE;
+    return COLLECTION_SORT_MODES.includes(v) ? v : COLLECTION_DEFAULT_SORT_MODE;
   }
 
-  function archiveSortLabel(mode = archiveSortMode) {
-    return ARCHIVE_SORT_LABELS[normalizeArchiveSortMode(mode)] ?? ARCHIVE_SORT_LABELS[ARCHIVE_DEFAULT_SORT_MODE];
+  function collectionSortLabel(mode = collectionSortMode) {
+    return COLLECTION_SORT_LABELS[normalizeCollectionSortMode(mode)] ?? COLLECTION_SORT_LABELS[COLLECTION_DEFAULT_SORT_MODE];
   }
 
-  function persistArchiveSortMode(v) {
-    const ok = ARCHIVE_SORT_MODES.includes(v) ? v : ARCHIVE_DEFAULT_SORT_MODE;
+  function persistCollectionSortMode(v) {
+    const ok = COLLECTION_SORT_MODES.includes(v) ? v : COLLECTION_DEFAULT_SORT_MODE;
     try {
-      localStorage.setItem(ARCHIVE_SORT_MODE_KEY, ok);
+      localStorage.setItem(COLLECTION_SORT_MODE_KEY, ok);
     } catch {
       /* */
     }
     return ok;
   }
 
-  function syncArchiveSortChipUi() {
-    const drawer = document.getElementById("archive-filter-drawer");
+  function syncCollectionSortChipUi() {
+    const drawer = document.getElementById("collection-filter-drawer");
     if (!drawer) return;
-    archiveSortMode = normalizeArchiveSortMode(archiveSortMode);
+    collectionSortMode = normalizeCollectionSortMode(collectionSortMode);
     let matched = false;
-    drawer.querySelectorAll("[data-archive-sort]").forEach((btn) => {
-      const v = String(btn.getAttribute("data-archive-sort") ?? "").trim();
-      const on = v === archiveSortMode;
+    drawer.querySelectorAll("[data-collection-sort]").forEach((btn) => {
+      const v = String(btn.getAttribute("data-collection-sort") ?? "").trim();
+      const on = v === collectionSortMode;
       if (on) matched = true;
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
     if (!matched) {
-      archiveSortMode = persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
-      drawer.querySelectorAll("[data-archive-sort]").forEach((btn) => {
-        const v = String(btn.getAttribute("data-archive-sort") ?? "").trim();
-        const on = v === archiveSortMode;
+      collectionSortMode = persistCollectionSortMode(COLLECTION_DEFAULT_SORT_MODE);
+      drawer.querySelectorAll("[data-collection-sort]").forEach((btn) => {
+        const v = String(btn.getAttribute("data-collection-sort") ?? "").trim();
+        const on = v === collectionSortMode;
         btn.classList.toggle("is-active", on);
         btn.setAttribute("aria-pressed", on ? "true" : "false");
       });
     }
-    const heading = document.getElementById("archive-drawer-sort-heading");
+    const heading = document.getElementById("collection-drawer-sort-heading");
     if (heading) {
-      heading.textContent = `Sort by · ${archiveSortLabel()}`;
+      heading.textContent = `Sort by · ${collectionSortLabel()}`;
     }
   }
 
-  function syncArchiveFilterDrawerDoneLabel(n) {
-    if (!document.body.classList.contains("archive-ui--filter-drawer")) return;
-    const doneBtn = document.getElementById("archive-filter-drawer-done");
+  function syncCollectionFilterDrawerDoneLabel(n) {
+    if (!document.body.classList.contains("collection-ui--filter-drawer")) return;
+    const doneBtn = document.getElementById("collection-filter-drawer-done");
     if (!doneBtn) return;
     const c = Number.isFinite(Number(n)) ? Number(n) : applyFilters(items).length;
     doneBtn.textContent = c > 0 ? `Done (${c})` : "Done";
@@ -1013,9 +1029,9 @@
     return n;
   }
 
-  let archiveSortMode = loadPersistedArchiveSortMode();
-  /** Archive list prices are converted to TWD for totals, sort, and card display. */
-  const archiveDisplayCurrency = "TWD";
+  let collectionSortMode = loadPersistedCollectionSortMode();
+  /** COLLECTION list prices are converted to TWD for totals, sort, and card display. */
+  const collectionDisplayCurrency = "TWD";
   /** @type {Set<string>} */
   let basicColourFilters = loadPersistedBasicColourFilters();
   /** @type {Set<string>} */
@@ -1451,7 +1467,7 @@
   }
 
   /**
-   * Display-only rounding for archive / cards / spend total.
+   * Display-only rounding for collection / cards / spend total.
    * Currencies without minor units (0 fraction digits, e.g. JPY/KRW/TWD) are half-up rounded on screen.
    * `item.price` storage stays unchanged.
    */
@@ -1501,26 +1517,26 @@
   }
 
   /** Stored `item.price` is per colourway; multiply for spend / sort when `colourVariants` exist. */
-  function archivePriceColourVariantCount(item) {
+  function collectionPriceColourVariantCount(item) {
     const vars = getItemColourVariants(item);
     return vars?.length ? vars.length : 1;
   }
 
-  function formattedArchivePriceLine(item, opts = {}) {
+  function formattedCollectionPriceLine(item, opts = {}) {
     const brief = Boolean(opts?.brief);
     const p = item?.price;
     if (!Number.isFinite(Number(p))) return "";
     const from = String(item?.priceCurrency ?? "TWD").toUpperCase();
-    const convertedUnit = convertPriceAmount(Number(p), from, archiveDisplayCurrency);
+    const convertedUnit = convertPriceAmount(Number(p), from, collectionDisplayCurrency);
     if (!Number.isFinite(convertedUnit)) return "";
-    const n = archivePriceColourVariantCount(item);
+    const n = collectionPriceColourVariantCount(item);
     const convertedTotal = convertedUnit * n;
 
-    const unitShown = formatMoneyInCurrency(convertedUnit, archiveDisplayCurrency);
-    const totalShown = formatMoneyInCurrency(convertedTotal, archiveDisplayCurrency);
+    const unitShown = formatMoneyInCurrency(convertedUnit, collectionDisplayCurrency);
+    const totalShown = formatMoneyInCurrency(convertedTotal, collectionDisplayCurrency);
 
     if (n <= 1) {
-      if (from !== archiveDisplayCurrency) {
+      if (from !== collectionDisplayCurrency) {
         const raw = formatMoneyInCurrency(Number(p), from);
         if (brief) return unitShown;
         return `${unitShown} (${raw})`;
@@ -1528,7 +1544,7 @@
       return unitShown;
     }
 
-    if (from !== archiveDisplayCurrency) {
+    if (from !== collectionDisplayCurrency) {
       const rawUnit = formatMoneyInCurrency(Number(p), from);
       const rawTotalFmt = formatMoneyInCurrency(Number(p) * n, from);
       if (brief) return totalShown;
@@ -1551,9 +1567,9 @@
     const p = item?.price;
     if (!Number.isFinite(Number(p))) return null;
     const from = String(item?.priceCurrency ?? "TWD").toUpperCase();
-    const unit = convertPriceAmount(Number(p), from, archiveDisplayCurrency);
+    const unit = convertPriceAmount(Number(p), from, collectionDisplayCurrency);
     if (!Number.isFinite(unit)) return null;
-    const v = unit * archivePriceColourVariantCount(item);
+    const v = unit * collectionPriceColourVariantCount(item);
     return Number.isFinite(v) ? v : null;
   }
 
@@ -1593,7 +1609,7 @@
   let fileBackedCustomItems = [];
 
 
-  /** Top-level archive category (filter + add-item). */
+  /** Top-level collection category (filter + add-item). */
   const SLOT_CLOTHING = "Clothing";
   const SLOT_ACCESSORIES = "Accessories";
   const SLOT_WATCHES = "Watches";
@@ -1625,7 +1641,7 @@
   /** @returns {{ slot: string, slug: string, legacy: boolean } | null} */
   function parseCollectionLocationPath(pathname) {
     const path = String(pathname ?? "").replace(/\/$/, "") || "/";
-    if (path === "/archive" || path === "/archive.html") return { slot: "", slug: "", legacy: true };
+    if (path === "/collection" || path === "/collection.html") return { slot: "", slug: "", legacy: true };
     const m = path.match(/^\/collection(?:\.html)?(?:\/([a-z]+))?$/i);
     if (!m) return null;
     const slug = String(m[1] ?? "").toLowerCase();
@@ -1665,7 +1681,7 @@
     if (!parsed) return;
     const slot = String(parsed.slot ?? "").trim();
     if (SLOT_OPTIONS.includes(slot)) categoryNavFilter = slot;
-    else if (!peekArchiveBrowseRestoreSnapshot()) categoryNavFilter = "";
+    else if (!peekCollectionBrowseRestoreSnapshot()) categoryNavFilter = "";
     try {
       const type = new URLSearchParams(globalThis.location.search).get("type");
       if (type != null) setSubcategoryFiltersFromString(type);
@@ -1837,7 +1853,7 @@
       const p = item?.price;
       if (Number.isFinite(Number(p))) {
         const cur = String(item?.priceCurrency ?? "TWD").toUpperCase();
-        const n = archivePriceColourVariantCount(item);
+        const n = collectionPriceColourVariantCount(item);
         const total = Number(p) * n;
         lines.push(
           n > 1
@@ -1910,7 +1926,7 @@
     "夏·下装": SLOT_CLOTHING,
   };
 
-  /** Old English granular slots → Clothing (non-archive rows). */
+  /** Old English granular slots → Clothing (non-collection rows). */
   const LEGACY_ENGLISH_GRANULAR_SLOT = {
     "Winter · Upper": SLOT_CLOTHING,
     "Winter · Lower": SLOT_CLOTHING,
@@ -1920,7 +1936,7 @@
     "Summer · Lower": SLOT_CLOTHING,
   };
 
-  /** Disambiguate former “archive accessories” bucket using record `category` only. */
+  /** Disambiguate former “collection accessories” bucket using record `category` only. */
   function inferAccessoryBucket(item) {
     const cat = String(item.category ?? "").trim();
     if (
@@ -1976,7 +1992,7 @@
     if (rawCat === "Clothing (incl. shoes)") return SLOT_CLOTHING;
 
     if (LEGACY_SLOT_LABEL[rawCat]) return LEGACY_SLOT_LABEL[rawCat];
-    if (rawCat === "典藏·配件" || rawCat === "Archive · Accessories") return inferAccessoryBucket(item);
+    if (rawCat === "典藏·配件" || rawCat === "Collection · Accessories") return inferAccessoryBucket(item);
     if (Object.prototype.hasOwnProperty.call(LEGACY_ENGLISH_GRANULAR_SLOT, rawCat)) {
       return LEGACY_ENGLISH_GRANULAR_SLOT[rawCat];
     }
@@ -2060,7 +2076,7 @@
     );
   }
 
-  /** Outfit builder: clothing, shoes, watches, and accessories — jewellery and perfume stay archive-only. */
+  /** Outfit builder: clothing, shoes, watches, and accessories — jewellery and perfume stay collection-only. */
   function itemEligibleForOutfit(item) {
     if (!item) return false;
     const s = itemSlot(item);
@@ -2630,7 +2646,7 @@
     return o;
   }
 
-  /** Persist a just-saved row across `item.html` → archive navigation (cloud list can lag). */
+  /** Persist a just-saved row across `item.html` → collection navigation (cloud list can lag). */
   function pinWardrobeSaveToSession(row) {
     const id = String(row?.id ?? "").trim();
     if (!id) return;
@@ -2866,14 +2882,14 @@
   /**
    * Supabase is canonical: push any rows that still exist only outside cloud
    * (seed catalogue + browser/file custom rows) into `wardrobe_items`.
-   * Skips any id listed in `archive_hidden_ids` so user-deleted catalogue rows are not revived by deferred backfill.
+   * Skips any id listed in `collection_hidden_ids` so user-deleted catalogue rows are not revived by deferred backfill.
    * @param {object[]} cloudRows current rows fetched from Supabase (or a snapshot thereof)
    * @returns {Promise<{ synced: number, failed: number }>}
    */
   async function syncMissingRowsToSupabase(cloudRows) {
     if (!isSupabaseReady()) return { synced: 0, failed: 0 };
     const cloudIds = new Set((cloudRows || []).map((r) => String(r?.id ?? "").trim()).filter(Boolean));
-    const buriedIds = loadArchiveHiddenIds();
+    const buriedIds = loadCollectionHiddenIds();
 
     /** @type {Map<string, object>} */
     const candidatesById = new Map();
@@ -2938,10 +2954,10 @@
   /** @type {Map<string, string>} */
   let wardrobeSearchIndex = new Map();
 
-  /** Memoised filtered + sorted archive list for the main grid. */
-  let archiveSortedCacheKey = "";
+  /** Memoised filtered + sorted collection list for the main grid. */
+  let collectionSortedCacheKey = "";
   /** @type {object[] | null} */
-  let archiveSortedCache = null;
+  let collectionSortedCache = null;
 
   const GRID_DENSE_ANIMATION_THRESHOLD = 40;
 
@@ -3163,7 +3179,7 @@
   }
 
   /**
-   * One-file snapshot of browser-only state (custom rows, archive overrides, hidden ids, outfits, UI prefs).
+   * One-file snapshot of browser-only state (custom rows, collection overrides, hidden ids, outfits, UI prefs).
    * Does not replace Supabase sync — use when cloud is off or as an extra safety copy.
    */
   function downloadBrowserWardrobeBackupJson() {
@@ -3175,8 +3191,8 @@
       wardrobeItemsText: textLocal.items,
       wardrobeTextLocal: textLocal,
       customItems: loadCustomItems(),
-      archiveOverrides: loadArchiveOverrides(),
-      archiveHiddenIds: [...loadArchiveHiddenIds()],
+      collectionOverrides: loadCollectionOverrides(),
+      collectionHiddenIds: [...loadCollectionHiddenIds()],
       outfits: {
         version: OUTFIT_STORAGE_VERSION,
         outfits: savedOutfits.map((o) => ({
@@ -3188,7 +3204,7 @@
         })),
       },
       seasonNav: readSeasonNavFromLocalStorage(),
-      archiveSortMode: loadPersistedArchiveSortMode(),
+      collectionSortMode: loadPersistedCollectionSortMode(),
       displayCurrency: "TWD",
       basicColourFilter: loadPersistedBasicColourFilter(),
     };
@@ -3327,12 +3343,12 @@
     return "";
   }
 
-  function isArchiveLocation() {
+  function isCollectionLocation() {
     return isCollectionLocation();
   }
 
   function readSeasonNavFromUrl() {
-    if (!isArchiveLocation()) return null;
+    if (!isCollectionLocation()) return null;
     try {
       return normalizeSeasonNavToken(new URLSearchParams(globalThis.location.search).get("season"));
     } catch {
@@ -3340,8 +3356,8 @@
     }
   }
 
-  function archiveUrlHasSeasonParam() {
-    if (!isArchiveLocation()) return false;
+  function collectionUrlHasSeasonParam() {
+    if (!isCollectionLocation()) return false;
     try {
       return new URLSearchParams(globalThis.location.search).has("season");
     } catch {
@@ -3350,7 +3366,7 @@
   }
 
   function loadPersistedSeasonNav() {
-    if (isArchiveLocation()) return readSeasonNavFromUrl();
+    if (isCollectionLocation()) return readSeasonNavFromUrl();
     return readSeasonNavFromLocalStorage();
   }
 
@@ -3364,15 +3380,15 @@
     }
   }
 
-  /** In-memory archive state; persisted to Supabase when configured (else localStorage). */
+  /** In-memory collection state; persisted to Supabase when configured (else localStorage). */
   /** @type {Record<string, object>} */
-  let archiveOverridesState = {};
+  let collectionOverridesState = {};
   /** @type {Set<string>} */
-  let archiveHiddenState = new Set();
+  let collectionHiddenState = new Set();
 
-  function readArchiveOverridesFromLocalStorageRaw() {
+  function readCollectionOverridesFromLocalStorageRaw() {
     try {
-      const raw = localStorage.getItem(ITEM_ARCHIVE_OVERRIDES_KEY);
+      const raw = localStorage.getItem(ITEM_COLLECTION_OVERRIDES_KEY);
       if (!raw) return {};
       const p = JSON.parse(raw);
       return p && typeof p === "object" && !Array.isArray(p) ? p : {};
@@ -3381,9 +3397,9 @@
     }
   }
 
-  function readArchiveHiddenIdsFromLocalStorageRaw() {
+  function readCollectionHiddenIdsFromLocalStorageRaw() {
     try {
-      const raw = localStorage.getItem(ARCHIVE_HIDDEN_IDS_KEY);
+      const raw = localStorage.getItem(COLLECTION_HIDDEN_IDS_KEY);
       if (!raw) return [];
       const p = JSON.parse(raw);
       if (!Array.isArray(p)) return [];
@@ -3393,20 +3409,20 @@
     }
   }
 
-  function installArchiveStateFromPayload(overrides, hiddenIds) {
-    archiveOverridesState =
+  function installCollectionStateFromPayload(overrides, hiddenIds) {
+    collectionOverridesState =
       overrides && typeof overrides === "object" && !Array.isArray(overrides) ? { ...overrides } : {};
-    archiveHiddenState = new Set(Array.isArray(hiddenIds) ? hiddenIds.map((x) => String(x)) : []);
+    collectionHiddenState = new Set(Array.isArray(hiddenIds) ? hiddenIds.map((x) => String(x)) : []);
   }
 
   function applySeasonNavFromLocalStorage() {
-    seasonNavFilter = isArchiveLocation() ? readSeasonNavFromUrl() : readSeasonNavFromLocalStorage();
+    seasonNavFilter = isCollectionLocation() ? readSeasonNavFromUrl() : readSeasonNavFromLocalStorage();
   }
 
-  function hydrateArchiveStateFromLocalStorageOnly() {
-    installArchiveStateFromPayload(
-      readArchiveOverridesFromLocalStorageRaw(),
-      readArchiveHiddenIdsFromLocalStorageRaw()
+  function hydrateCollectionStateFromLocalStorageOnly() {
+    installCollectionStateFromPayload(
+      readCollectionOverridesFromLocalStorageRaw(),
+      readCollectionHiddenIdsFromLocalStorageRaw()
     );
     applySeasonNavFromLocalStorage();
   }
@@ -3415,42 +3431,42 @@
     if (!isSupabaseReady()) return;
     const row = {
       id: "default",
-      archive_overrides: archiveOverridesState,
-      archive_hidden_ids: [...archiveHiddenState],
+      collection_overrides: collectionOverridesState,
+      collection_hidden_ids: [...collectionHiddenState],
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabaseClient.from("wardrobe_app_state").upsert(row, { onConflict: "id" });
     if (error) throw error;
   }
 
-  async function hydrateArchiveAndSeasonState() {
+  async function hydrateCollectionAndSeasonState() {
     if (!isSupabaseReady()) {
-      hydrateArchiveStateFromLocalStorageOnly();
+      hydrateCollectionStateFromLocalStorageOnly();
       return;
     }
 
-    const lsOv = readArchiveOverridesFromLocalStorageRaw();
-    const lsH = readArchiveHiddenIdsFromLocalStorageRaw();
+    const lsOv = readCollectionOverridesFromLocalStorageRaw();
+    const lsH = readCollectionHiddenIdsFromLocalStorageRaw();
 
     const { data, error } = await supabaseClient
       .from("wardrobe_app_state")
-      .select("archive_overrides, archive_hidden_ids")
+      .select("collection_overrides, collection_hidden_ids")
       .eq("id", "default")
       .maybeSingle();
 
     if (error) {
       console.warn("wardrobe_app_state:", error);
-      hydrateArchiveStateFromLocalStorageOnly();
+      hydrateCollectionStateFromLocalStorageOnly();
       return;
     }
 
     if (!data) {
-      installArchiveStateFromPayload(lsOv, lsH);
+      installCollectionStateFromPayload(lsOv, lsH);
       applySeasonNavFromLocalStorage();
       try {
         await flushWardrobeAppStateToSupabase();
-        localStorage.removeItem(ITEM_ARCHIVE_OVERRIDES_KEY);
-        localStorage.removeItem(ARCHIVE_HIDDEN_IDS_KEY);
+        localStorage.removeItem(ITEM_COLLECTION_OVERRIDES_KEY);
+        localStorage.removeItem(COLLECTION_HIDDEN_IDS_KEY);
       } catch (e) {
         console.warn("wardrobe_app_state bootstrap insert:", e);
       }
@@ -3458,10 +3474,10 @@
     }
 
     let overrides =
-      data.archive_overrides && typeof data.archive_overrides === "object" && !Array.isArray(data.archive_overrides)
-        ? { ...data.archive_overrides }
+      data.collection_overrides && typeof data.collection_overrides === "object" && !Array.isArray(data.collection_overrides)
+        ? { ...data.collection_overrides }
         : {};
-    let hidden = Array.isArray(data.archive_hidden_ids) ? data.archive_hidden_ids.map((x) => String(x)) : [];
+    let hidden = Array.isArray(data.collection_hidden_ids) ? data.collection_hidden_ids.map((x) => String(x)) : [];
     let migrated = false;
 
     if (!Object.keys(overrides).length && Object.keys(lsOv).length) {
@@ -3473,41 +3489,41 @@
       migrated = true;
     }
 
-    installArchiveStateFromPayload(overrides, hidden);
+    installCollectionStateFromPayload(overrides, hidden);
     applySeasonNavFromLocalStorage();
 
     if (migrated) {
       try {
         await flushWardrobeAppStateToSupabase();
-        localStorage.removeItem(ITEM_ARCHIVE_OVERRIDES_KEY);
-        localStorage.removeItem(ARCHIVE_HIDDEN_IDS_KEY);
+        localStorage.removeItem(ITEM_COLLECTION_OVERRIDES_KEY);
+        localStorage.removeItem(COLLECTION_HIDDEN_IDS_KEY);
       } catch (e) {
-        console.warn("Migrate archive state to Supabase failed.", e);
+        console.warn("Migrate collection state to Supabase failed.", e);
       }
     } else if (Object.keys(lsOv).length || lsH.length) {
       try {
-        localStorage.removeItem(ITEM_ARCHIVE_OVERRIDES_KEY);
-        localStorage.removeItem(ARCHIVE_HIDDEN_IDS_KEY);
+        localStorage.removeItem(ITEM_COLLECTION_OVERRIDES_KEY);
+        localStorage.removeItem(COLLECTION_HIDDEN_IDS_KEY);
       } catch {
         /* ignore */
       }
     }
   }
 
-  function loadArchiveOverrides() {
-    return { ...archiveOverridesState };
+  function loadCollectionOverrides() {
+    return { ...collectionOverridesState };
   }
 
-  async function saveArchiveOverrides(map) {
-    archiveOverridesState = map && typeof map === "object" && !Array.isArray(map) ? { ...map } : {};
+  async function saveCollectionOverrides(map) {
+    collectionOverridesState = map && typeof map === "object" && !Array.isArray(map) ? { ...map } : {};
     if (!isSupabaseReady()) {
       try {
-        localStorage.setItem(ITEM_ARCHIVE_OVERRIDES_KEY, JSON.stringify(archiveOverridesState));
+        localStorage.setItem(ITEM_COLLECTION_OVERRIDES_KEY, JSON.stringify(collectionOverridesState));
       } catch (e) {
         const q = /** @type {any} */ (e);
         if (q?.name === "QuotaExceededError" || q?.code === 22) {
           const ex = /** @type {any} */ (new Error("quota"));
-          ex.archiveOverrides = true;
+          ex.collectionOverrides = true;
           throw ex;
         }
         throw e;
@@ -3520,9 +3536,9 @@
   /**
    * Full in-memory row for cloud upsert when editing a catalogue (non-custom) piece.
    * @param {object} prev
-   * @param {Record<string, unknown>} patch same shape as archive override patch
+   * @param {Record<string, unknown>} patch same shape as collection override patch
    */
-  function mergeArchivePatchIntoFullItem(prev, patch) {
+  function mergeCollectionPatchIntoFullItem(prev, patch) {
     if (!prev || typeof prev !== "object") return /** @type {any} */ ({});
     const id = String(prev.id ?? "").trim();
     const out = /** @type {Record<string, unknown>} */ ({ ...prev });
@@ -3538,15 +3554,15 @@
     return /** @type {any} */ (out);
   }
 
-  function loadArchiveHiddenIds() {
-    return new Set(archiveHiddenState);
+  function loadCollectionHiddenIds() {
+    return new Set(collectionHiddenState);
   }
 
-  async function saveArchiveHiddenIds(set) {
-    archiveHiddenState = new Set(set);
+  async function saveCollectionHiddenIds(set) {
+    collectionHiddenState = new Set(set);
     if (!isSupabaseReady()) {
       try {
-        localStorage.setItem(ARCHIVE_HIDDEN_IDS_KEY, JSON.stringify([...archiveHiddenState]));
+        localStorage.setItem(COLLECTION_HIDDEN_IDS_KEY, JSON.stringify([...collectionHiddenState]));
       } catch (e) {
         throw e;
       }
@@ -3561,19 +3577,19 @@
   }
 
   function mergeWardrobeFromSources() {
-    const ov = loadArchiveOverrides();
-    const hiddenArchive = loadArchiveHiddenIds();
+    const ov = loadCollectionOverrides();
+    const hiddenCollection = loadCollectionHiddenIds();
     const mergedBase = wardrobeBase
       .filter((row) => {
         if (!row || row.id == null) return false;
-        return !hiddenArchive.has(String(row.id));
+        return !hiddenCollection.has(String(row.id));
       })
       .map((row, idx) => {
         if (!row || row.id == null) return row;
         const id = String(row.id);
         const patch = ov[id];
         const base = patch && typeof patch === "object" ? { ...row, ...patch, id } : { ...row };
-        return { ...base, __archiveOrdinal: idx };
+        return { ...base, __collectionOrdinal: idx };
       });
     slotRecordFallbackCategory = computeSlotRecordFallbackCategories(mergedBase);
     const mergedList = isCloudModeActive() ? [...mergedBase] : [...loadCustomItems(), ...mergedBase];
@@ -3598,8 +3614,8 @@
     rebuildWardrobeSearchIndex();
     coverResolutionCache.clear();
     wardrobeRevision += 1;
-    archiveSortedCacheKey = "";
-    archiveSortedCache = null;
+    collectionSortedCacheKey = "";
+    collectionSortedCache = null;
     syncHeaderSearchFeaturedSubcategoryCards();
   }
 
@@ -3612,35 +3628,35 @@
     wardrobeSearchIndex = next;
   }
 
-  function invalidateArchiveSortedCache() {
-    archiveSortedCacheKey = "";
-    archiveSortedCache = null;
+  function invalidateCollectionSortedCache() {
+    collectionSortedCacheKey = "";
+    collectionSortedCache = null;
   }
 
-  function buildArchiveSortedCacheKey() {
+  function buildCollectionSortedCacheKey() {
     return [
       wardrobeRevision,
       seasonNavFilter,
       categoryNavFilter,
       subcategoryFiltersKey(),
-      String(archiveSubmittedSearchNorm ?? "").trim(),
-      String(archiveSearchWithinRecordCategory ?? "").trim(),
-      archiveSearchBrowseAllSlots ? "1" : "0",
+      String(collectionSubmittedSearchNorm ?? "").trim(),
+      String(collectionSearchWithinRecordCategory ?? "").trim(),
+      collectionSearchBrowseAllSlots ? "1" : "0",
       serializeFilterListParam(basicColourFilters),
       [...selectedBrandFilters].sort().join("\x1f"),
-      archiveSortMode,
-      archiveDisplayCurrency,
+      collectionSortMode,
+      collectionDisplayCurrency,
     ].join("\x1e");
   }
 
-  /** Filtered then sorted archive rows — one pass per filter state (memoised). */
-  function getArchiveSortedDataset() {
-    const key = buildArchiveSortedCacheKey();
-    if (key === archiveSortedCacheKey && archiveSortedCache) return archiveSortedCache;
+  /** Filtered then sorted collection rows — one pass per filter state (memoised). */
+  function getCollectionSortedDataset() {
+    const key = buildCollectionSortedCacheKey();
+    if (key === collectionSortedCacheKey && collectionSortedCache) return collectionSortedCache;
     const filtered = applyFilters(items);
-    archiveSortedCache = [...filtered].sort(compareGridItems);
-    archiveSortedCacheKey = key;
-    return archiveSortedCache;
+    collectionSortedCache = [...filtered].sort(compareGridItems);
+    collectionSortedCacheKey = key;
+    return collectionSortedCache;
   }
 
   /** Main nav labels — never surface as a “Popular” tile title (redundant with header tabs). */
@@ -4699,7 +4715,7 @@
     return buildItemPageUrl(id).toString();
   }
 
-  /** Homepage curated grids only — archive PLP always uses cover. */
+  /** Homepage curated grids only — collection PLP always uses cover. */
   function homeEditorialCoverSrc(item) {
     const candidates = buildCoverCandidates(item);
     return candidates[0] || String(item?.image ?? "").trim();
@@ -5038,6 +5054,14 @@
     });
   }
 
+  /** @param {HTMLElement} scroller */
+  function refreshHomeHorizontalRailScroller(scroller) {
+    if (!scroller) return;
+    prepareHomeHorizontalRailScroller(scroller);
+    scroller.dispatchEvent(new Event("scroll"));
+    requestAnimationFrame(() => scroller.dispatchEvent(new Event("scroll")));
+  }
+
   /** @param {HTMLElement | null} scroller */
   function wireHomeHorizontalRailScroller(scroller) {
     if (!scroller) return;
@@ -5045,7 +5069,10 @@
     const section = scroller.closest("[data-ed-lp-horizontal-rail]");
     const track = section?.querySelector(".ed-lp__rail-progress");
     const thumb = section?.querySelector(".ed-lp__rail-progress-bar");
-    if (scroller.dataset.horizontalRailWired === "1") return;
+    if (scroller.dataset.horizontalRailWired === "1") {
+      refreshHomeHorizontalRailScroller(scroller);
+      return;
+    }
     scroller.dataset.horizontalRailWired = "1";
 
     scroller.addEventListener(
@@ -5139,7 +5166,8 @@
     }
 
     scroller.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || trackDragActive || e.pointerType === "touch") return;
+      /* Touch/pen: native overflow scroll only (avoid fighting iOS trackpad synthesis). */
+      if (e.button !== 0 || trackDragActive || e.pointerType !== "mouse") return;
       const link =
         e.target instanceof Element ? /** @type {HTMLAnchorElement | null} */ (e.target.closest("a")) : null;
       const dragFromLink = !!(link && scroller.contains(link));
@@ -5182,7 +5210,6 @@
 
     scroller.addEventListener("pointerup", endScrollerDrag);
     scroller.addEventListener("pointercancel", endScrollerDrag);
-    scroller.addEventListener("lostpointercapture", endScrollerDrag);
 
     scroller.addEventListener("scroll", syncUi, { passive: true });
     window.addEventListener("resize", syncUi);
@@ -5243,6 +5270,10 @@
       scroller.appendChild(buildHomeDivisionRailCard(plan));
     }
     wireHomeHorizontalRailScroller(scroller);
+    scroller.querySelectorAll("img").forEach((img) => {
+      if (img.complete) return;
+      img.addEventListener("load", () => refreshHomeHorizontalRailScroller(scroller), { once: true });
+    });
   }
 
   /** @param {object} item */
@@ -5282,7 +5313,7 @@
     title.textContent = displayNameWithoutLeadingColour(item);
     const price = document.createElement("p");
     price.className = "ed-lp__viewed-card-price";
-    const priceLine = formattedArchivePriceLine(item, { brief: true });
+    const priceLine = formattedCollectionPriceLine(item, { brief: true });
     if (priceLine) price.textContent = priceLine;
     else price.hidden = true;
     body.appendChild(brand);
@@ -5354,10 +5385,10 @@
     wireHomeEditorialCardImage(img, item, displaySrc || homeEditorialCoverSrc(item), {
       host: media,
       missingClass: "ed-lp__pcard-media--missing",
-      coverRenderWidth: isGallery ? 840 : ARCHIVE_GRID_CARD_RENDER.width,
-      coverRenderHeight: isGallery ? 1050 : ARCHIVE_GRID_CARD_RENDER.height,
-      coverRenderQuality: isGallery ? 88 : ARCHIVE_GRID_CARD_RENDER.quality,
-      coverRenderResize: isGallery ? "cover" : ARCHIVE_GRID_CARD_RENDER.resize,
+      coverRenderWidth: isGallery ? 840 : COLLECTION_GRID_CARD_RENDER.width,
+      coverRenderHeight: isGallery ? 1050 : COLLECTION_GRID_CARD_RENDER.height,
+      coverRenderQuality: isGallery ? 88 : COLLECTION_GRID_CARD_RENDER.quality,
+      coverRenderResize: isGallery ? "cover" : COLLECTION_GRID_CARD_RENDER.resize,
     });
     const body = document.createElement("div");
     body.className = "ed-lp__pcard-body";
@@ -5410,9 +5441,9 @@
 
     const shouldUseSolidHeader = () => {
       if (!isFiltersNarrowViewport() && homeHeaderRowHover) return true;
-      if (document.body.classList.contains("archive-ui--header-search-open")) return true;
-      if (document.body.classList.contains("archive-ui--header-submenu-open")) return true;
-      if (document.body.classList.contains("archive-ui--styling-board")) return true;
+      if (document.body.classList.contains("collection-ui--header-search-open")) return true;
+      if (document.body.classList.contains("collection-ui--header-submenu-open")) return true;
+      if (document.body.classList.contains("collection-ui--styling-board")) return true;
       const heroBottom = hero.getBoundingClientRect().bottom;
       return heroBottom <= siteHeader.offsetHeight + 4;
     };
@@ -5512,12 +5543,12 @@
     syncCategoryTabUI();
   }
 
-  function wireEditorialLandingPageArchiveLinks() {
+  function wireEditorialLandingPageCollectionLinks() {
     const main = document.getElementById("main");
-    if (!main?.classList.contains("ed-lp") || main.dataset.edArchiveWired === "1") return;
-    main.dataset.edArchiveWired = "1";
+    if (!main?.classList.contains("ed-lp") || main.dataset.edCollectionWired === "1") return;
+    main.dataset.edCollectionWired = "1";
     main.addEventListener("click", (e) => {
-      const link = /** @type {HTMLElement | null} */ (e.target.closest("a[data-ed-archive='1']"));
+      const link = /** @type {HTMLElement | null} */ (e.target.closest("a[data-ed-collection='1']"));
       if (!link || !main.contains(link)) return;
       e.preventDefault();
 
@@ -5526,13 +5557,13 @@
       const seasonOnly = String(link.getAttribute("data-season-filter") ?? "").trim();
       if (isSeasonalEntry && (seasonOnly === "A/W" || seasonOnly === "S/S")) {
         if (!document.getElementById("grid")) {
-          navigateToArchiveSeason(seasonOnly);
+          navigateToCollectionSeason(seasonOnly);
           return;
         }
         enterSeasonalCollection(seasonOnly);
         renderGrid();
         syncToolbarActiveFilterChips();
-        scrollArchiveViewportTop();
+        scrollCollectionViewportTop();
         return;
       }
 
@@ -5543,7 +5574,7 @@
       const clearsSeason = normalizeSeason(season) === "ALL";
       if (selectedSeason || clearsSeason) {
         if (!document.getElementById("grid") && selectedSeason) {
-          navigateToArchiveSeason(season);
+          navigateToCollectionSeason(season);
           return;
         }
         seasonNavFilter = selectedSeason;
@@ -5552,20 +5583,20 @@
         } catch {
           /* ignore */
         }
-        replaceArchiveSeasonQuery(seasonNavFilter);
+        replaceCollectionSeasonQuery(seasonNavFilter);
         syncSeasonTabUI();
       }
-      clearArchiveKeywordColourNarrowing();
-      if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
+      clearCollectionKeywordColourNarrowing();
+      if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
       categoryNavFilter = resolveCategoryJump(jump);
       setOnlySubcategoryFilter(sub);
-      noteArchiveSearchUserChoseMainSlotFilter();
+      noteCollectionSearchUserChoseMainSlotFilter();
       syncCategoryTabUI();
       syncFilterSearchClearVisibility();
       if (!document.getElementById("grid")) {
         validateSubcategoryFilter();
-        writeArchiveBrowseRestoreSnapshot();
-        navigateToArchiveMain({
+        writeCollectionBrowseRestoreSnapshot();
+        navigateToCollectionMain({
           category: resolveCategoryJump(jump),
           subcategory: sub,
           seasonNav: selectedSeason ?? seasonNavFilter,
@@ -5576,7 +5607,7 @@
       renderCategoryDrill();
       renderGrid();
       syncCollectionUrlFromBrowseState({ replace: true });
-      scrollArchiveViewportTop();
+      scrollCollectionViewportTop();
     });
   }
 
@@ -5592,8 +5623,8 @@
   let toastTimer = null;
 
   /** @type {Element | null} */
-  let archiveFilterDrawerFocusReturn = null;
-  let archiveFilterDrawerOpenRaf = 0;
+  let collectionFilterDrawerFocusReturn = null;
+  let collectionFilterDrawerOpenRaf = 0;
 
   /** @type {boolean} */
   let useCloudOutfits = false;
@@ -5605,16 +5636,16 @@
   /** When set, that slot renders in the added hero instead of the strip grid. */
   let stylingBoardAddedRevealKey = null;
   let stylingBoardDrawerFocusReturn = /** @type {Element | null} */ (null);
-  let archivePageScrollLockCount = 0;
-  let archivePageScrollLockY = 0;
+  let collectionPageScrollLockCount = 0;
+  let collectionPageScrollLockY = 0;
 
-  /** Active main-nav slot filter (`itemSlot()`). Empty string = all slots — default archive view. */
+  /** Active main-nav slot filter (`itemSlot()`). Empty string = all slots — default collection view. */
   let categoryNavFilter = "";
 
   /** Top nav underline while desktop mega menu is open (hover); cleared when panel closes. */
   let headerNavOpenSlot = "";
 
-  /** Top strip: "All", "S/S", or "A/W" — narrows archive before category tabs (persisted in localStorage). */
+  /** Top strip: "All", "S/S", or "A/W" — narrows collection before category tabs (persisted in localStorage). */
   let seasonNavFilter = loadPersistedSeasonNav();
 
   /** Within main category: filter by seed `category` (e.g. Jackets); empty set = all types. */
@@ -5622,11 +5653,11 @@
   let subcategoryFilters = new Set();
 
   /**
-   * When false: no record-type drill under the archive toolbar, no header hover mega-menu, and mobile skips the
+   * When false: no record-type drill under the collection toolbar, no header hover mega-menu, and mobile skips the
    * expandable type list — top-level taps jump straight to the full slot grid. Inline `data-subcategory-jump` links and
    * the subcategory filter chip still work.
    */
-  const ARCHIVE_RECORD_TYPE_SUBNAV_ENABLED = true;
+  const COLLECTION_RECORD_TYPE_SUBNAV_ENABLED = true;
 
   /** Item id currently shown on the item page (for edit / delete actions). */
   let detailItemId = null;
@@ -5667,10 +5698,10 @@
     return document.getElementById("item-detail-root");
   }
 
-  /** Standalone item.html: prefer browser back so the archive tab (and in-memory filters) is restored when possible. */
+  /** Standalone item.html: prefer browser back so the collection tab (and in-memory filters) is restored when possible. */
   function installItemPageBackNavigation() {
     if (itemPageBackNavInstalled) return;
-    const back = document.querySelector(".site-header__archive-back, .item-page-header__back");
+    const back = document.querySelector(".site-header__collection-back, .item-page-header__back");
     if (!back) return;
     itemPageBackNavInstalled = true;
     back.addEventListener("click", (e) => {
@@ -5939,7 +5970,7 @@
   }
 
   /**
-   * Families used for archive colour chips and filter. If the user set broad colour anywhere
+   * Families used for collection colour chips and filter. If the user set broad colour anywhere
    * (item, metadata, or a variant), only those keys are used; otherwise text/hex inference.
    * @returns {Set<string>}
    */
@@ -5970,7 +6001,7 @@
     return fams;
   }
 
-  /** First variant whose families include `bucket` (e.g. active archive colour filter). */
+  /** First variant whose families include `bucket` (e.g. active collection colour filter). */
   function firstVariantKeyMatchingBasicColourBucket(item, bucket) {
     if (!bucket) return "";
     const vars = getItemColourVariants(item);
@@ -6081,28 +6112,45 @@
     return subcategoryFilters;
   }
 
+  /** Toolbar category drill — single type at a time (multi-select lives in Filter & Sort drawer only). */
+  function pickSubcategoryFilterFromToolbar(raw) {
+    const key = String(raw ?? "").trim();
+    if (!key) {
+      clearSubcategoryFilters();
+      validateSubcategoryFilters();
+      return subcategoryFilters;
+    }
+    if (subcategoryEntryIsActive(key)) {
+      clearSubcategoryFilters();
+      validateSubcategoryFilters();
+      return subcategoryFilters;
+    }
+    setOnlySubcategoryFilter(key);
+    return subcategoryFilters;
+  }
+
   /**
    * Colour chips reflect the same pool as the main grid: global search hits only when a keyword is active,
    * otherwise season/category/drill (excluding the colour filter itself).
    * @returns {Set<string>}
    */
   function availableBasicColourFamiliesForCurrentContext() {
-    const submitted = String(archiveSubmittedSearchNorm ?? "").trim();
+    const submitted = String(collectionSubmittedSearchNorm ?? "").trim();
     if (submitted) {
       let pool = items.filter((it) => itemMatchesSearch(it, submitted));
-      const wc = String(archiveSearchWithinRecordCategory ?? "").trim();
-      if (wc) pool = pool.filter((it) => itemMatchesArchiveSearchWithinRecordCategory(it, wc));
+      const wc = String(collectionSearchWithinRecordCategory ?? "").trim();
+      if (wc) pool = pool.filter((it) => itemMatchesCollectionSearchWithinRecordCategory(it, wc));
       const f = getFilters();
       const out = new Set();
       for (const item of pool) {
         if (!itemPassesSeasonNav(item, f.seasonNav)) continue;
-        if (!archiveSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) continue;
+        if (!collectionSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) continue;
         if (f.subcategories?.length && !itemMatchesSubcategoryFilters(item, f.category)) continue;
         for (const fam of inferItemBasicColourFamilies(item)) out.add(fam);
       }
       return out;
     }
-    const q = effectiveArchiveKeywordSearchNorm();
+    const q = effectiveCollectionKeywordSearchNorm();
     if (q) {
       const out = new Set();
       for (const item of items) {
@@ -6124,16 +6172,16 @@
 
   /** @returns {Map<string, number>} */
   function basicColourFamilyCountsForCurrentContext() {
-    const submitted = String(archiveSubmittedSearchNorm ?? "").trim();
+    const submitted = String(collectionSubmittedSearchNorm ?? "").trim();
     if (submitted) {
       let pool = items.filter((it) => itemMatchesSearch(it, submitted));
-      const wc = String(archiveSearchWithinRecordCategory ?? "").trim();
-      if (wc) pool = pool.filter((it) => itemMatchesArchiveSearchWithinRecordCategory(it, wc));
+      const wc = String(collectionSearchWithinRecordCategory ?? "").trim();
+      if (wc) pool = pool.filter((it) => itemMatchesCollectionSearchWithinRecordCategory(it, wc));
       const f = getFilters();
       const out = new Map();
       for (const item of pool) {
         if (!itemPassesSeasonNav(item, f.seasonNav)) continue;
-        if (!archiveSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) continue;
+        if (!collectionSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) continue;
         if (f.subcategories?.length && !itemMatchesSubcategoryFilters(item, f.category)) continue;
         for (const fam of inferItemBasicColourFamilies(item)) {
           out.set(fam, (out.get(fam) ?? 0) + 1);
@@ -6141,7 +6189,7 @@
       }
       return out;
     }
-    const q = effectiveArchiveKeywordSearchNorm();
+    const q = effectiveCollectionKeywordSearchNorm();
     if (q) {
       const out = new Map();
       for (const item of items) {
@@ -6302,33 +6350,33 @@
    * While the header search overlay is open, keyword matching for `#grid` stays frozen so typing only updates
    * results inside the overlay (luxury modal behaviour).
    */
-  let headerSearchOverlayArchiveSearchFrozen = false;
+  let headerSearchOverlayCollectionSearchFrozen = false;
   /** @type {string} */
-  let headerSearchOpenArchiveSearchNorm = "";
+  let headerSearchOpenCollectionSearchNorm = "";
   /** Raw trimmed query at overlay open — drives the toolbar chip while frozen. */
   let headerSearchOverlayOpeningQueryRaw = /** @type {string | null} */ (null);
   let headerSearchOverlayUiDebounceTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 
-  /** Committed keyword search for the main archive grid (Ralph Lauren–style PLP). Empty when browsing. */
-  let archiveSubmittedSearchNorm = "";
-  let archiveSubmittedSearchRaw = "";
+  /** Committed keyword search for the main collection grid (Ralph Lauren–style PLP). Empty when browsing. */
+  let collectionSubmittedSearchNorm = "";
+  let collectionSubmittedSearchRaw = "";
   /** Raw `recordCategoryForDrill` token; empty means “All” within the current keyword hit pool. */
-  let archiveSearchWithinRecordCategory = "";
+  let collectionSearchWithinRecordCategory = "";
   /** After first submit from browse: show hits across every slot until the user picks a main category tab. */
-  let archiveSearchBrowseAllSlots = false;
+  let collectionSearchBrowseAllSlots = false;
   /** Snapshot of browse filters taken when entering submitted search from browse (restored on CLEAR). */
-  let archiveSearchReturnSnapshot = /** @type {{ seasonNav: string; category: string; subcategory: string; basicColour: string } | null} */ (
+  let collectionSearchReturnSnapshot = /** @type {{ seasonNav: string; category: string; subcategory: string; basicColour: string } | null} */ (
     null
   );
 
-  function effectiveArchiveKeywordSearchNorm() {
-    if (headerSearchOverlayArchiveSearchFrozen) return headerSearchOpenArchiveSearchNorm;
-    return archiveSubmittedSearchNorm;
+  function effectiveCollectionKeywordSearchNorm() {
+    if (headerSearchOverlayCollectionSearchFrozen) return headerSearchOpenCollectionSearchNorm;
+    return collectionSubmittedSearchNorm;
   }
 
-  /** Committed archive keyword search (main PLP), not header overlay typing. */
-  function isArchiveSearchResultsMode() {
-    return Boolean(String(archiveSubmittedSearchNorm ?? "").trim());
+  /** Committed collection keyword search (main PLP), not header overlay typing. */
+  function isCollectionSearchResultsMode() {
+    return Boolean(String(collectionSubmittedSearchNorm ?? "").trim());
   }
 
   function normalizeSearchResultFilterKey(label) {
@@ -6342,7 +6390,7 @@
     return friendlyRecordCategory(raw) || raw;
   }
 
-  function itemMatchesArchiveSearchWithinRecordCategory(item, filterKey) {
+  function itemMatchesCollectionSearchWithinRecordCategory(item, filterKey) {
     const want = normalizeSearchResultFilterKey(filterKey);
     if (!want) return true;
     return normalizeSearchResultFilterKey(searchResultFilterLabelForItem(item)) === want;
@@ -6351,7 +6399,7 @@
   function searchResultFilterDisplayLabelFromKey(normKey) {
     const key = String(normKey ?? "").trim();
     if (!key) return "";
-    const q = String(archiveSubmittedSearchNorm ?? "").trim();
+    const q = String(collectionSubmittedSearchNorm ?? "").trim();
     if (q) {
       for (const it of items) {
         if (!itemMatchesSearch(it, q)) continue;
@@ -6402,7 +6450,7 @@
   }
 
   function relocateFilterSearchFieldIntoPlpAnchor() {
-    const anchor = document.getElementById("archive-search-results-plp-field-anchor");
+    const anchor = document.getElementById("collection-search-results-plp-field-anchor");
     const field = document.querySelector(".filters__search-field");
     if (!anchor || !field) return;
     if (field.parentElement === anchor) return;
@@ -6411,26 +6459,26 @@
 
   function syncFilterSearchFieldDomPlacement() {
     if (isHeaderSearchWrapOpen()) relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
-    else if (archiveSubmittedSearchNorm) relocateFilterSearchFieldIntoPlpAnchor();
+    else if (collectionSubmittedSearchNorm) relocateFilterSearchFieldIntoPlpAnchor();
     else relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
   }
 
-  function exitArchiveSearchPlpRestoreBrowse(options = {}) {
+  function exitCollectionSearchPlpRestoreBrowse(options = {}) {
     const skipRestore = Boolean(options.skipRestore);
     cancelSearchGridDebounce();
     cancelHeaderSearchOverlayUiDebounce();
-    archiveSubmittedSearchNorm = "";
-    archiveSubmittedSearchRaw = "";
-    archiveSearchWithinRecordCategory = "";
-    archiveSearchBrowseAllSlots = false;
-    document.body.classList.remove("archive-ui--search-results-plp");
-    if (!skipRestore && archiveSearchReturnSnapshot) {
-      const s = archiveSearchReturnSnapshot;
+    collectionSubmittedSearchNorm = "";
+    collectionSubmittedSearchRaw = "";
+    collectionSearchWithinRecordCategory = "";
+    collectionSearchBrowseAllSlots = false;
+    document.body.classList.remove("collection-ui--search-results-plp");
+    if (!skipRestore && collectionSearchReturnSnapshot) {
+      const s = collectionSearchReturnSnapshot;
       seasonNavFilter = normalizeSeasonNavToken(s.seasonNav);
       categoryNavFilter = s.category;
       setSubcategoryFiltersFromString(s.subcategory || "");
       persistBasicColourFilter(s.basicColour || "");
-      archiveSearchReturnSnapshot = null;
+      collectionSearchReturnSnapshot = null;
       try {
         persistSeasonNav();
       } catch {
@@ -6442,7 +6490,7 @@
       renderCategoryDrill();
       syncBasicColourFilterChipUi();
     } else {
-      archiveSearchReturnSnapshot = null;
+      collectionSearchReturnSnapshot = null;
     }
     if (els.search) els.search.value = "";
     resetHeaderSearchOverlayResultsDom();
@@ -6451,7 +6499,7 @@
     syncSearchKeywordChip();
   }
 
-  function submitArchiveSearchFromInput() {
+  function submitCollectionSearchFromInput() {
     cancelSearchGridDebounce();
     cancelHeaderSearchOverlayUiDebounce();
     const raw = String(els.search?.value ?? "").trim();
@@ -6465,28 +6513,28 @@
     if (!document.getElementById("grid")) {
       if (norm) {
         try {
-          writeArchiveBrowseRestoreSnapshot({ search: raw });
+          writeCollectionBrowseRestoreSnapshot({ search: raw });
         } catch {
           /* ignore */
         }
       }
       validateSubcategoryFilter();
-      navigateToArchiveMain();
+      navigateToCollectionMain();
       return;
     }
 
 
     if (!norm) {
-      if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse();
+      if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse();
       syncFilterSearchClearVisibility();
       syncFilterSearchFieldDomPlacement();
       renderGrid();
       return;
     }
 
-    const firstEntryFromBrowse = !archiveSubmittedSearchNorm;
+    const firstEntryFromBrowse = !collectionSubmittedSearchNorm;
     if (firstEntryFromBrowse) {
-      archiveSearchReturnSnapshot = {
+      collectionSearchReturnSnapshot = {
         seasonNav: seasonNavFilter,
         category: categoryNavFilter,
         subcategory: serializeFilterListParam(subcategoryFilters),
@@ -6501,31 +6549,31 @@
       syncSeasonTabUI();
       clearSubcategoryFilters();
       persistBasicColourFilters(new Set());
-      archiveSearchBrowseAllSlots = true;
+      collectionSearchBrowseAllSlots = true;
       categoryNavFilter = "";
       syncCategoryTabUI();
       validateSubcategoryFilter();
     } else {
-      archiveSearchWithinRecordCategory = "";
+      collectionSearchWithinRecordCategory = "";
     }
 
-    invalidateArchiveSortedCache();
-    archiveSubmittedSearchNorm = norm;
-    archiveSubmittedSearchRaw = raw;
-    document.body.classList.remove("archive-ui--search-results-plp");
+    invalidateCollectionSortedCache();
+    collectionSubmittedSearchNorm = norm;
+    collectionSubmittedSearchRaw = raw;
+    document.body.classList.remove("collection-ui--search-results-plp");
     renderCategoryDrill();
     syncFilterSearchFieldDomPlacement();
-    syncArchiveSearchResultsPlpUi();
+    syncCollectionSearchResultsPlpUi();
     syncFilterSearchClearVisibility();
     syncSearchKeywordChip();
     renderGrid();
-    scrollArchiveViewportTop();
+    scrollCollectionViewportTop();
   }
 
-  function syncArchiveSearchResultCategoryPills(pillsEl) {
+  function syncCollectionSearchResultCategoryPills(pillsEl) {
     if (!pillsEl) return;
     pillsEl.replaceChildren();
-    const q = String(archiveSubmittedSearchNorm ?? "").trim();
+    const q = String(collectionSubmittedSearchNorm ?? "").trim();
     if (!q) return;
 
     const hits = items.filter((it) => itemMatchesSearch(it, q));
@@ -6538,12 +6586,12 @@
       if (!byKey.has(key)) byKey.set(key, label);
     }
     const entries = [...byKey.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-    const activeKey = normalizeSearchResultFilterKey(archiveSearchWithinRecordCategory);
+    const activeKey = normalizeSearchResultFilterKey(collectionSearchWithinRecordCategory);
 
     function appendPill(label, filterKey, active) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "archive-search-results-plp__pill" + (active ? " is-active" : "");
+      b.className = "collection-search-results-plp__pill" + (active ? " is-active" : "");
       b.setAttribute("role", "tab");
       b.setAttribute("aria-selected", active ? "true" : "false");
       if (!filterKey) b.dataset.searchResultAll = "1";
@@ -6558,11 +6606,11 @@
     }
   }
 
-  /** Archive PLP: piece count stays under the page title (utility row = chips + Filter & Sort only). */
-  function syncArchiveCountLinePlacement() {
-    const summary = document.querySelector(".items-toolbar__archive-summary--under-title");
-    const heading = document.getElementById("archive-heading");
-    if (!summary || !heading || !document.body.classList.contains("archive-page")) return;
+  /** COLLECTION PLP: piece count stays under the page title (utility row = chips + Filter & Sort only). */
+  function syncCollectionCountLinePlacement() {
+    const summary = document.querySelector(".items-toolbar__collection-summary--under-title");
+    const heading = document.getElementById("collection-heading");
+    if (!summary || !heading || !document.body.classList.contains("collection-page")) return;
     if (summary.parentElement !== heading) {
       const title = document.getElementById("items-toolbar-page-title");
       if (title && title.parentElement === heading) {
@@ -6573,19 +6621,19 @@
     }
   }
 
-  function syncArchiveSearchResultsPlpUi() {
-    const wrap = document.getElementById("archive-search-results-plp");
-    const heading = document.getElementById("archive-search-results-heading");
-    const pills = document.getElementById("archive-search-results-pills");
+  function syncCollectionSearchResultsPlpUi() {
+    const wrap = document.getElementById("collection-search-results-plp");
+    const heading = document.getElementById("collection-search-results-heading");
+    const pills = document.getElementById("collection-search-results-pills");
     if (wrap) wrap.hidden = true;
     if (heading) heading.replaceChildren();
     if (pills) pills.replaceChildren();
     syncToolbarActiveFilterChips();
-    syncArchiveCountLinePlacement();
+    syncCollectionCountLinePlacement();
   }
 
-  function noteArchiveSearchUserChoseMainSlotFilter() {
-    if (archiveSubmittedSearchNorm) archiveSearchBrowseAllSlots = false;
+  function noteCollectionSearchUserChoseMainSlotFilter() {
+    if (collectionSubmittedSearchNorm) collectionSearchBrowseAllSlots = false;
   }
 
   /**
@@ -6657,31 +6705,31 @@
     cancelHeaderSearchOverlayUiDebounce();
   }
 
-  /** Basic colour archive filter: enabled on the archive grid (all category tabs + “All”); hidden on `item.html`. */
-  function allowArchiveBasicColourFilter() {
+  /** Basic colour collection filter: enabled on the collection grid (all category tabs + “All”); hidden on `item.html`. */
+  function allowCollectionBasicColourFilter() {
     return Boolean(document.getElementById("grid"));
   }
 
   function getFilters() {
-    const allowColour = allowArchiveBasicColourFilter();
+    const allowColour = allowCollectionBasicColourFilter();
     return {
       seasonNav: seasonNavFilter,
       category: categoryNavFilter,
       subcategories: [...subcategoryFilters],
-      search: effectiveArchiveKeywordSearchNorm(),
+      search: effectiveCollectionKeywordSearchNorm(),
       basicColours: allowColour ? [...basicColourFilters] : [],
     };
   }
 
   /** Category / record-type drill / search / colour — not the season tab. */
   function narrowingFiltersActive() {
-    const allowColour = allowArchiveBasicColourFilter();
+    const allowColour = allowCollectionBasicColourFilter();
     const cat = String(categoryNavFilter ?? "").trim();
     return Boolean(
       cat ||
         subcategoryFilters.size > 0 ||
-        effectiveArchiveKeywordSearchNorm() ||
-        String(archiveSearchWithinRecordCategory ?? "").trim() ||
+        effectiveCollectionKeywordSearchNorm() ||
+        String(collectionSearchWithinRecordCategory ?? "").trim() ||
         (allowColour && basicColourFilters.size > 0) ||
         selectedBrandFilters.size > 0
     );
@@ -6697,9 +6745,9 @@
     } else if (subcategoryFilters.size > 1) {
       bits.push(`${subcategoryFilters.size} types`);
     }
-    if (allowArchiveBasicColourFilter() && basicColourFilters.size === 1) {
+    if (allowCollectionBasicColourFilter() && basicColourFilters.size === 1) {
       bits.push(basicColourLabelEn([...basicColourFilters][0]));
-    } else if (allowArchiveBasicColourFilter() && basicColourFilters.size > 1) {
+    } else if (allowCollectionBasicColourFilter() && basicColourFilters.size > 1) {
       bits.push(`${basicColourFilters.size} colours`);
     }
     if (selectedBrandFilters.size > 0) {
@@ -6712,7 +6760,7 @@
 
   function hideLegacyFilterCountRowChips() {
     const unified = document.getElementById("items-toolbar-active-filter-chips");
-    if (!unified || document.body.classList.contains("archive-ui--search-results-plp")) return false;
+    if (!unified || document.body.classList.contains("collection-ui--search-results-plp")) return false;
     for (const key of ["searchChip", "categoryChip", "colourChip", "subcategoryChip"]) {
       const btn = els[key];
       const textEl = els[`${key}Text`];
@@ -6730,14 +6778,14 @@
     const textEl = els.searchChipText;
     if (!btn || !textEl) return;
     if (hideLegacyFilterCountRowChips()) return;
-    if (archiveSubmittedSearchNorm && !isHeaderSearchWrapOpen()) {
+    if (collectionSubmittedSearchNorm && !isHeaderSearchWrapOpen()) {
       textEl.textContent = "";
       btn.hidden = true;
       btn.removeAttribute("aria-label");
       return;
     }
     const rawQ =
-      headerSearchOverlayArchiveSearchFrozen && headerSearchOverlayOpeningQueryRaw != null
+      headerSearchOverlayCollectionSearchFrozen && headerSearchOverlayOpeningQueryRaw != null
         ? headerSearchOverlayOpeningQueryRaw
         : (els.search?.value?.trim() ?? "");
     if (rawQ) {
@@ -6774,7 +6822,7 @@
     const textEl = els.colourChipText;
     if (!btn || !textEl) return;
     if (hideLegacyFilterCountRowChips()) return;
-    const allowColour = allowArchiveBasicColourFilter();
+    const allowColour = allowCollectionBasicColourFilter();
     if (allowColour && basicColourFilters.size === 1) {
       const label = basicColourLabelEn([...basicColourFilters][0]);
       textEl.textContent = label;
@@ -6808,7 +6856,7 @@
   /** RL-style removable chips below category / search pills (does not replace filter logic). */
   function syncToolbarActiveFilterChips() {
     const browseHost = document.getElementById("items-toolbar-active-filter-chips");
-    const searchHost = document.getElementById("archive-search-results-active-chips");
+    const searchHost = document.getElementById("collection-search-results-active-chips");
     if (!browseHost && !searchHost) return;
 
     function renderChipRow(host, defs, { onClearAll } = {}) {
@@ -6853,28 +6901,28 @@
       host.hidden = !show;
     }
 
-    const submitted = String(archiveSubmittedSearchNorm ?? "").trim();
-    const searchPlp = Boolean(submitted) && document.body.classList.contains("archive-ui--search-results-plp");
+    const submitted = String(collectionSubmittedSearchNorm ?? "").trim();
+    const searchPlp = Boolean(submitted) && document.body.classList.contains("collection-ui--search-results-plp");
 
     const searchDefs = [];
     if (searchPlp && searchHost) {
-      const wc = String(archiveSearchWithinRecordCategory ?? "").trim();
+      const wc = String(collectionSearchWithinRecordCategory ?? "").trim();
       if (wc) {
         const label = searchResultFilterDisplayLabelFromKey(wc);
         searchDefs.push({
           label,
           removeLabel: `Remove ${label} filter`,
           onRemove() {
-            archiveSearchWithinRecordCategory = "";
-            syncArchiveSearchResultsPlpUi();
+            collectionSearchWithinRecordCategory = "";
+            syncCollectionSearchResultsPlpUi();
             renderGrid();
           },
         });
       }
       renderChipRow(searchHost, searchDefs, {
         onClearAll() {
-          archiveSearchWithinRecordCategory = "";
-          resetAllArchiveFilters();
+          collectionSearchWithinRecordCategory = "";
+          resetAllCollectionFilters();
         },
       });
     } else if (searchHost) {
@@ -6898,7 +6946,7 @@
             /* ignore */
           }
           syncSeasonTabUI();
-          replaceArchiveSeasonQuery(seasonNavFilter);
+          replaceCollectionSeasonQuery(seasonNavFilter);
           renderGrid();
         },
       });
@@ -6911,7 +6959,7 @@
         label: catLabel,
         removeLabel: `Remove category filter “${catLabel}”`,
         onRemove() {
-          withPreservedArchiveScroll(() => {
+          withPreservedCollectionScroll(() => {
             categoryNavFilter = "";
             clearSubcategoryFilters();
             syncCategoryTabUI();
@@ -6932,7 +6980,7 @@
         label,
         removeLabel: `Remove ${label} filter`,
         onRemove() {
-          withPreservedArchiveScroll(() => {
+          withPreservedCollectionScroll(() => {
             removeSubcategoryFilterKey(sub);
             validateSubcategoryFilter();
             renderCategoryDrill();
@@ -6950,27 +6998,27 @@
         removeLabel: `Remove brand filter “${brand}”`,
         onRemove() {
           toggleBrandFilter(brand);
-          syncArchiveBrandFilterChipUi();
+          syncCollectionBrandFilterChipUi();
           renderGrid();
         },
       });
     }
 
     if (!searchPlp) {
-      const submittedNorm = String(archiveSubmittedSearchNorm ?? "").trim();
+      const submittedNorm = String(collectionSubmittedSearchNorm ?? "").trim();
       if (submittedNorm) {
-        const rawQ = archiveSubmittedSearchRaw || submittedNorm;
+        const rawQ = collectionSubmittedSearchRaw || submittedNorm;
         browseDefs.push({
           label: rawQ,
           removeLabel: `Remove search “${rawQ}”`,
           onRemove() {
-            clearArchiveKeywordSearchThenRender();
+            clearCollectionKeywordSearchThenRender();
           },
         });
       }
     }
 
-    const allowColour = allowArchiveBasicColourFilter();
+    const allowColour = allowCollectionBasicColourFilter();
     const colourKeys = [...basicColourFilters].sort((a, b) =>
       basicColourLabelEn(a).localeCompare(basicColourLabelEn(b), undefined, { sensitivity: "base" })
     );
@@ -6987,7 +7035,7 @@
       });
     }
 
-    const clearAllActiveFilters = () => resetAllArchiveFilters();
+    const clearAllActiveFilters = () => resetAllCollectionFilters();
 
     if (searchPlp) {
       if (browseHost) {
@@ -7000,13 +7048,13 @@
     hideLegacyFilterCountRowChips();
   }
 
-  function clearArchiveKeywordSearchThenRender(options = {}) {
+  function clearCollectionKeywordSearchThenRender(options = {}) {
     const { focusInput = true } = options;
     if (!els.search) return;
     cancelSearchGridDebounce();
     cancelHeaderSearchOverlayUiDebounce();
-    if (archiveSubmittedSearchNorm) {
-      exitArchiveSearchPlpRestoreBrowse();
+    if (collectionSubmittedSearchNorm) {
+      exitCollectionSearchPlpRestoreBrowse();
     } else {
       els.search.value = "";
     }
@@ -7021,7 +7069,7 @@
   }
 
   /** Clears basic colour narrowing only (search text is managed by commit / CLEAR). */
-  function clearArchiveKeywordColourNarrowing() {
+  function clearCollectionKeywordColourNarrowing() {
     cancelSearchGridDebounce();
     persistBasicColourFilters(new Set());
   }
@@ -7030,15 +7078,15 @@
    * Exit search / PLP and strip category, colour, and in-progress search UI.
    * Does not change season tab or sort — use `enterSeasonalCollection` for seasonal entry tiles.
    */
-  function clearArchiveBrowseFiltersForSeasonalEntry() {
+  function clearCollectionBrowseFiltersForSeasonalEntry() {
     cancelSearchGridDebounce();
     cancelHeaderSearchOverlayUiDebounce();
-    archiveSubmittedSearchNorm = "";
-    archiveSubmittedSearchRaw = "";
-    archiveSearchWithinRecordCategory = "";
-    archiveSearchBrowseAllSlots = false;
-    archiveSearchReturnSnapshot = null;
-    document.body.classList.remove("archive-ui--search-results-plp");
+    collectionSubmittedSearchNorm = "";
+    collectionSubmittedSearchRaw = "";
+    collectionSearchWithinRecordCategory = "";
+    collectionSearchBrowseAllSlots = false;
+    collectionSearchReturnSnapshot = null;
+    document.body.classList.remove("collection-ui--search-results-plp");
     if (els.search) els.search.value = "";
     resetHeaderSearchOverlayResultsDom();
     persistBasicColourFilters(new Set());
@@ -7056,35 +7104,35 @@
   }
 
   /**
-   * Homepage seasonal tiles → archive: fresh browse with only A/W or S/S active (one chip).
+   * Homepage seasonal tiles → collection: fresh browse with only A/W or S/S active (one chip).
    * @param {"A/W" | "S/S"} seasonToken
    */
   function enterSeasonalCollection(seasonToken) {
     const selectedSeason = normalizeSeasonNavToken(seasonToken);
     if (!selectedSeason) return;
-    clearArchiveBrowseFiltersForSeasonalEntry();
+    clearCollectionBrowseFiltersForSeasonalEntry();
     seasonNavFilter = selectedSeason;
     try {
       persistSeasonNav();
     } catch {
       /* ignore */
     }
-    replaceArchiveSeasonQuery(seasonNavFilter);
-    archiveSortMode = persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
-    syncArchiveSortChipUi();
+    replaceCollectionSeasonQuery(seasonNavFilter);
+    collectionSortMode = persistCollectionSortMode(COLLECTION_DEFAULT_SORT_MODE);
+    syncCollectionSortChipUi();
     syncSeasonTabUI();
     syncCategoryTabUI();
     validateSubcategoryFilter();
     renderCategoryDrill();
     syncFiltersMenuForViewport();
-    document.body.classList.remove("archive-ui--nav-folded");
-    closeArchiveFilterDrawer();
+    document.body.classList.remove("collection-ui--nav-folded");
+    closeCollectionFilterDrawer();
     collapseFiltersMenuPanel();
   }
 
-  /** Persist a clean archive snapshot for seasonal entry navigation (no inherited filters). */
+  /** Persist a clean collection snapshot for seasonal entry navigation (no inherited filters). */
   function writeSeasonalEntryBrowseRestoreSnapshot(seasonToken) {
-    writeArchiveBrowseRestoreSnapshot({
+    writeCollectionBrowseRestoreSnapshot({
       seasonNav: normalizeSeasonNavToken(seasonToken) || null,
       category: "",
       subcategory: "",
@@ -7093,14 +7141,14 @@
     });
   }
 
-  function archiveSeasonHref(seasonToken) {
+  function collectionSeasonHref(seasonToken) {
     const normalized = normalizeSeasonNavToken(seasonToken);
     const query = seasonNavQueryToken(normalized);
     return query ? `${COLLECTION_BASE_PATH}?season=${query}` : COLLECTION_HOME_URL;
   }
 
-  function navigateToArchiveSeason(seasonToken) {
-    const href = archiveSeasonHref(seasonToken);
+  function navigateToCollectionSeason(seasonToken) {
+    const href = collectionSeasonHref(seasonToken);
     try {
       globalThis.location.assign(href);
     } catch {
@@ -7108,8 +7156,8 @@
     }
   }
 
-  function replaceArchiveSeasonQuery(seasonToken) {
-    if (!isArchiveLocation()) return;
+  function replaceCollectionSeasonQuery(seasonToken) {
+    if (!isCollectionLocation()) return;
     const normalized = normalizeSeasonNavToken(seasonToken);
     try {
       const u = new URL(globalThis.location.href);
@@ -7123,9 +7171,9 @@
   }
 
   function resetNarrowingFilters() {
-    clearArchiveKeywordColourNarrowing();
+    clearCollectionKeywordColourNarrowing();
     clearBrandFilters();
-    if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
+    if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
     categoryNavFilter = "";
     clearSubcategoryFilters();
     syncBasicColourFilterChipUi();
@@ -7138,16 +7186,16 @@
     collapseFiltersMenuPanel();
   }
 
-  /** Archive “reset view”: season All, all slots, no narrowing filters; sort returns to default. */
-  function resetAllArchiveFilters() {
+  /** COLLECTION “reset view”: season All, all slots, no narrowing filters; sort returns to default. */
+  function resetAllCollectionFilters() {
     seasonNavFilter = null;
     persistSeasonNav();
-    replaceArchiveSeasonQuery(seasonNavFilter);
+    replaceCollectionSeasonQuery(seasonNavFilter);
     syncSeasonTabUI();
-    archiveSortMode = persistArchiveSortMode(ARCHIVE_DEFAULT_SORT_MODE);
-    syncArchiveSortChipUi();
-    document.body.classList.remove("archive-ui--nav-folded");
-    closeArchiveFilterDrawer();
+    collectionSortMode = persistCollectionSortMode(COLLECTION_DEFAULT_SORT_MODE);
+    syncCollectionSortChipUi();
+    document.body.classList.remove("collection-ui--nav-folded");
+    closeCollectionFilterDrawer();
     resetNarrowingFilters();
   }
 
@@ -7166,7 +7214,7 @@
     const selectedSeason = normalizeSeasonNavToken(nav);
     if (!selectedSeason) return true;
     const normalized = normalizedItemSeasonTags(item);
-    // Legacy archive: blank / unknown season tags behave like all-season.
+    // Legacy collection: blank / unknown season tags behave like all-season.
     if (!normalized.length) return true;
     return normalized.includes(selectedSeason) || normalized.includes("ALL");
   }
@@ -7534,13 +7582,13 @@
     }
   }
 
-  function ensureArchiveSlotTypeStrip() {
+  function ensureCollectionSlotTypeStrip() {
     const drill = document.getElementById("category-drill");
     if (!drill) return null;
-    let strip = document.getElementById("archive-slot-type-strip");
+    let strip = document.getElementById("collection-slot-type-strip");
     if (!strip) {
       strip = document.createElement("div");
-      strip.id = "archive-slot-type-strip";
+      strip.id = "collection-slot-type-strip";
       strip.className = "category-drill__grid category-drill__grid--slots";
       strip.setAttribute("role", "tablist");
       strip.setAttribute("aria-label", "Collection type");
@@ -7551,9 +7599,9 @@
     return strip;
   }
 
-  function renderArchiveSlotTypeStrip() {
+  function renderCollectionSlotTypeStrip() {
     const drill = document.getElementById("category-drill");
-    const strip = ensureArchiveSlotTypeStrip();
+    const strip = ensureCollectionSlotTypeStrip();
     if (!drill || !strip) return;
 
     const cat = String(categoryNavFilter ?? "").trim();
@@ -7573,7 +7621,7 @@
       strip.appendChild(b);
     }
 
-    appendSlot("", ARCHIVE_ALL_TYPES_LABEL);
+    appendSlot("", COLLECTION_ALL_TYPES_LABEL);
     for (const slot of SLOT_OPTIONS) {
       appendSlot(slot, categoryDisplayLabel(slot));
     }
@@ -7603,7 +7651,7 @@
 
     validateSubcategoryFilter();
 
-    if (isArchiveSearchResultsMode()) {
+    if (isCollectionSearchResultsMode()) {
       blurActiveElementIfInsideCategoryDrill();
       drill.hidden = true;
       grid.hidden = true;
@@ -7611,7 +7659,7 @@
       return;
     }
 
-    if (!ARCHIVE_RECORD_TYPE_SUBNAV_ENABLED) {
+    if (!COLLECTION_RECORD_TYPE_SUBNAV_ENABLED) {
       blurActiveElementIfInsideCategoryDrill();
       drill.hidden = true;
       grid.hidden = true;
@@ -7629,11 +7677,11 @@
       grid.innerHTML = "";
       grid.hidden = true;
       lastCategoryDrillStructureKey = "";
-      document.getElementById("archive-slot-type-strip")?.remove();
+      document.getElementById("collection-slot-type-strip")?.remove();
       return;
     }
 
-    document.getElementById("archive-slot-type-strip")?.remove();
+    document.getElementById("collection-slot-type-strip")?.remove();
     drill.hidden = false;
     drill.removeAttribute("aria-hidden");
 
@@ -7695,12 +7743,12 @@
   }
 
   /** Season, slot, drill, basic colour, and brand — no live keyword typing (keywords are commit-only). */
-  function applyArchiveUiFilters(list, opts = {}) {
+  function applyCollectionUiFilters(list, opts = {}) {
     const skipBrand = Boolean(opts.skipBrandFilter);
     const f = getFilters();
     return list.filter((item) => {
       if (!itemPassesSeasonNav(item, f.seasonNav)) return false;
-      if (!archiveSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) return false;
+      if (!collectionSearchBrowseAllSlots && f.category && itemSlot(item) !== f.category) return false;
       if (subcategoryFilters.size > 0 && !itemMatchesSubcategoryFilters(item, f.category)) return false;
       if (basicColourFilters.size > 0 && !itemMatchesBasicColourFilters(item)) return false;
       if (!skipBrand && selectedBrandFilters.size > 0) {
@@ -7713,14 +7761,14 @@
 
   /** Pool for brand filter chips — same constraints as the grid, excluding the brand filter itself. */
   function poolItemsForBrandFilterOptions() {
-    const committed = String(archiveSubmittedSearchNorm ?? "").trim();
+    const committed = String(collectionSubmittedSearchNorm ?? "").trim();
     if (committed) {
       let pool = items.filter((item) => itemMatchesSearch(item, committed));
-      const wc = String(archiveSearchWithinRecordCategory ?? "").trim();
-      if (wc) pool = pool.filter((item) => itemMatchesArchiveSearchWithinRecordCategory(item, wc));
-      return applyArchiveUiFilters(pool, { skipBrandFilter: true });
+      const wc = String(collectionSearchWithinRecordCategory ?? "").trim();
+      if (wc) pool = pool.filter((item) => itemMatchesCollectionSearchWithinRecordCategory(item, wc));
+      return applyCollectionUiFilters(pool, { skipBrandFilter: true });
     }
-    return applyArchiveUiFilters(items, { skipBrandFilter: true });
+    return applyCollectionUiFilters(items, { skipBrandFilter: true });
   }
 
   function brandKeyForItem(item) {
@@ -7759,28 +7807,28 @@
     if (next.has(key)) next.delete(key);
     else next.add(key);
     selectedBrandFilters = next;
-    invalidateArchiveSortedCache();
+    invalidateCollectionSortedCache();
   }
 
   function clearBrandFilters() {
     if (!selectedBrandFilters.size) return;
     selectedBrandFilters = new Set();
-    invalidateArchiveSortedCache();
+    invalidateCollectionSortedCache();
   }
 
   /**
-   * Visible archive list for the main grid. Submitted search matches on the full `items` root, then optional
+   * Visible collection list for the main grid. Submitted search matches on the full `items` root, then optional
    * within-result record-type pill, then season / slot / drill / colour filters apply only within that pool.
    */
   function applyFilters(list) {
-    const committed = String(archiveSubmittedSearchNorm ?? "").trim();
+    const committed = String(collectionSubmittedSearchNorm ?? "").trim();
     if (committed) {
       let pool = items.filter((item) => itemMatchesSearch(item, committed));
-      const wc = String(archiveSearchWithinRecordCategory ?? "").trim();
-      if (wc) pool = pool.filter((item) => itemMatchesArchiveSearchWithinRecordCategory(item, wc));
-      return applyArchiveUiFilters(pool);
+      const wc = String(collectionSearchWithinRecordCategory ?? "").trim();
+      if (wc) pool = pool.filter((item) => itemMatchesCollectionSearchWithinRecordCategory(item, wc));
+      return applyCollectionUiFilters(pool);
     }
-    return applyArchiveUiFilters(list);
+    return applyCollectionUiFilters(list);
   }
 
   function escapeRegExp(s) {
@@ -7791,16 +7839,10 @@
    * Title line: when a descriptive colour is set and the name repeats it at the start, strip it (colour lives in specs).
    * Does not strip when the leading colour is the first half of a compound material (e.g. Camel Hair, Navy Wool).
    */
-  /** Archive card meta line — single-colour rows only; multi-variant cards use the swatch tray. */
+  /** COLLECTION card meta line — rows with colour circles on the preview use the tray instead. */
   function colourLabelForItem(item) {
     const variants = getItemColourVariants(item);
-    if (variants?.length > 1) return "";
-    if (variants?.length === 1) {
-      const v = variants[0];
-      const col = String(v.colour ?? v.color ?? "").trim();
-      const label = String(v.label ?? "").trim();
-      return col || label || String(item?.colour ?? "").trim();
-    }
+    if (variants?.length) return "";
     return String(item?.colour ?? "").trim();
   }
 
@@ -7874,7 +7916,7 @@
     const mb = formatMeasurementRowsBrief(item);
     if (mb) bits.push(mb);
     if (item.purchaseDate) bits.push(formatPurchaseDateForDisplay(item.purchaseDate));
-    const pl = formattedArchivePriceLine(item);
+    const pl = formattedCollectionPriceLine(item);
     if (pl) bits.push(pl);
     let s = bits.filter(Boolean).join(" · ");
     if (s.length > 480) s = s.slice(0, 477) + "…";
@@ -7961,7 +8003,7 @@
     return out.map((u) => withWardrobeImageCacheBust(u, item));
   }
 
-  /** Header search category tiles: pick a random visible cover (not always archive sort order). */
+  /** Header search category tiles: pick a random visible cover (not always collection sort order). */
   function pickRandomHeaderSearchPreviewItem(pool) {
     if (!Array.isArray(pool) || pool.length === 0) return null;
     const withCover = pool.filter((it) => buildCoverCandidates(it).length > 0);
@@ -8004,7 +8046,7 @@
     return withWardrobeImageCacheBust(src, item);
   }
 
-  const ARCHIVE_GRID_CARD_RENDER = Object.freeze({
+  const COLLECTION_GRID_CARD_RENDER = Object.freeze({
     width: 600,
     height: 800,
     quality: 82,
@@ -8190,10 +8232,10 @@
     const extras = itemGalleryList(item).filter(isDisplayableCloudImageUrl);
     if (!extras.length) return;
 
-    const inArchiveGrid = Boolean(mediaEl.closest("#grid"));
+    const inCollectionGrid = Boolean(mediaEl.closest("#grid"));
     const frame =
       opts.coverFrame ??
-      (inArchiveGrid ? ARCHIVE_GRID_CARD_RENDER : ITEM_DETAIL_GALLERY_RENDER);
+      (inCollectionGrid ? COLLECTION_GRID_CARD_RENDER : ITEM_DETAIL_GALLERY_RENDER);
 
     function heroFrameSrc(url) {
       return wardrobeImageForFrame(url, item, frame) || withWardrobeImageCacheBust(url, item);
@@ -8494,7 +8536,7 @@
     if (!item) return;
     if (!itemEligibleForOutfit(item)) {
       showToast(
-        "Only clothing, shoes, watches, and accessories go on the styling board — jewellery and perfume stay in the archive."
+        "Only clothing, shoes, watches, and accessories go on the styling board — jewellery and perfume stay in the collection."
       );
       return;
     }
@@ -8637,7 +8679,7 @@
     const colourLabel = variant
       ? variantCaptionText(variant) || variant.label
       : String(item.colour ?? "").trim();
-    const priceLine = formattedArchivePriceLine(item, { brief: true });
+    const priceLine = formattedCollectionPriceLine(item, { brief: true });
 
     hero.innerHTML = "";
     const figure = document.createElement("figure");
@@ -8839,12 +8881,12 @@
     if (forEdit) {
       els.outfitName?.focus();
       if (skipped > 0) {
-        showToast(`Editing “${found.name}” — skipped ${skipped} archive-only piece(s). Save updates this outfit.`);
+        showToast(`Editing “${found.name}” — skipped ${skipped} collection-only piece(s). Save updates this outfit.`);
       } else {
         showToast(`Editing “${found.name}” — Save updates this outfit.`);
       }
     } else if (skipped > 0) {
-      showToast(`Loaded: “${found.name}” — skipped ${skipped} archive-only piece(s).`);
+      showToast(`Loaded: “${found.name}” — skipped ${skipped} collection-only piece(s).`);
     } else {
       showToast(`Loaded: “${found.name}”`);
     }
@@ -9629,7 +9671,7 @@
   /**
    * Remove a wardrobe piece via Supabase only: unlink outfit refs, delete referenced Storage objects, DELETE
    * the `wardrobe_items` row. If Supabase is not ready, refuses (no offline delete).
-   * The id is always saved to `archive_hidden_ids` so `syncMissingRowsToSupabase` never re-upserts seed/file rows with the same id
+   * The id is always saved to `collection_hidden_ids` so `syncMissingRowsToSupabase` never re-upserts seed/file rows with the same id
    * (critical when the catalogue comes only from Supabase). With seed-merge catalogue, hidden ids still suppress resurgence after reload.
    */
   async function deleteWardrobePieceFromBrowser(id) {
@@ -9674,18 +9716,18 @@
       }
 
       try {
-        const all = loadArchiveOverrides();
+        const all = loadCollectionOverrides();
         if (Object.prototype.hasOwnProperty.call(all, sid)) {
           delete all[sid];
-          await saveArchiveOverrides(all);
+          await saveCollectionOverrides(all);
         }
       } catch (e) {
         console.warn(e);
       }
 
-      const hidden = loadArchiveHiddenIds();
+      const hidden = loadCollectionHiddenIds();
       hidden.add(sid);
-      await saveArchiveHiddenIds(hidden);
+      await saveCollectionHiddenIds(hidden);
     } catch (e) {
       cloudBackedCustomItems = prevCloud;
       try {
@@ -9869,7 +9911,7 @@
 
   /**
    * Clone any visible piece into a new `custom-*` row (same image URLs / data; name gets " (copy)").
-   * Archive seed rows become a new custom entry; does not change seed files.
+   * COLLECTION seed rows become a new custom entry; does not change seed files.
    */
   function buildDuplicateCustomItem(src) {
     const id =
@@ -10076,22 +10118,22 @@
     resetAddItemMeasurementBlock();
   }
 
-  function isArchiveCardCoarsePointer() {
+  function isCollectionCardCoarsePointer() {
     return globalThis.matchMedia?.("(max-width: 900px), (hover: none), (pointer: coarse)")?.matches ?? false;
   }
 
-  function isArchiveGridCardContext() {
-    return document.body.classList.contains("archive-page") && !!document.getElementById("grid");
+  function isCollectionGridCardContext() {
+    return document.body.classList.contains("collection-page") && !!document.getElementById("grid");
   }
 
-  /** Rendered frame URLs for archive card gallery nav (cover first, then extras). */
-  function archiveCardGalleryFrames(item) {
+  /** Rendered frame URLs for collection card gallery nav (cover first, then extras). */
+  function collectionCardGalleryFrames(item) {
     if (!item || typeof item !== "object") return [];
     const out = [];
     const seen = new Set();
     for (const raw of buildCoverCandidates(item)) {
       const url =
-        wardrobeImageForFrame(raw, item, ARCHIVE_GRID_CARD_RENDER) ||
+        wardrobeImageForFrame(raw, item, COLLECTION_GRID_CARD_RENDER) ||
         withWardrobeImageCacheBust(raw, item);
       const key = String(url).split("?")[0];
       if (!url || seen.has(key)) continue;
@@ -10102,13 +10144,13 @@
   }
 
   /**
-   * Chevron prev/next on archive PLP cards (cover + gallery frames).
+   * Chevron prev/next on collection PLP cards (cover + gallery frames).
    * @param {HTMLElement} media
    * @param {HTMLImageElement} img
    * @param {() => object} resolveItem
    */
-  function mountArchiveCardGalleryNav(media, img, resolveItem) {
-    if (!isArchiveGridCardContext()) return;
+  function mountCollectionCardGalleryNav(media, img, resolveItem) {
+    if (!isCollectionGridCardContext()) return;
 
     const prev = document.createElement("button");
     prev.type = "button";
@@ -10123,7 +10165,7 @@
     next.innerHTML = '<span class="card__gallery-nav__glyph" aria-hidden="true">›</span>';
 
     function frameList() {
-      return archiveCardGalleryFrames(resolveItem());
+      return collectionCardGalleryFrames(resolveItem());
     }
 
     function syncNav() {
@@ -10169,7 +10211,7 @@
       step(1);
     });
 
-    media.addEventListener("tw-archive-cover-change", () => {
+    media.addEventListener("tw-collection-cover-change", () => {
       media.dataset.galleryFrameIndex = "0";
       syncNav();
     });
@@ -10180,9 +10222,47 @@
     syncNav();
   }
 
-  function mountArchiveCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray = false } = {}) {
+  /**
+   * Desktop collection grid: on hover, swap cover → second gallery frame (first extra photo).
+   * @param {HTMLElement} article
+   * @param {HTMLElement} media
+   * @param {HTMLImageElement} img
+   * @param {() => object} resolveCoverItem
+   */
+  function wireCollectionCardHoverGallery(article, media, img, resolveCoverItem) {
+    if (!isCollectionGridCardContext()) return;
+    if (isCollectionCardCoarsePointer()) return;
+
+    const restoreCover = () => {
+      const cover = String(img.dataset.coverSrc ?? "").trim();
+      media.dataset.galleryFrameIndex = "0";
+      if (cover) img.src = cover;
+    };
+
+    const showHoverGallery = () => {
+      const frames = collectionCardGalleryFrames(resolveCoverItem());
+      if (frames.length < 2) return;
+      const cover = String(img.dataset.coverSrc ?? frames[0] ?? "").trim();
+      if (!cover) return;
+      const hoverUrl = frames[1];
+      if (!hoverUrl || hoverUrl === cover) return;
+      media.dataset.galleryFrameIndex = "1";
+      img.src = hoverUrl;
+    };
+
+    article.addEventListener("mouseenter", showHoverGallery);
+    article.addEventListener("mouseleave", restoreCover);
+    article.addEventListener("focusin", showHoverGallery);
+    article.addEventListener("focusout", (ev) => {
+      const next = ev.relatedTarget;
+      if (next instanceof Node && article.contains(next)) return;
+      restoreCover();
+    });
+  }
+
+  function mountCollectionCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray = false } = {}) {
     if (!boardAddBtn) return;
-    boardAddBtn.classList.add("card__board-add--archive-hover");
+    boardAddBtn.classList.add("card__board-add--collection-hover");
     if (hasColourTray) {
       const trayInner = media.querySelector(".card__colour-tray__inner");
       if (trayInner) {
@@ -10271,7 +10351,7 @@
     mount.appendChild(wrap);
   }
 
-  function dismissArchiveCardStylingReveal(except) {
+  function dismissCollectionCardStylingReveal(except) {
     if (!els.grid) return;
     els.grid.querySelectorAll(".card--styling-reveal").forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
@@ -10312,7 +10392,7 @@
 
     const media = document.createElement("div");
     media.className = "card__media card__media--opens-detail";
-    if (variants && variants.length > 1) media.classList.add("card__media--variant-colours");
+    if (variants?.length) media.classList.add("card__media--variant-colours");
 
     const img = document.createElement("img");
     img.className = "card__media-img";
@@ -10324,15 +10404,15 @@
     if (cardOpts.fetchPriority === "high") img.fetchPriority = "high";
     wireCoverImageWithFallbacks(img, cardCoverItem, {
       host: media,
-      coverRenderWidth: ARCHIVE_GRID_CARD_RENDER.width,
-      coverRenderHeight: ARCHIVE_GRID_CARD_RENDER.height,
-      coverRenderQuality: ARCHIVE_GRID_CARD_RENDER.quality,
-      coverRenderResize: ARCHIVE_GRID_CARD_RENDER.resize,
+      coverRenderWidth: COLLECTION_GRID_CARD_RENDER.width,
+      coverRenderHeight: COLLECTION_GRID_CARD_RENDER.height,
+      coverRenderQuality: COLLECTION_GRID_CARD_RENDER.quality,
+      coverRenderResize: COLLECTION_GRID_CARD_RENDER.resize,
       onResolved(url) {
         img.dataset.coverSrc = url;
         const ti = media.querySelector(".card__gallery-strip .card__gallery-thumb.is-active img");
         if (ti) ti.src = url;
-        media.dispatchEvent(new CustomEvent("tw-archive-cover-change", { bubbles: true }));
+        media.dispatchEvent(new CustomEvent("tw-collection-cover-change", { bubbles: true }));
       },
     });
 
@@ -10378,14 +10458,14 @@
       if (ev.target.closest(".card__gallery-thumb")) return;
       if (ev.target.closest(".card__gallery-nav")) return;
       if (ev.target.closest(".card__season-chip")) return;
-      if (isArchiveCardCoarsePointer() && boardAddBtn && !boardAddBtn.disabled) {
+      if (isCollectionCardCoarsePointer() && boardAddBtn && !boardAddBtn.disabled) {
         if (!article.classList.contains("card--styling-reveal")) {
-          dismissArchiveCardStylingReveal(article);
+          dismissCollectionCardStylingReveal(article);
           article.classList.add("card--styling-reveal");
           return;
         }
       }
-      dismissArchiveCardStylingReveal();
+      dismissCollectionCardStylingReveal();
       openCardDetail(ev);
     });
 
@@ -10419,7 +10499,7 @@
     body.appendChild(brand);
     body.appendChild(metaLine);
 
-    const hasColourTray = Boolean(variants && variants.length > 1);
+    const hasColourTray = Boolean(variants?.length);
     if (hasColourTray) {
       mountVariantSwatchStrip(media, item, {
         outfitPick: true,
@@ -10430,7 +10510,7 @@
         heroInitialColourKey: variantKeyForHero || undefined,
       });
     }
-    mountArchiveCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray });
+    mountCollectionCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray });
 
     const resolveCoverItemForHover = () => {
       const active = media.querySelector(".card__swatch.is-active");
@@ -10438,7 +10518,8 @@
       if (ck) return itemProjectionForOutfitSlot(item, { itemId: String(item.id), colourKey: ck });
       return cardCoverItem;
     };
-    mountArchiveCardGalleryNav(media, img, resolveCoverItemForHover);
+    mountCollectionCardGalleryNav(media, img, resolveCoverItemForHover);
+    wireCollectionCardHoverGallery(article, media, img, resolveCoverItemForHover);
 
     const specs = document.createElement("ul");
     specs.className = "card__specs card__specs--hover";
@@ -10448,7 +10529,7 @@
       li.textContent = part;
       specs.appendChild(li);
     });
-    const showPurchaseOnCard = archiveSortMode === "date-desc";
+    const showPurchaseOnCard = collectionSortMode === "date-desc";
     if (showPurchaseOnCard && item.purchaseDate) {
       const li = document.createElement("li");
       li.textContent = formatPurchaseDateForDisplay(item.purchaseDate);
@@ -10458,12 +10539,12 @@
     if (specs.children.length) body.appendChild(specs);
 
     {
-      const priceBrief = formattedArchivePriceLine(item, { brief: true });
+      const priceBrief = formattedCollectionPriceLine(item, { brief: true });
       if (priceBrief) {
         const priceEl = document.createElement("p");
         priceEl.className = "card__price-subtle card__price-subtle--hover";
         priceEl.textContent = priceBrief;
-        const priceFull = formattedArchivePriceLine(item);
+        const priceFull = formattedCollectionPriceLine(item);
         if (priceFull !== priceBrief) priceEl.title = priceFull;
         body.appendChild(priceEl);
       }
@@ -10484,32 +10565,32 @@
   /** Outfit slots key: when only this changes, patch card UI in place. */
   let lastGridOutfitKey = "";
 
-  function buildArchiveGridStructuralKey(sorted, searchNorm) {
+  function buildCollectionGridStructuralKey(sorted, searchNorm) {
     const ids = sorted.map((x) => String(x.id)).join("\x1f");
     return [
       seasonNavFilter,
       categoryNavFilter,
       subcategoryFiltersKey(),
       searchNorm,
-      String(archiveSubmittedSearchNorm ?? "").trim(),
-      String(archiveSearchWithinRecordCategory ?? "").trim(),
-      archiveSearchBrowseAllSlots ? "1" : "0",
+      String(collectionSubmittedSearchNorm ?? "").trim(),
+      String(collectionSearchWithinRecordCategory ?? "").trim(),
+      collectionSearchBrowseAllSlots ? "1" : "0",
       serializeFilterListParam(basicColourFilters),
       [...selectedBrandFilters].sort().join("\x1f"),
-      archiveSortMode,
-      archiveDisplayCurrency,
+      collectionSortMode,
+      collectionDisplayCurrency,
       String(wardrobeRevision),
       String(sorted.length),
       ids,
     ].join("\x1e");
   }
 
-  function buildArchiveGridOutfitKey() {
+  function buildCollectionGridOutfitKey() {
     return currentOutfitSlots.map((s) => `${s.itemId}\x1d${s.colourKey ?? ""}`).join("\x1c");
   }
 
   /** @returns {boolean} false if DOM order/id mismatch — caller should full-rebuild grid. */
-  function syncArchiveGridCardsOutfitUi(sorted) {
+  function syncCollectionGridCardsOutfitUi(sorted) {
     if (!els.grid) return false;
     const rows = els.grid.querySelectorAll(":scope > .card[data-item-id]");
     if (rows.length !== sorted.length) return false;
@@ -10555,34 +10636,34 @@
   }
 
   function compareGridItems(a, b) {
-    if (archiveSortMode === "price-asc" || archiveSortMode === "price-desc") {
+    if (collectionSortMode === "price-asc" || collectionSortMode === "price-desc") {
       const pa = priceSortComparableInDisplayCurrency(a);
       const pb = priceSortComparableInDisplayCurrency(b);
-      if (pa == null && pb == null) return compareArchiveGridItems(a, b);
+      if (pa == null && pb == null) return compareCollectionGridItems(a, b);
       if (pa == null) return 1;
       if (pb == null) return -1;
       const cmp = pa - pb;
-      if (cmp !== 0) return archiveSortMode === "price-desc" ? -cmp : cmp;
-      return compareArchiveGridItems(a, b);
+      if (cmp !== 0) return collectionSortMode === "price-desc" ? -cmp : cmp;
+      return compareCollectionGridItems(a, b);
     }
-    if (archiveSortMode === "date-asc" || archiveSortMode === "date-desc") {
+    if (collectionSortMode === "date-asc" || collectionSortMode === "date-desc") {
       const da = purchaseDateSortMs(a);
       const db = purchaseDateSortMs(b);
-      if (da == null && db == null) return compareArchiveGridItems(a, b);
+      if (da == null && db == null) return compareCollectionGridItems(a, b);
       if (da == null) return 1;
       if (db == null) return -1;
       const cmp = da - db;
-      if (cmp !== 0) return archiveSortMode === "date-desc" ? -cmp : cmp;
-      return compareArchiveGridItems(a, b);
+      if (cmp !== 0) return collectionSortMode === "date-desc" ? -cmp : cmp;
+      return compareCollectionGridItems(a, b);
     }
-    return compareArchiveGridItems(a, b);
+    return compareCollectionGridItems(a, b);
   }
 
   /**
    * List order: when not filtered by drill record-type, outer → jackets → … → bottoms → shoes → …
-   * then brand / name. With a drill sub-type active, preserve archive seed order inside that type.
+   * then brand / name. With a drill sub-type active, preserve collection seed order inside that type.
    */
-  function compareArchiveGridItems(a, b) {
+  function compareCollectionGridItems(a, b) {
     const drilled = subcategoryFilters.size > 0;
     if (!drilled) {
       const tax = compareByTaxonomy(a, b);
@@ -10600,32 +10681,32 @@
       const kb = `${String(b?.brand ?? "")}\0${String(b?.name ?? "")}\0${String(b?.id ?? "")}`;
       return ka.localeCompare(kb, undefined, { sensitivity: "base" });
     }
-    const oa = Number.isFinite(a?.__archiveOrdinal) ? a.__archiveOrdinal : 1e9;
-    const ob = Number.isFinite(b?.__archiveOrdinal) ? b.__archiveOrdinal : 1e9;
+    const oa = Number.isFinite(a?.__collectionOrdinal) ? a.__collectionOrdinal : 1e9;
+    const ob = Number.isFinite(b?.__collectionOrdinal) ? b.__collectionOrdinal : 1e9;
     if (oa !== ob) return oa - ob;
     return String(a?.id ?? "").localeCompare(String(b?.id ?? ""), undefined, { sensitivity: "base" });
   }
 
-  const ARCHIVE_ALL_TYPES_LABEL = "All Types";
-  const ARCHIVE_HEADING_DEFAULT_TITLE = "Collection";
+  const COLLECTION_ALL_TYPES_LABEL = "All Types";
+  const COLLECTION_HEADING_DEFAULT_TITLE = "Collection";
 
   /** Season token for line 1 (`COLLECTION / … /`). */
-  function archiveHeadingSeasonLabel() {
+  function collectionHeadingSeasonLabel() {
     if (seasonNavFilter === "SS") return "S / S";
     if (seasonNavFilter === "AW") return "A / W";
     return "ALL SEASONS";
   }
 
-  function archiveHeadingAtCollectionRoot() {
+  function collectionHeadingAtCollectionRoot() {
     const cat = String(categoryNavFilter ?? "").trim();
     return !cat && subcategoryFilters.size === 0 && !seasonNavFilter && !narrowingFiltersActive();
   }
 
-  /** Archive root — all seasons, no division drill, no narrowing filters. */
-  function navigateArchiveCollectionRoot() {
-    resetAllArchiveFilters();
+  /** COLLECTION root — all seasons, no division drill, no narrowing filters. */
+  function navigateCollectionCollectionRoot() {
+    resetAllCollectionFilters();
     syncCollectionUrlFromBrowseState({ replace: true });
-    scrollArchiveViewportTop();
+    scrollCollectionViewportTop();
   }
 
   function isWardrobeCollectionPlp() {
@@ -10648,28 +10729,28 @@
       return;
     }
     if (isWardrobeCollectionPlp()) {
-      if (archiveHeadingAtCollectionRoot()) scrollArchiveViewportTop();
-      else navigateArchiveCollectionRoot();
+      if (collectionHeadingAtCollectionRoot()) scrollCollectionViewportTop();
+      else navigateCollectionCollectionRoot();
       return;
     }
     if (isItemDetailPageContext()) {
       try {
-        sessionStorage.removeItem(ARCHIVE_BROWSE_RESTORE_KEY);
+        sessionStorage.removeItem(COLLECTION_BROWSE_RESTORE_KEY);
       } catch {
         /* ignore */
       }
-      navigateToArchiveMain();
+      navigateToCollectionMain();
       return;
     }
     if (isCollectionLocation()) {
-      navigateToArchiveMain();
+      navigateToCollectionMain();
       return;
     }
     navigateToSiteHome();
   }
 
   /** Clear season tab only; keep parent division / subcategory drill when set. */
-  function navigateArchiveAllSeasonsKeepDivision() {
+  function navigateCollectionAllSeasonsKeepDivision() {
     if (!seasonNavFilter) return;
     seasonNavFilter = null;
     try {
@@ -10677,22 +10758,22 @@
     } catch {
       /* ignore */
     }
-    replaceArchiveSeasonQuery(seasonNavFilter);
+    replaceCollectionSeasonQuery(seasonNavFilter);
     syncSeasonTabUI();
     renderGrid();
   }
 
-  function renderArchiveHeadingBreadcrumb(host, { searchActive = false } = {}) {
+  function renderCollectionHeadingBreadcrumb(host, { searchActive = false } = {}) {
     if (!host) return;
     host.replaceChildren();
 
     const nav = document.createElement("nav");
-    nav.className = "archive-heading__breadcrumb";
+    nav.className = "collection-heading__breadcrumb";
     nav.setAttribute("aria-label", "Collection breadcrumb");
 
     function appendSep() {
       const sep = document.createElement("span");
-      sep.className = "archive-heading__crumb-sep";
+      sep.className = "collection-heading__crumb-sep";
       sep.setAttribute("aria-hidden", "true");
       sep.textContent = " / ";
       nav.appendChild(sep);
@@ -10701,14 +10782,14 @@
     function appendCrumb(label, { onClick = null, isCurrent = false } = {}) {
       if (isCurrent || !onClick) {
         const el = document.createElement("span");
-        el.className = "archive-heading__crumb archive-heading__crumb--current";
+        el.className = "collection-heading__crumb collection-heading__crumb--current";
         el.textContent = label;
         nav.appendChild(el);
         return;
       }
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "archive-heading__crumb archive-heading__crumb--link";
+      btn.className = "collection-heading__crumb collection-heading__crumb--link";
       btn.textContent = label;
       btn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -10717,12 +10798,12 @@
       nav.appendChild(btn);
     }
 
-    const atRoot = archiveHeadingAtCollectionRoot();
+    const atRoot = collectionHeadingAtCollectionRoot();
     const cat = String(categoryNavFilter ?? "").trim();
     const season = normalizeSeasonNavToken(seasonNavFilter);
 
     appendCrumb("COLLECTION", {
-      onClick: navigateArchiveCollectionRoot,
+      onClick: navigateCollectionCollectionRoot,
       isCurrent: atRoot && !searchActive,
     });
 
@@ -10731,8 +10812,8 @@
       appendCrumb("SEARCH", { isCurrent: true });
     } else if (season) {
       appendSep();
-      appendCrumb(archiveHeadingSeasonLabel(), {
-        onClick: navigateArchiveAllSeasonsKeepDivision,
+      appendCrumb(collectionHeadingSeasonLabel(), {
+        onClick: navigateCollectionAllSeasonsKeepDivision,
         isCurrent: !cat,
       });
     }
@@ -10741,28 +10822,28 @@
   }
 
   /** Line 2 — parent division only; subcategories stay in drill pills / filter chips. */
-  function archiveHeadingTitleLine(parentCategory) {
+  function collectionHeadingTitleLine(parentCategory) {
     const cat = String(parentCategory ?? "").trim();
     if (cat) return categoryDisplayLabel(cat);
-    return ARCHIVE_HEADING_DEFAULT_TITLE;
+    return COLLECTION_HEADING_DEFAULT_TITLE;
   }
 
-  function resolveArchiveSearchTitleLine(qNorm) {
+  function resolveCollectionSearchTitleLine(qNorm) {
     const rawQ =
-      headerSearchOverlayArchiveSearchFrozen && headerSearchOverlayOpeningQueryRaw != null
+      headerSearchOverlayCollectionSearchFrozen && headerSearchOverlayOpeningQueryRaw != null
         ? headerSearchOverlayOpeningQueryRaw
-        : archiveSubmittedSearchRaw || String(els.search?.value ?? "").trim();
+        : collectionSubmittedSearchRaw || String(els.search?.value ?? "").trim();
     return rawQ.length > 0 ? `Results for “${rawQ}”` : `Results for “${qNorm}”`;
   }
 
-  /** Two-line editorial archive heading (context trail + serif title). */
-  function renderArchiveHeading({
-    titleLine = ARCHIVE_HEADING_DEFAULT_TITLE,
+  /** Two-line editorial collection heading (context trail + serif title). */
+  function renderCollectionHeading({
+    titleLine = COLLECTION_HEADING_DEFAULT_TITLE,
     hidden = false,
     searchActive = false,
   } = {}) {
-    const root = document.getElementById("archive-heading");
-    const elContext = document.getElementById("archive-heading-context");
+    const root = document.getElementById("collection-heading");
+    const elContext = document.getElementById("collection-heading-context");
     const elTitle = document.getElementById("items-toolbar-page-title");
     if (!root || !elContext || !elTitle) return;
 
@@ -10775,8 +10856,8 @@
       return;
     }
 
-    const title = String(titleLine ?? "").trim() || ARCHIVE_HEADING_DEFAULT_TITLE;
-    renderArchiveHeadingBreadcrumb(elContext, { searchActive });
+    const title = String(titleLine ?? "").trim() || COLLECTION_HEADING_DEFAULT_TITLE;
+    renderCollectionHeadingBreadcrumb(elContext, { searchActive });
     elContext.hidden = false;
     elTitle.hidden = false;
     elTitle.removeAttribute("aria-hidden");
@@ -10785,7 +10866,7 @@
     const season = normalizeSeasonNavToken(seasonNavFilter);
     const trailParts = ["COLLECTION"];
     if (searchActive) trailParts.push("SEARCH");
-    else if (season) trailParts.push(archiveHeadingSeasonLabel());
+    else if (season) trailParts.push(collectionHeadingSeasonLabel());
     root.setAttribute("aria-label", `${trailParts.join(" / ")} · ${title}`);
   }
   /** Per-slot subcategory drill / mega menu: view entire parent category (empty `subcategoryFilter`). */
@@ -10800,74 +10881,74 @@
     const slot = String(nextSlot ?? "").trim();
     categoryNavFilter = SLOT_OPTIONS.includes(slot) ? slot : "";
     clearSubcategoryFilters();
-    noteArchiveSearchUserChoseMainSlotFilter();
+    noteCollectionSearchUserChoseMainSlotFilter();
     syncCategoryTabUI();
     validateSubcategoryFilter();
     renderCategoryDrill();
     syncFiltersMenuForViewport();
     renderGrid();
     if (!skipUrlSync) syncCollectionUrlFromBrowseState({ replace: true });
-    if (scrollTop) scrollArchiveViewportTop();
+    if (scrollTop) scrollCollectionViewportTop();
   }
 
-  /** Two-line editorial archive heading (context trail + serif title). */
-  function syncArchiveToolbarHeading() {
-    const root = document.getElementById("archive-heading");
+  /** Two-line editorial collection heading (context trail + serif title). */
+  function syncCollectionToolbarHeading() {
+    const root = document.getElementById("collection-heading");
     if (!root) return;
-    const submitted = String(archiveSubmittedSearchNorm ?? "").trim();
-    const qNorm = effectiveArchiveKeywordSearchNorm();
+    const submitted = String(collectionSubmittedSearchNorm ?? "").trim();
+    const qNorm = effectiveCollectionKeywordSearchNorm();
     const searchActive = Boolean((submitted && !isHeaderSearchWrapOpen()) || qNorm);
     const cat = String(categoryNavFilter ?? "").trim();
     const subActive = subcategoryFilters.size > 0;
     const allSeasonsNav = !seasonNavFilter;
     const classicHome = !cat && !subActive && !narrowingFiltersActive() && allSeasonsNav;
     const allPiecesLanding =
-      classicHome && !archiveSubmittedSearchNorm && !qNorm && !isHeaderSearchWrapOpen();
-    const defaultArchiveLanding =
-      !cat && !subActive && !narrowingFiltersActive() && !archiveSubmittedSearchNorm && !qNorm && !isHeaderSearchWrapOpen();
+      classicHome && !collectionSubmittedSearchNorm && !qNorm && !isHeaderSearchWrapOpen();
+    const defaultCollectionLanding =
+      !cat && !subActive && !narrowingFiltersActive() && !collectionSubmittedSearchNorm && !qNorm && !isHeaderSearchWrapOpen();
 
-    document.body.classList.toggle("archive-ui--all-pieces-landing", allPiecesLanding);
-    document.body.classList.toggle("archive-ui--default-archive-landing", defaultArchiveLanding);
+    document.body.classList.toggle("collection-ui--all-pieces-landing", allPiecesLanding);
+    document.body.classList.toggle("collection-ui--default-collection-landing", defaultCollectionLanding);
 
     if (qNorm) {
-      renderArchiveHeading({
+      renderCollectionHeading({
         searchActive: true,
-        titleLine: resolveArchiveSearchTitleLine(qNorm),
+        titleLine: resolveCollectionSearchTitleLine(qNorm),
       });
       return;
     }
 
-    renderArchiveHeading({
+    renderCollectionHeading({
       searchActive: false,
-      titleLine: archiveHeadingTitleLine(cat),
+      titleLine: collectionHeadingTitleLine(cat),
     });
   }
 
   function renderGrid() {
     if (!els.grid) return;
-    dismissArchiveCardStylingReveal();
-    const sorted = getArchiveSortedDataset();
+    dismissCollectionCardStylingReveal();
+    const sorted = getCollectionSortedDataset();
     const filtered = sorted;
     els.grid.classList.toggle("grid--dense", sorted.length > GRID_DENSE_ANIMATION_THRESHOLD);
-    syncArchiveFilterDrawerDoneLabel(filtered.length);
+    syncCollectionFilterDrawerDoneLabel(filtered.length);
     syncFilterSearchFieldDomPlacement();
-    syncArchiveSearchResultsPlpUi();
-    syncArchiveCountLinePlacement();
-    syncArchiveToolbarHeading();
+    syncCollectionSearchResultsPlpUi();
+    syncCollectionCountLinePlacement();
+    syncCollectionToolbarHeading();
     syncBasicColourFilterChipUi();
-    syncArchiveBrandFilterChipUi();
-    syncArchiveDrawerSubcategoryPills();
+    syncCollectionBrandFilterChipUi();
+    syncCollectionDrawerSubcategoryPills();
     syncCategoryFilterChip();
     syncColourFilterChip();
     syncSubcategoryFilterChip();
     syncToolbarActiveFilterChips();
-    const searchNorm = effectiveArchiveKeywordSearchNorm();
-    const structuralKey = buildArchiveGridStructuralKey(sorted, searchNorm);
-    const outfitKey = buildArchiveGridOutfitKey();
+    const searchNorm = effectiveCollectionKeywordSearchNorm();
+    const structuralKey = buildCollectionGridStructuralKey(sorted, searchNorm);
+    const outfitKey = buildCollectionGridOutfitKey();
 
     if (structuralKey === lastGridStructuralKey && outfitKey === lastGridOutfitKey) {
       syncFilterSearchFieldDomPlacement();
-      syncArchiveSearchResultsPlpUi();
+      syncCollectionSearchResultsPlpUi();
       syncToolbarActiveFilterChips();
       return;
     }
@@ -10877,7 +10958,7 @@
       outfitKey !== lastGridOutfitKey &&
       els.grid.childElementCount === sorted.length;
 
-    if (canPatchOutfitOnly && syncArchiveGridCardsOutfitUi(sorted)) {
+    if (canPatchOutfitOnly && syncCollectionGridCardsOutfitUi(sorted)) {
       lastGridOutfitKey = outfitKey;
     } else {
       lastGridStructuralKey = structuralKey;
@@ -10897,7 +10978,7 @@
 
     const n = sorted.length;
     const seasonalTotal = countItemsForCurrentSeasonTab();
-    const gridSearchNorm = effectiveArchiveKeywordSearchNorm();
+    const gridSearchNorm = effectiveCollectionKeywordSearchNorm();
     let countText = "";
     if (gridSearchNorm) {
       countText = `${n} piece${n === 1 ? "" : "s"}`;
@@ -10931,7 +11012,7 @@
     if (els.emptyWrap) els.emptyWrap.hidden = n > 0;
     els.grid.hidden = n === 0;
     syncFilterSearchFieldDomPlacement();
-    syncArchiveSearchResultsPlpUi();
+    syncCollectionSearchResultsPlpUi();
     syncToolbarActiveFilterChips();
   }
 
@@ -10939,7 +11020,7 @@
     const el = els.spendTotal;
     if (!el) return;
     const total = sumPriceInDisplayCurrency(filteredItems);
-    const prefix = effectiveArchiveKeywordSearchNorm()
+    const prefix = effectiveCollectionKeywordSearchNorm()
       ? "Search results"
       : narrowingFiltersActive()
         ? "Filtered spend"
@@ -10947,7 +11028,7 @@
     const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
 
     if (!Number.isFinite(total)) {
-      const formatted = formatMoneyInCurrency(0, archiveDisplayCurrency);
+      const formatted = formatMoneyInCurrency(0, collectionDisplayCurrency);
       el.dataset.spendCompact = formatted;
       el.textContent = formatted;
       return;
@@ -10955,7 +11036,7 @@
 
     const token = ++spendTotalAnimToken;
     if (spendTotalAnimRaf) cancelAnimationFrame(spendTotalAnimRaf);
-    el.dataset.spendCompact = formatMoneyInCurrency(total, archiveDisplayCurrency);
+    el.dataset.spendCompact = formatMoneyInCurrency(total, collectionDisplayCurrency);
 
     if (reduce) {
       spendTotalCurrentValue = total;
@@ -10972,7 +11053,7 @@
       const p = Math.min(1, (now - t0) / duration);
       const eased = 1 - Math.pow(1 - p, 3);
       const next = start + delta * eased;
-      const formatted = formatMoneyInCurrency(next, archiveDisplayCurrency);
+      const formatted = formatMoneyInCurrency(next, collectionDisplayCurrency);
       el.dataset.spendCompact = formatted;
       el.textContent = formatted;
       if (p < 1) {
@@ -11014,11 +11095,11 @@
     }
   }
 
-  /** Preserve window scroll when archive overlays lock the page (styling board, filter drawer). */
-  function forceUnlockArchivePageScroll() {
-    archivePageScrollLockCount = 0;
-    const y = archivePageScrollLockY;
-    archivePageScrollLockY = 0;
+  /** Preserve window scroll when collection overlays lock the page (styling board, filter drawer). */
+  function forceUnlockCollectionPageScroll() {
+    collectionPageScrollLockCount = 0;
+    const y = collectionPageScrollLockY;
+    collectionPageScrollLockY = 0;
     document.documentElement.style.overflow = "";
     document.body.style.position = "";
     document.body.style.top = "";
@@ -11029,27 +11110,27 @@
     if (y > 0) globalThis.scrollTo(0, y);
   }
 
-  function lockArchivePageScroll() {
-    if (archivePageScrollLockCount === 0) {
-      archivePageScrollLockY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
+  function lockCollectionPageScroll() {
+    if (collectionPageScrollLockCount === 0) {
+      collectionPageScrollLockY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
       const scrollbarWidth = Math.max(0, globalThis.innerWidth - document.documentElement.clientWidth);
       document.documentElement.style.overflow = "hidden";
       document.body.style.position = "fixed";
-      document.body.style.top = `-${archivePageScrollLockY}px`;
+      document.body.style.top = `-${collectionPageScrollLockY}px`;
       document.body.style.left = "0";
       document.body.style.right = "0";
       document.body.style.width = "100%";
       if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
     }
-    archivePageScrollLockCount += 1;
+    collectionPageScrollLockCount += 1;
   }
 
-  function unlockArchivePageScroll() {
-    if (archivePageScrollLockCount <= 0) return;
-    archivePageScrollLockCount -= 1;
-    if (archivePageScrollLockCount > 0) return;
-    const y = archivePageScrollLockY;
-    archivePageScrollLockY = 0;
+  function unlockCollectionPageScroll() {
+    if (collectionPageScrollLockCount <= 0) return;
+    collectionPageScrollLockCount -= 1;
+    if (collectionPageScrollLockCount > 0) return;
+    const y = collectionPageScrollLockY;
+    collectionPageScrollLockY = 0;
     document.documentElement.style.overflow = "";
     document.body.style.position = "";
     document.body.style.top = "";
@@ -11099,8 +11180,8 @@
         stylingBoardDrawerOpenRaf = 0;
         if (root.hasAttribute("hidden")) return;
         root.classList.add("styling-board-drawer--visible");
-        document.body.classList.add("archive-ui--styling-board");
-        lockArchivePageScroll();
+        document.body.classList.add("collection-ui--styling-board");
+        lockCollectionPageScroll();
         syncStylingBoardUi();
         renderOutfitStrip();
         document.getElementById("styling-board-drawer-close")?.focus();
@@ -11120,15 +11201,15 @@
       stylingBoardDrawerOpenRaf = 0;
     }
     if (root.hasAttribute("hidden")) {
-      document.body.classList.remove("archive-ui--styling-board");
-      unlockArchivePageScroll();
+      document.body.classList.remove("collection-ui--styling-board");
+      unlockCollectionPageScroll();
       syncStylingBoardUi();
       return;
     }
     root.classList.remove("styling-board-drawer--visible");
     root.setAttribute("aria-hidden", "true");
-    document.body.classList.remove("archive-ui--styling-board");
-    unlockArchivePageScroll();
+    document.body.classList.remove("collection-ui--styling-board");
+    unlockCollectionPageScroll();
     const returnFocus = stylingBoardDrawerFocusReturn;
     stylingBoardDrawerFocusReturn = null;
     const finish = () => {
@@ -11463,7 +11544,7 @@
 
     const basicSel = document.createElement("select");
     basicSel.className = "item-edit-variant-basic-colour";
-    basicSel.setAttribute("aria-label", "Broad colour (archive filter)");
+    basicSel.setAttribute("aria-label", "Broad colour (collection filter)");
     fillBasicColourSelectOptions(basicSel, String(data.basicColour ?? "").trim());
 
     const notesIn = document.createElement("input");
@@ -11687,7 +11768,7 @@
       statusEl.textContent = err ? t : saving ? "Saving…" : t;
       statusEl.classList.toggle("item-edit-save-status--error", Boolean(err));
       statusEl.classList.toggle("item-edit-save-status--saving", saving && !err);
-      statusEl.classList.toggle("item-edit-save-status--saved", !err && !saving && t === "Saved to archive");
+      statusEl.classList.toggle("item-edit-save-status--saved", !err && !saving && t === "Saved to collection");
     };
     let keepFinalWarningMessage = false;
 
@@ -11884,8 +11965,8 @@
     let customCloudSynced = false;
     /** After custom or catalogue mirror save, cloud refresh already merged + rendered the grid. */
     let didCloudListRefresh = false;
-    let archiveCloudRowSaved = false;
-    let archiveSavedAsOverride = false;
+    let collectionCloudRowSaved = false;
+    let collectionSavedAsOverride = false;
     /** @type {object | null} */
     let savedRowForPin = null;
 
@@ -11992,7 +12073,7 @@
       }
 
       try {
-        const mergedForCloud = normalizeItemDerivedFields(mergeArchivePatchIntoFullItem(prev, patch));
+        const mergedForCloud = normalizeItemDerivedFields(mergeCollectionPatchIntoFullItem(prev, patch));
         const saved = await saveWardrobeItemToCloud(mergedForCloud);
         const mediaBust = stampWardrobeItemMediaNonce(
           saved,
@@ -12000,16 +12081,16 @@
             ? /** @type {any} */ (updated).__displayNonce
             : Date.now()
         );
-        archiveCloudRowSaved = true;
+        collectionCloudRowSaved = true;
         upsertWardrobeBaseRowInMemory(saved);
         try {
-          const allOv = loadArchiveOverrides();
+          const allOv = loadCollectionOverrides();
           if (Object.prototype.hasOwnProperty.call(allOv, id)) {
             delete allOv[id];
-            await saveArchiveOverrides(allOv);
+            await saveCollectionOverrides(allOv);
           }
         } catch (clearOvErr) {
-          console.warn("Could not clear stale archive override after cloud save.", clearOvErr);
+          console.warn("Could not clear stale collection override after cloud save.", clearOvErr);
         }
         cloudBackedCustomItems = [
           saved,
@@ -12033,7 +12114,7 @@
     }
 
     if (!keepFinalWarningMessage && !(isCustom && isSupabaseReady() && !customCloudSynced)) {
-      setMsg("Saved to archive", false);
+      setMsg("Saved to collection", false);
     }
     if (!didCloudListRefresh) {
       mergeWardrobeFromSources();
@@ -12055,7 +12136,7 @@
       }
     }
     if (isSupabaseReady()) {
-      if (!isCustom && !archiveCloudRowSaved && archiveSavedAsOverride) {
+      if (!isCustom && !collectionCloudRowSaved && collectionSavedAsOverride) {
         showToast("Saved as override (cloud row write failed).");
         return;
       }
@@ -12073,11 +12154,11 @@
     }
     if (onItemPage) {
       if (savedRowForPin) pinWardrobeSaveToSession(savedRowForPin);
-      writeArchiveBrowseRestoreForItemReturn(next ?? updated);
+      writeCollectionBrowseRestoreForItemReturn(next ?? updated);
     }
   }
 
-  /** PDP-style trail: site → section → record type (matches archive tabs / drill). */
+  /** PDP-style trail: site → section → record type (matches collection tabs / drill). */
   function buildItemDetailBreadcrumbNav(item) {
     const nav = document.createElement("nav");
     nav.className = "item-detail__breadcrumb";
@@ -12099,8 +12180,20 @@
     const home = document.createElement("a");
     home.className = "item-detail__breadcrumb-link";
     home.href = SITE_HOME_URL;
-    home.textContent = "Timeless Wardrobe";
+    home.textContent = "Home";
     nav.appendChild(home);
+
+    appendSep();
+
+    const collection = document.createElement("a");
+    collection.className = "item-detail__breadcrumb-link";
+    collection.href = COLLECTION_BASE_PATH;
+    collection.textContent = "Collection";
+    collection.addEventListener("click", (e) => {
+      e.preventDefault();
+      navigateToCollectionMain();
+    });
+    nav.appendChild(collection);
 
     appendSep();
 
@@ -12112,11 +12205,11 @@
       e.preventDefault();
       const cat = String(slotLabel ?? "").trim();
       if (!SLOT_OPTIONS.includes(cat)) {
-        navigateToArchiveMain();
+        navigateToCollectionMain();
         return;
       }
-      writeArchiveBrowseRestoreSnapshot({ category: cat, subcategory: "" });
-      navigateToArchiveMain({ category: cat, subcategory: "" });
+      writeCollectionBrowseRestoreSnapshot({ category: cat, subcategory: "" });
+      navigateToCollectionMain({ category: cat, subcategory: "" });
     });
     nav.appendChild(sec);
 
@@ -12132,11 +12225,11 @@
       const cat = String(slotLabel ?? "").trim();
       const sub = String(rk ?? "").trim();
       if (!SLOT_OPTIONS.includes(cat)) {
-        navigateToArchiveMain();
+        navigateToCollectionMain();
         return;
       }
-      writeArchiveBrowseRestoreSnapshot({ category: cat, subcategory: sub });
-      navigateToArchiveMain({ category: cat, subcategory: sub });
+      writeCollectionBrowseRestoreSnapshot({ category: cat, subcategory: sub });
+      navigateToCollectionMain({ category: cat, subcategory: sub });
     });
     nav.appendChild(typeLink);
 
@@ -12368,7 +12461,7 @@
       recordTypeSel.id = "item-edit-record-type";
       recordTypeSel.className = "item-edit-record-type-select";
       recordTypeSel.title =
-        'Same labels as the archive "type" strip — controls filtering and default browse order.';
+        'Same labels as the collection "type" strip — controls filtering and default browse order.';
       const currentRecKey = recordCategoryForDrill(item, slotPick);
       addField("Record type", recordTypeSel);
       fillItemEditRecordTypeSelect(recordTypeSel, slotPick, currentRecKey);
@@ -12501,7 +12594,7 @@
         const variantsIntro = document.createElement("p");
         variantsIntro.className = "item-edit-variants-intro";
         variantsIntro.textContent =
-          "This piece keeps one primary cover for the archive grid; each colour has its own variant cover. The colour strip uses an uploaded preview if set, otherwise a hex value from the colour code or name, otherwise the code text, and only then the variant cover. Keys stay fixed — use “Add another colour…” for a new option.";
+          "This piece keeps one primary cover for the collection grid; each colour has its own variant cover. The colour strip uses an uploaded preview if set, otherwise a hex value from the colour code or name, otherwise the code text, and only then the variant cover. Keys stay fixed — use “Add another colour…” for a new option.";
         variantsWrap.appendChild(variantsIntro);
       }
 
@@ -12872,7 +12965,7 @@
     body.appendChild(brand);
 
     if (isItemPageView) {
-      const priceLine = formattedArchivePriceLine(item);
+      const priceLine = formattedCollectionPriceLine(item);
       if (priceLine) {
         const priceEl = document.createElement("p");
         priceEl.className = "item-detail__price";
@@ -12920,8 +13013,8 @@
 
     if (!itemEligibleForOutfit(item)) {
       const only = document.createElement("p");
-      only.className = "item-detail__archive-only";
-      only.textContent = "Archive entry — not used in the outfit builder.";
+      only.className = "item-detail__collection-only";
+      only.textContent = "Collection entry — not used in the outfit builder.";
       body.appendChild(only);
     }
 
@@ -12946,7 +13039,7 @@
       if (pd) addRow("Purchase date", formatPurchaseDateForDisplay(pd));
     }
     if (!isItemPageView) {
-      const pl = formattedArchivePriceLine(item);
+      const pl = formattedCollectionPriceLine(item);
       if (pl) addRow("Price", pl);
     }
     const specLine = specParts(item).join(" · ");
@@ -13008,11 +13101,11 @@
     globalThis.history.replaceState(null, "", u.pathname + u.search);
   }
 
-  function persistArchiveListScrollForReturn() {
+  function persistCollectionListScrollForReturn() {
     if (!document.getElementById("grid")) return;
     try {
       sessionStorage.setItem(
-        ARCHIVE_SCROLL_RESTORE_KEY,
+        COLLECTION_SCROLL_RESTORE_KEY,
         JSON.stringify({
           y: globalThis.scrollY ?? globalThis.pageYOffset ?? 0,
           t: Date.now(),
@@ -13023,10 +13116,10 @@
     }
   }
 
-  function writeArchiveBrowseRestoreSnapshot(overrides = {}) {
+  function writeCollectionBrowseRestoreSnapshot(overrides = {}) {
     try {
       sessionStorage.setItem(
-        ARCHIVE_BROWSE_RESTORE_KEY,
+        COLLECTION_BROWSE_RESTORE_KEY,
         JSON.stringify({
           t: Date.now(),
           seasonNav: normalizeSeasonNavToken(overrides.seasonNav ?? seasonNavFilter),
@@ -13047,14 +13140,14 @@
     }
   }
 
-  /** Read browse snapshot without consuming (same TTL as `consumeArchiveBrowseStateForReturn`). */
-  function peekArchiveBrowseRestoreSnapshot() {
+  /** Read browse snapshot without consuming (same TTL as `consumeCollectionBrowseStateForReturn`). */
+  function peekCollectionBrowseRestoreSnapshot() {
     try {
-      const raw = sessionStorage.getItem(ARCHIVE_BROWSE_RESTORE_KEY);
+      const raw = sessionStorage.getItem(COLLECTION_BROWSE_RESTORE_KEY);
       if (!raw) return null;
       const o = JSON.parse(raw);
       const t = Number(o?.t);
-      if (!Number.isFinite(t) || Date.now() - t > ARCHIVE_SCROLL_TTL_MS) return null;
+      if (!Number.isFinite(t) || Date.now() - t > COLLECTION_SCROLL_TTL_MS) return null;
       return o;
     } catch {
       return null;
@@ -13062,12 +13155,12 @@
   }
 
   /**
-   * Before leaving `item.html` after save, refresh the archive browse snapshot so the PLP
+   * Before leaving `item.html` after save, refresh the collection browse snapshot so the PLP
    * re-opens on the same section + record-type drill the user came from (or the saved item’s type).
    * @param {object | null | undefined} item
    */
-  function writeArchiveBrowseRestoreForItemReturn(item) {
-    const prev = peekArchiveBrowseRestoreSnapshot();
+  function writeCollectionBrowseRestoreForItemReturn(item) {
+    const prev = peekCollectionBrowseRestoreSnapshot();
     const slot = item ? itemSlot(item) : "";
     const drill = item ? recordCategoryForDrill(item, slot) : "";
     let category = String(prev?.category ?? "").trim();
@@ -13075,7 +13168,7 @@
     if (!SLOT_OPTIONS.includes(category)) category = slot;
     if (!subcategory && drill) subcategory = drill;
     if (prev) {
-      writeArchiveBrowseRestoreSnapshot({
+      writeCollectionBrowseRestoreSnapshot({
         seasonNav: prev.seasonNav,
         category,
         subcategory,
@@ -13084,10 +13177,10 @@
       });
       return;
     }
-    writeArchiveBrowseRestoreSnapshot({ category, subcategory });
+    writeCollectionBrowseRestoreSnapshot({ category, subcategory });
   }
 
-  function navigateToArchiveMain(overrides = {}) {
+  function navigateToCollectionMain(overrides = {}) {
     const href = collectionHrefForBrowseState(overrides);
     try {
       globalThis.location.assign(href);
@@ -13096,8 +13189,8 @@
     }
   }
 
-  function normalizeArchiveTopLanding() {
-    if (!isArchiveLocation()) return;
+  function normalizeCollectionTopLanding() {
+    if (!isCollectionLocation()) return;
     if (String(globalThis.location.hash ?? "") !== "#main") return;
     try {
       const u = new URL(globalThis.location.href);
@@ -13119,7 +13212,7 @@
     return resolvePageTheme() === "home";
   }
 
-  /** Logo / brand home: editorial hero landing — never the archive PLP. */
+  /** Logo / brand home: editorial hero landing — never the collection PLP. */
   function scrollSiteHomeTop() {
     try {
       const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
@@ -13135,7 +13228,7 @@
       return;
     }
     try {
-      sessionStorage.removeItem(ARCHIVE_BROWSE_RESTORE_KEY);
+      sessionStorage.removeItem(COLLECTION_BROWSE_RESTORE_KEY);
     } catch {
       /* ignore */
     }
@@ -13146,18 +13239,18 @@
     }
   }
 
-  function persistArchiveBrowseStateForReturn() {
+  function persistCollectionBrowseStateForReturn() {
     if (!document.getElementById("grid")) return;
-    writeArchiveBrowseRestoreSnapshot();
+    writeCollectionBrowseRestoreSnapshot();
   }
 
   /** Apply category / season / drill / search after a full reload when returning from `item.html`. */
-  function consumeArchiveBrowseStateForReturn() {
+  function consumeCollectionBrowseStateForReturn() {
     if (!document.getElementById("grid")) return;
     let raw = null;
     try {
-      raw = sessionStorage.getItem(ARCHIVE_BROWSE_RESTORE_KEY);
-      if (raw) sessionStorage.removeItem(ARCHIVE_BROWSE_RESTORE_KEY);
+      raw = sessionStorage.getItem(COLLECTION_BROWSE_RESTORE_KEY);
+      if (raw) sessionStorage.removeItem(COLLECTION_BROWSE_RESTORE_KEY);
     } catch {
       return;
     }
@@ -13169,12 +13262,12 @@
       return;
     }
     const t = Number(o?.t);
-    if (!Number.isFinite(t) || Date.now() - t > ARCHIVE_SCROLL_TTL_MS) return;
+    if (!Number.isFinite(t) || Date.now() - t > COLLECTION_SCROLL_TTL_MS) return;
 
     const urlSeason = readSeasonNavFromUrl();
     if (urlSeason) {
       seasonNavFilter = urlSeason;
-    } else if (archiveUrlHasSeasonParam() || isArchiveLocation()) {
+    } else if (collectionUrlHasSeasonParam() || isCollectionLocation()) {
       seasonNavFilter = null;
     } else {
       seasonNavFilter = normalizeSeasonNavToken(o?.seasonNav);
@@ -13190,12 +13283,12 @@
       els.search.value = q.slice(0, 500);
       const qn = normalizeSearch(q);
       if (qn) {
-        archiveSubmittedSearchNorm = qn;
-        archiveSubmittedSearchRaw = q;
-        archiveSearchWithinRecordCategory = "";
-        archiveSearchBrowseAllSlots = true;
-        archiveSearchReturnSnapshot = null;
-        document.body.classList.remove("archive-ui--search-results-plp");
+        collectionSubmittedSearchNorm = qn;
+        collectionSubmittedSearchRaw = q;
+        collectionSearchWithinRecordCategory = "";
+        collectionSearchBrowseAllSlots = true;
+        collectionSearchReturnSnapshot = null;
+        document.body.classList.remove("collection-ui--search-results-plp");
       }
     }
 
@@ -13207,12 +13300,12 @@
     }
   }
 
-  function consumeAndRestoreArchiveListScroll() {
+  function consumeAndRestoreCollectionListScroll() {
     if (!document.getElementById("grid")) return;
     let raw = null;
     try {
-      raw = sessionStorage.getItem(ARCHIVE_SCROLL_RESTORE_KEY);
-      if (raw) sessionStorage.removeItem(ARCHIVE_SCROLL_RESTORE_KEY);
+      raw = sessionStorage.getItem(COLLECTION_SCROLL_RESTORE_KEY);
+      if (raw) sessionStorage.removeItem(COLLECTION_SCROLL_RESTORE_KEY);
     } catch {
       return;
     }
@@ -13226,7 +13319,7 @@
     const y = Number(o?.y);
     const t = Number(o?.t);
     if (!Number.isFinite(y) || y < 0) return;
-    if (!Number.isFinite(t) || Date.now() - t > ARCHIVE_SCROLL_TTL_MS) return;
+    if (!Number.isFinite(t) || Date.now() - t > COLLECTION_SCROLL_TTL_MS) return;
 
     function clampScroll(target) {
       const el = document.documentElement;
@@ -13263,8 +13356,8 @@
       globalThis.open(url, "_blank", "noopener,noreferrer");
       return;
     }
-    persistArchiveListScrollForReturn();
-    persistArchiveBrowseStateForReturn();
+    persistCollectionListScrollForReturn();
+    persistCollectionBrowseStateForReturn();
     globalThis.location.assign(url);
   }
 
@@ -13435,7 +13528,7 @@
   function syncCategoryTabUI() {
     const filter = String(categoryNavFilter ?? "").trim();
     const subF = subcategoryFiltersKey();
-    const submenuOpen = document.body.classList.contains("archive-ui--header-submenu-open");
+    const submenuOpen = document.body.classList.contains("collection-ui--header-submenu-open");
     const openSlot = submenuOpen ? String(headerNavOpenSlot ?? "").trim() : "";
     const jumpMatches = (el) => String(el.getAttribute("data-category-jump") ?? "").trim() === filter;
 
@@ -13482,8 +13575,8 @@
     const v = normalized === "SS" || normalized === "AW" ? normalized : null;
     seasonNavFilter = v && seasonNavFilter !== v ? v : null;
     persistSeasonNav();
-    replaceArchiveSeasonQuery(seasonNavFilter);
-    invalidateArchiveSortedCache();
+    replaceCollectionSeasonQuery(seasonNavFilter);
+    invalidateCollectionSortedCache();
     syncSeasonTabUI();
     validateSubcategoryFilter();
     renderCategoryDrill();
@@ -13505,19 +13598,19 @@
     markTabs(document.getElementById("season-nav"), ".season-strip__tab", "aria-selected");
     markTabs(document.getElementById("season-nav-mini"), ".site-header__season-mini-tab", "aria-pressed");
     markTabs(
-      document.getElementById("archive-drawer-season-chips"),
+      document.getElementById("collection-drawer-season-chips"),
       "button[data-season-filter]",
       "aria-pressed"
     );
   }
 
-  /** Match archive mobile PLP + compact header (`max-width: 900px` in CSS / `isHeaderCompactLayout`). */
+  /** Match collection mobile PLP + compact header (`max-width: 900px` in CSS / `isHeaderCompactLayout`). */
   function isFiltersNarrowViewport() {
     return globalThis.matchMedia?.("(max-width: 900px)")?.matches ?? false;
   }
 
-  /** After changing category / type filters, bring the archive list back into view from the top. */
-  function scrollArchiveViewportTop() {
+  /** After changing category / type filters, bring the collection list back into view from the top. */
+  function scrollCollectionViewportTop() {
     try {
       const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
       globalThis.scrollTo({ top: 0, left: 0, behavior: reduce ? "auto" : "smooth" });
@@ -13527,7 +13620,7 @@
   }
 
   /** Keep viewport Y stable when toolbar / drill chips reflow (avoids scroll-fold feedback loops). */
-  function withPreservedArchiveScroll(updateFn) {
+  function withPreservedCollectionScroll(updateFn) {
     const y = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
     updateFn();
     requestAnimationFrame(() => {
@@ -13553,7 +13646,7 @@
       btn.removeAttribute("aria-hidden");
       btn.tabIndex = 0;
       btn.setAttribute("aria-expanded", nav.classList.contains("filters--menu-open") ? "true" : "false");
-      document.body.classList.remove("archive-ui--nav-folded");
+      document.body.classList.remove("collection-ui--nav-folded");
     }
   }
 
@@ -13573,7 +13666,7 @@
     const open = nav.classList.contains("filters--menu-open");
     btn.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
-      document.body.classList.remove("archive-ui--nav-folded");
+      document.body.classList.remove("collection-ui--nav-folded");
     }
   }
 
@@ -13583,18 +13676,18 @@
     validateSubcategoryFilter();
     renderCategoryDrill();
     syncFiltersMenuForViewport();
-    wireArchiveBrowseToolControls();
+    wireCollectionBrowseToolControls();
     syncFilterSearchClearVisibility();
-    syncArchiveSortChipUi();
+    syncCollectionSortChipUi();
   }
 
   /**
    * Filter drawer: pill row of record types present in the current slot + season (counts), above sort/colour.
    * Mirrors `fillItemEditRecordTypeSelect` key ordering; hidden when fewer than two distinct types.
    */
-  function syncArchiveDrawerSubcategoryPills() {
-    const section = document.getElementById("archive-drawer-record-types");
-    const chipWrap = document.getElementById("archive-drawer-record-type-chips");
+  function syncCollectionDrawerSubcategoryPills() {
+    const section = document.getElementById("collection-drawer-record-types");
+    const chipWrap = document.getElementById("collection-drawer-record-type-chips");
     if (!section || !chipWrap) return;
 
     const slot = String(categoryNavFilter ?? "").trim();
@@ -13642,7 +13735,7 @@
 
     const allBtn = document.createElement("button");
     allBtn.type = "button";
-    allBtn.className = "archive-drawer-record-type-chip";
+    allBtn.className = "collection-drawer-record-type-chip";
     allBtn.dataset.drawerRecordType = "";
     const allTypesActive = subcategoryFilters.size === 0;
     allBtn.classList.toggle("is-active", allTypesActive);
@@ -13657,7 +13750,7 @@
     for (const { raw, label, count } of withCounts) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "archive-drawer-record-type-chip";
+      b.className = "collection-drawer-record-type-chip";
       b.dataset.drawerRecordType = raw;
       const on = subcategoryEntryIsActive(raw);
       b.classList.toggle("is-active", on);
@@ -13672,10 +13765,10 @@
   }
 
   function syncBasicColourFilterChipUi() {
-    const chipWrap = document.getElementById("archive-colour-chips");
+    const chipWrap = document.getElementById("collection-colour-chips");
     const chipBlock = chipWrap?.closest(".items-toolbar__colour-block");
     if (!chipWrap) return;
-    const allowColour = allowArchiveBasicColourFilter();
+    const allowColour = allowCollectionBasicColourFilter();
     if (chipBlock) chipBlock.hidden = !allowColour;
     chipWrap.hidden = !allowColour;
     if (!allowColour) {
@@ -13729,7 +13822,7 @@
         const key = String(b.dataset.basicColour ?? "")
           .trim()
           .toLowerCase();
-        withPreservedArchiveScroll(() => {
+        withPreservedCollectionScroll(() => {
           if (!key) persistBasicColourFilters(new Set());
           else toggleBasicColourFilter(key);
           syncBasicColourFilterChipUi();
@@ -13739,11 +13832,11 @@
     }
   }
 
-  function syncArchiveBrandFilterChipUi() {
-    const chipWrap = document.getElementById("archive-drawer-brand-chips");
-    const chipBlock = chipWrap?.closest(".archive-filter-drawer__block--brands");
+  function syncCollectionBrandFilterChipUi() {
+    const chipWrap = document.getElementById("collection-drawer-brand-chips");
+    const chipBlock = chipWrap?.closest(".collection-filter-drawer__block--brands");
     if (!chipWrap) return;
-    const allowBrand = allowArchiveBasicColourFilter();
+    const allowBrand = allowCollectionBasicColourFilter();
     if (chipBlock) chipBlock.hidden = !allowBrand;
     chipWrap.hidden = !allowBrand;
     if (!allowBrand) {
@@ -13762,7 +13855,7 @@
     for (const brand of keys) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "archive-drawer-sort-chip archive-drawer-brand-chip";
+      b.className = "collection-drawer-sort-chip collection-drawer-brand-chip";
       b.dataset.brandFilter = brand;
       const on = selectedBrandFilters.has(brand);
       b.classList.toggle("is-active", on);
@@ -13771,7 +13864,7 @@
       b.textContent = `${brand} (${counts.get(brand) ?? 0})`;
       b.addEventListener("click", () => {
         toggleBrandFilter(brand);
-        syncArchiveBrandFilterChipUi();
+        syncCollectionBrandFilterChipUi();
         syncToolbarActiveFilterChips();
         renderGrid();
       });
@@ -13779,58 +13872,58 @@
     }
   }
 
-  function openArchiveFilterDrawer() {
-    const root = document.getElementById("archive-filter-drawer");
-    const openBtn = document.getElementById("archive-filter-drawer-open");
+  function openCollectionFilterDrawer() {
+    const root = document.getElementById("collection-filter-drawer");
+    const openBtn = document.getElementById("collection-filter-drawer-open");
     if (!root || !openBtn) return;
     if (!root.hasAttribute("hidden")) return;
-    if (archiveFilterDrawerOpenRaf) {
-      cancelAnimationFrame(archiveFilterDrawerOpenRaf);
-      archiveFilterDrawerOpenRaf = 0;
+    if (collectionFilterDrawerOpenRaf) {
+      cancelAnimationFrame(collectionFilterDrawerOpenRaf);
+      collectionFilterDrawerOpenRaf = 0;
     }
-    archiveFilterDrawerFocusReturn = document.activeElement;
+    collectionFilterDrawerFocusReturn = document.activeElement;
     root.removeAttribute("hidden");
     root.setAttribute("aria-hidden", "false");
-    archiveFilterDrawerOpenRaf = requestAnimationFrame(() => {
-      archiveFilterDrawerOpenRaf = 0;
+    collectionFilterDrawerOpenRaf = requestAnimationFrame(() => {
+      collectionFilterDrawerOpenRaf = 0;
       if (root.hasAttribute("hidden")) return;
-      root.classList.add("archive-filter-drawer--visible");
+      root.classList.add("collection-filter-drawer--visible");
       openBtn.setAttribute("aria-expanded", "true");
-      document.body.classList.add("archive-ui--filter-drawer");
-      lockArchivePageScroll();
-      syncArchiveDrawerSubcategoryPills();
-      syncArchiveSortChipUi();
-      syncArchiveBrandFilterChipUi();
-      syncArchiveFilterDrawerDoneLabel(applyFilters(items).length);
-      document.getElementById("archive-filter-drawer-close")?.focus();
+      document.body.classList.add("collection-ui--filter-drawer");
+      lockCollectionPageScroll();
+      syncCollectionDrawerSubcategoryPills();
+      syncCollectionSortChipUi();
+      syncCollectionBrandFilterChipUi();
+      syncCollectionFilterDrawerDoneLabel(applyFilters(items).length);
+      document.getElementById("collection-filter-drawer-close")?.focus();
     });
   }
 
-  function closeArchiveFilterDrawer() {
-    const root = document.getElementById("archive-filter-drawer");
-    const openBtn = document.getElementById("archive-filter-drawer-open");
+  function closeCollectionFilterDrawer() {
+    const root = document.getElementById("collection-filter-drawer");
+    const openBtn = document.getElementById("collection-filter-drawer-open");
     if (!root) return;
-    if (archiveFilterDrawerOpenRaf) {
-      cancelAnimationFrame(archiveFilterDrawerOpenRaf);
-      archiveFilterDrawerOpenRaf = 0;
+    if (collectionFilterDrawerOpenRaf) {
+      cancelAnimationFrame(collectionFilterDrawerOpenRaf);
+      collectionFilterDrawerOpenRaf = 0;
     }
     if (root.hasAttribute("hidden")) {
-      document.body.classList.remove("archive-ui--filter-drawer");
-      unlockArchivePageScroll();
+      document.body.classList.remove("collection-ui--filter-drawer");
+      unlockCollectionPageScroll();
       return;
     }
 
-    const sheet = root.querySelector(".archive-filter-drawer__sheet");
+    const sheet = root.querySelector(".collection-filter-drawer__sheet");
     const finalize = () => {
       if (root.hasAttribute("hidden")) return;
       root.setAttribute("hidden", "");
       root.setAttribute("aria-hidden", "true");
-      root.classList.remove("archive-filter-drawer--visible");
+      root.classList.remove("collection-filter-drawer--visible");
       openBtn?.setAttribute("aria-expanded", "false");
-      document.body.classList.remove("archive-ui--filter-drawer");
-      unlockArchivePageScroll();
-      const el = archiveFilterDrawerFocusReturn;
-      archiveFilterDrawerFocusReturn = null;
+      document.body.classList.remove("collection-ui--filter-drawer");
+      unlockCollectionPageScroll();
+      const el = collectionFilterDrawerFocusReturn;
+      collectionFilterDrawerFocusReturn = null;
       if (el && typeof el.focus === "function") {
         try {
           el.focus();
@@ -13840,7 +13933,7 @@
       }
     };
 
-    if (!root.classList.contains("archive-filter-drawer--visible")) {
+    if (!root.classList.contains("collection-filter-drawer--visible")) {
       finalize();
       return;
     }
@@ -13859,34 +13952,34 @@
     };
     sheet?.addEventListener("transitionend", onTrans);
     const safety = setTimeout(finish, 420);
-    root.classList.remove("archive-filter-drawer--visible");
+    root.classList.remove("collection-filter-drawer--visible");
   }
 
-  function wireArchiveBrowseToolControls() {
-    const filterDrawer = document.getElementById("archive-filter-drawer");
+  function wireCollectionBrowseToolControls() {
+    const filterDrawer = document.getElementById("collection-filter-drawer");
     if (filterDrawer && filterDrawer.dataset.twSortChipWired !== "1") {
       filterDrawer.dataset.twSortChipWired = "1";
       filterDrawer.addEventListener("click", (e) => {
-        const btn = e.target.closest("[data-archive-sort]");
+        const btn = e.target.closest("[data-collection-sort]");
         if (!btn || !filterDrawer.contains(btn)) return;
-        const v = String(btn.getAttribute("data-archive-sort") ?? "").trim();
-        if (!ARCHIVE_SORT_MODES.includes(v)) return;
-        archiveSortMode = persistArchiveSortMode(v);
-        syncArchiveSortChipUi();
+        const v = String(btn.getAttribute("data-collection-sort") ?? "").trim();
+        if (!COLLECTION_SORT_MODES.includes(v)) return;
+        collectionSortMode = persistCollectionSortMode(v);
+        syncCollectionSortChipUi();
         renderGrid();
       });
     }
-    syncArchiveSortChipUi();
+    syncCollectionSortChipUi();
 
-    const drawerOpen = document.getElementById("archive-filter-drawer-open");
-    const drawerRoot = document.getElementById("archive-filter-drawer");
-    const drawerRecChips = document.getElementById("archive-drawer-record-type-chips");
+    const drawerOpen = document.getElementById("collection-filter-drawer-open");
+    const drawerRoot = document.getElementById("collection-filter-drawer");
+    const drawerRecChips = document.getElementById("collection-drawer-record-type-chips");
     if (drawerRecChips && drawerRecChips.dataset.twDrawerRecWired !== "1") {
       drawerRecChips.dataset.twDrawerRecWired = "1";
       drawerRecChips.addEventListener("click", (e) => {
-        const b = e.target.closest("button.archive-drawer-record-type-chip");
+        const b = e.target.closest("button.collection-drawer-record-type-chip");
         if (!b || !drawerRecChips.contains(b)) return;
-        withPreservedArchiveScroll(() => {
+        withPreservedCollectionScroll(() => {
           const raw = String(b.dataset.drawerRecordType ?? "").trim();
           if (!raw) clearSubcategoryFilters();
           else toggleSubcategoryFilter(raw);
@@ -13898,35 +13991,35 @@
     }
     if (drawerRoot && drawerOpen && drawerRoot.dataset.twDrawerUiWired !== "1") {
       drawerRoot.dataset.twDrawerUiWired = "1";
-      drawerOpen.addEventListener("click", () => openArchiveFilterDrawer());
-      document.getElementById("archive-filter-drawer-backdrop")?.addEventListener("click", () => closeArchiveFilterDrawer());
-      document.getElementById("archive-filter-drawer-close")?.addEventListener("click", () => closeArchiveFilterDrawer());
-      document.getElementById("archive-filter-drawer-done")?.addEventListener("click", () => closeArchiveFilterDrawer());
+      drawerOpen.addEventListener("click", () => openCollectionFilterDrawer());
+      document.getElementById("collection-filter-drawer-backdrop")?.addEventListener("click", () => closeCollectionFilterDrawer());
+      document.getElementById("collection-filter-drawer-close")?.addEventListener("click", () => closeCollectionFilterDrawer());
+      document.getElementById("collection-filter-drawer-done")?.addEventListener("click", () => closeCollectionFilterDrawer());
       if (document.body.dataset.twFilterDrawerEscapeWired !== "1") {
         document.body.dataset.twFilterDrawerEscapeWired = "1";
         document.addEventListener(
           "keydown",
           (e) => {
             if (e.key !== "Escape") return;
-            const r = document.getElementById("archive-filter-drawer");
+            const r = document.getElementById("collection-filter-drawer");
             if (!r || r.hasAttribute("hidden")) return;
-            closeArchiveFilterDrawer();
+            closeCollectionFilterDrawer();
           },
           true
         );
       }
     }
 
-    const chipWrap = document.getElementById("archive-colour-chips");
+    const chipWrap = document.getElementById("collection-colour-chips");
     if (chipWrap && chipWrap.dataset.twColourWired !== "1") {
       chipWrap.dataset.twColourWired = "1";
       syncBasicColourFilterChipUi();
     }
 
-    const brandWrap = document.getElementById("archive-drawer-brand-chips");
+    const brandWrap = document.getElementById("collection-drawer-brand-chips");
     if (brandWrap && brandWrap.dataset.twBrandWired !== "1") {
       brandWrap.dataset.twBrandWired = "1";
-      syncArchiveBrandFilterChipUi();
+      syncCollectionBrandFilterChipUi();
     }
   }
 
@@ -13971,13 +14064,13 @@
         return;
       }
       const submenuOpen =
-        document.body.classList.contains("archive-ui--header-submenu-open") ||
-        document.body.classList.contains("archive-ui--header-submenu-closing");
+        document.body.classList.contains("collection-ui--header-submenu-open") ||
+        document.body.classList.contains("collection-ui--header-submenu-closing");
       const searchWrap = document.getElementById("site-header-search-wrap");
       const searchState = String(searchWrap?.dataset.searchState ?? "closed").trim() || "closed";
       const searchOpen =
-        document.body.classList.contains("archive-ui--header-search-open") ||
-        document.body.classList.contains("archive-ui--header-search-closing") ||
+        document.body.classList.contains("collection-ui--header-search-open") ||
+        document.body.classList.contains("collection-ui--header-search-closing") ||
         searchState === "opening" ||
         searchState === "open" ||
         searchState === "closing";
@@ -14009,11 +14102,11 @@
     const searchWrap = document.getElementById("site-header-search-wrap");
     const searchState = String(searchWrap?.dataset.searchState ?? "closed").trim() || "closed";
     const submenuOpen =
-      document.body.classList.contains("archive-ui--header-submenu-open") ||
-      document.body.classList.contains("archive-ui--header-submenu-closing");
+      document.body.classList.contains("collection-ui--header-submenu-open") ||
+      document.body.classList.contains("collection-ui--header-submenu-closing");
     const searchOpen =
-      document.body.classList.contains("archive-ui--header-search-open") ||
-      document.body.classList.contains("archive-ui--header-search-closing") ||
+      document.body.classList.contains("collection-ui--header-search-open") ||
+      document.body.classList.contains("collection-ui--header-search-closing") ||
       searchWrap?.classList.contains("is-open") ||
       searchState === "opening" ||
       searchState === "open" ||
@@ -14107,7 +14200,7 @@
       wrap.classList.remove("site-header__submenu--opening", "site-header__submenu--switching");
       wrap.setAttribute("aria-hidden", "true");
     }
-    document.body.classList.remove("archive-ui--header-submenu-open", "archive-ui--header-submenu-closing");
+    document.body.classList.remove("collection-ui--header-submenu-open", "collection-ui--header-submenu-closing");
     hideHeaderFlyoutDimIfIdle();
     try {
       document.documentElement.style.removeProperty("--site-header-chrome-bottom");
@@ -14193,15 +14286,15 @@
     shell?.classList.remove("site-header-shell--home-overlay");
 
     document.body.classList.remove(
-      "archive-ui--mobile-nav-open",
-      "archive-ui--header-search-open",
-      "archive-ui--header-search-closing",
-      "archive-ui--header-submenu-open",
-      "archive-ui--styling-board",
-      "archive-ui--filter-drawer",
-      "archive-ui--nav-folded"
+      "collection-ui--mobile-nav-open",
+      "collection-ui--header-search-open",
+      "collection-ui--header-search-closing",
+      "collection-ui--header-submenu-open",
+      "collection-ui--styling-board",
+      "collection-ui--filter-drawer",
+      "collection-ui--nav-folded"
     );
-    forceUnlockArchivePageScroll();
+    forceUnlockCollectionPageScroll();
     document.body.style.removeProperty("--home-header-nav-height");
     document.body.style.removeProperty("--home-header-stack-height");
     document.documentElement.style.removeProperty("--tw-search-dim-top");
@@ -14219,7 +14312,7 @@
     document.getElementById("site-header-menu-btn")?.setAttribute("aria-expanded", "false");
     document.getElementById("site-header-menu-btn")?.setAttribute("aria-label", "Open categories menu");
 
-    const filterDrawer = document.getElementById("archive-filter-drawer");
+    const filterDrawer = document.getElementById("collection-filter-drawer");
     if (filterDrawer) {
       filterDrawer.hidden = true;
       filterDrawer.setAttribute("aria-hidden", "true");
@@ -14248,8 +14341,8 @@
     const headerSearchInput = /** @type {HTMLInputElement | null} */ (document.getElementById("filter-search"));
     if (!headerSearchWrap?.classList.contains("is-open")) return;
     const snap = headerSearchOverlayOpeningQueryRaw;
-    headerSearchOverlayArchiveSearchFrozen = false;
-    headerSearchOpenArchiveSearchNorm = "";
+    headerSearchOverlayCollectionSearchFrozen = false;
+    headerSearchOpenCollectionSearchNorm = "";
     headerSearchOverlayOpeningQueryRaw = null;
     cancelHeaderSearchOverlayUiDebounce();
     resetHeaderSearchOverlayResultsDom();
@@ -14261,7 +14354,7 @@
     }
     headerSearchBtn?.setAttribute("aria-expanded", "false");
     headerSearchBtn?.setAttribute("aria-label", "Open search");
-    document.body.classList.remove("archive-ui--header-search-open", "archive-ui--header-search-closing");
+    document.body.classList.remove("collection-ui--header-search-open", "collection-ui--header-search-closing");
     document.documentElement.style.removeProperty("--tw-search-dim-top");
     hideHeaderFlyoutDimIfIdle();
     if (clear && headerSearchInput) {
@@ -14277,7 +14370,7 @@
 
   /** Safety: release scroll lock if drawer/search are not actually open (handles fast open/close races). */
   function ensureBodyScrollUnlockedWhenNoOverlay() {
-    const drawerRoot = document.getElementById("archive-filter-drawer");
+    const drawerRoot = document.getElementById("collection-filter-drawer");
     const drawerOpen = !!drawerRoot && !drawerRoot.hasAttribute("hidden");
     const stylingRoot = document.getElementById("styling-board-drawer");
     const stylingOpen =
@@ -14285,27 +14378,27 @@
     const headerSearchOpen = document.getElementById("site-header-search-wrap")?.classList.contains("is-open");
     const mobileNavOpen = document.getElementById("site-mobile-shell")?.classList.contains("is-open");
     const submenuOpen =
-      document.body.classList.contains("archive-ui--header-submenu-open") ||
-      document.body.classList.contains("archive-ui--header-submenu-closing");
+      document.body.classList.contains("collection-ui--header-submenu-open") ||
+      document.body.classList.contains("collection-ui--header-submenu-closing");
     if (!drawerOpen && !stylingOpen && !headerSearchOpen && !mobileNavOpen) {
-      document.body.classList.remove("archive-ui--filter-drawer", "archive-ui--styling-board");
-      forceUnlockArchivePageScroll();
+      document.body.classList.remove("collection-ui--filter-drawer", "collection-ui--styling-board");
+      forceUnlockCollectionPageScroll();
     }
     if (!drawerOpen && !stylingOpen && !headerSearchOpen && !mobileNavOpen && !submenuOpen) {
       hideHeaderFlyoutDimIfIdle();
     }
   }
 
-  /** Desktop (wider than 900px): scroll direction toggles `archive-ui--nav-folded` (hides branding shell). Search stays in the expanded header with filters — no floating magnifier while folded. */
-  const ENABLE_ARCHIVE_NAV_SCROLL_FOLD = true;
+  /** Desktop (wider than 900px): scroll direction toggles `collection-ui--nav-folded` (hides branding shell). Search stays in the expanded header with filters — no floating magnifier while folded. */
+  const ENABLE_COLLECTION_NAV_SCROLL_FOLD = true;
 
-  let archiveNavScrollFoldLastY = 0;
-  let archiveNavScrollFoldTicking = false;
+  let collectionNavScrollFoldLastY = 0;
+  let collectionNavScrollFoldTicking = false;
 
-  /** Scroll fold: hide desktop header chrome while scrolling down on the archive page (`#filters-nav` removed — optional menu state kept for compatibility). */
-  function initArchiveNavScrollFold() {
-    if (!ENABLE_ARCHIVE_NAV_SCROLL_FOLD) {
-      document.body.classList.remove("archive-ui--nav-folded");
+  /** Scroll fold: hide desktop header chrome while scrolling down on the collection page (`#filters-nav` removed — optional menu state kept for compatibility). */
+  function initCollectionNavScrollFold() {
+    if (!ENABLE_COLLECTION_NAV_SCROLL_FOLD) {
+      document.body.classList.remove("collection-ui--nav-folded");
       return;
     }
     if (!document.getElementById("grid")) return;
@@ -14313,48 +14406,48 @@
     const body = document.body;
 
     function onScrollNavFold() {
-      if (archiveNavScrollFoldTicking) return;
-      archiveNavScrollFoldTicking = true;
+      if (collectionNavScrollFoldTicking) return;
+      collectionNavScrollFoldTicking = true;
       requestAnimationFrame(() => {
         try {
-          archiveNavScrollFoldTicking = false;
+          collectionNavScrollFoldTicking = false;
           if (isFiltersNarrowViewport()) {
-            body.classList.remove("archive-ui--nav-folded");
-            archiveNavScrollFoldLastY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
+            body.classList.remove("collection-ui--nav-folded");
+            collectionNavScrollFoldLastY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
             return;
           }
-          if (body.classList.contains("archive-ui--header-search-open")) {
-            body.classList.remove("archive-ui--nav-folded");
-            archiveNavScrollFoldLastY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
+          if (body.classList.contains("collection-ui--header-search-open")) {
+            body.classList.remove("collection-ui--nav-folded");
+            collectionNavScrollFoldLastY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
             return;
           }
-          if (body.classList.contains("archive-ui--header-submenu-open")) {
-            body.classList.remove("archive-ui--nav-folded");
-            archiveNavScrollFoldLastY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
+          if (body.classList.contains("collection-ui--header-submenu-open")) {
+            body.classList.remove("collection-ui--nav-folded");
+            collectionNavScrollFoldLastY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
             return;
           }
           const y = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
           /** PLP filters / chips: header collapse shifts layout and retriggers scroll (bounce loop). */
           if (categoryNavFilter || narrowingFiltersActive()) {
-            body.classList.remove("archive-ui--nav-folded");
-            archiveNavScrollFoldLastY = y;
+            body.classList.remove("collection-ui--nav-folded");
+            collectionNavScrollFoldLastY = y;
             return;
           }
-          const dy = y - archiveNavScrollFoldLastY;
+          const dy = y - collectionNavScrollFoldLastY;
           if (filtersNav?.classList.contains("filters--menu-open")) {
-            body.classList.remove("archive-ui--nav-folded");
-            archiveNavScrollFoldLastY = y;
+            body.classList.remove("collection-ui--nav-folded");
+            collectionNavScrollFoldLastY = y;
             return;
           }
-          const folded = body.classList.contains("archive-ui--nav-folded");
+          const folded = body.classList.contains("collection-ui--nav-folded");
           if (y < 160) {
-            if (folded) body.classList.remove("archive-ui--nav-folded");
+            if (folded) body.classList.remove("collection-ui--nav-folded");
           } else if (dy > 12) {
-            if (!folded) body.classList.add("archive-ui--nav-folded");
+            if (!folded) body.classList.add("collection-ui--nav-folded");
           } else if (dy < -12) {
-            if (folded) body.classList.remove("archive-ui--nav-folded");
+            if (folded) body.classList.remove("collection-ui--nav-folded");
           }
-          archiveNavScrollFoldLastY = y;
+          collectionNavScrollFoldLastY = y;
         } catch {
           /* ignore */
         }
@@ -14435,7 +14528,7 @@
 
   function wireEvents() {
     initNavigationPrefetch();
-    const archiveMainHref = () => collectionHrefForBrowseState();
+    const collectionMainHref = () => collectionHrefForBrowseState();
 
     /** Full-screen mobile nav shell (below utility bar); replaces legacy slide-in panel. */
     function mountMobileNavigationShell() {
@@ -14579,14 +14672,14 @@
     }
 
     const jumpHeaderCategory = (jump) => {
-      clearArchiveKeywordColourNarrowing();
-      if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
+      clearCollectionKeywordColourNarrowing();
+      if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
       if (!document.getElementById("grid")) {
         categoryNavFilter = resolveCategoryJump(jump);
         clearSubcategoryFilters();
         validateSubcategoryFilter();
-        writeArchiveBrowseRestoreSnapshot();
-        navigateToArchiveMain({
+        writeCollectionBrowseRestoreSnapshot();
+        navigateToCollectionMain({
           category: resolveCategoryJump(jump),
           subcategory: "",
         });
@@ -14700,7 +14793,7 @@
       wrap.setAttribute("aria-hidden", "true");
       setHeaderSubmenuState(wrap, "closed");
       wrap.classList.remove("site-header__submenu--opening", "site-header__submenu--switching");
-      document.body.classList.remove("archive-ui--header-submenu-open", "archive-ui--header-submenu-closing");
+      document.body.classList.remove("collection-ui--header-submenu-open", "collection-ui--header-submenu-closing");
       headerNavOpenSlot = "";
       syncCategoryTabUI();
       clearHeaderSubmenuContent();
@@ -14732,8 +14825,8 @@
       }
 
       setHeaderSubmenuState(wrap, "closing");
-      document.body.classList.add("archive-ui--header-submenu-closing");
-      document.body.classList.remove("archive-ui--header-submenu-open");
+      document.body.classList.add("collection-ui--header-submenu-closing");
+      document.body.classList.remove("collection-ui--header-submenu-open");
       wrap.setAttribute("aria-hidden", "true");
 
       headerSubmenuCloseAbort = twAfterMotion(
@@ -14790,14 +14883,14 @@
         }
         headerSearchBtn?.setAttribute("aria-expanded", "false");
         headerSearchBtn?.setAttribute("aria-label", "Open search");
-        document.body.classList.remove("archive-ui--header-search-open", "archive-ui--header-search-closing");
+        document.body.classList.remove("collection-ui--header-search-open", "collection-ui--header-search-closing");
         document.documentElement.style.removeProperty("--tw-search-dim-top");
         hideHeaderFlyoutDimIfIdle();
         if (!clear && !submitted && snap != null && headerSearchInput) {
           headerSearchInput.value = snap;
         }
-        headerSearchOverlayArchiveSearchFrozen = false;
-        headerSearchOpenArchiveSearchNorm = "";
+        headerSearchOverlayCollectionSearchFrozen = false;
+        headerSearchOpenCollectionSearchNorm = "";
         headerSearchOverlayOpeningQueryRaw = null;
         cancelHeaderSearchOverlayUiDebounce();
         resetHeaderSearchOverlayResultsDom();
@@ -14825,11 +14918,11 @@
 
       if (!isHeaderCompactLayout() && !twPrefersReducedMotion()) {
         setHeaderSearchFlyoutState(headerSearchWrap, "closing");
-        document.body.classList.add("archive-ui--header-search-closing");
-        document.body.classList.remove("archive-ui--header-search-open");
+        document.body.classList.add("collection-ui--header-search-closing");
+        document.body.classList.remove("collection-ui--header-search-open");
         headerSearchWrap.setAttribute("aria-hidden", "true");
         headerSearchCloseAbort = twAfterMotion(headerSearchWrap, HEADER_SEARCH_FLYOUT_MOTION_MS, () => {
-          document.body.classList.remove("archive-ui--header-search-closing");
+          document.body.classList.remove("collection-ui--header-search-closing");
           finishClose();
         });
         return;
@@ -14850,7 +14943,7 @@
       if (!q || !els.search) return;
       cancelSearchGridDebounce();
       cancelHeaderSearchOverlayUiDebounce();
-      exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
+      exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
       seasonNavFilter = null;
       try {
         persistSeasonNav();
@@ -14860,8 +14953,8 @@
       categoryNavFilter = "";
       clearSubcategoryFilters();
       persistBasicColourFilters(new Set());
-      archiveSearchWithinRecordCategory = "";
-      archiveSearchBrowseAllSlots = true;
+      collectionSearchWithinRecordCategory = "";
+      collectionSearchBrowseAllSlots = true;
       syncSeasonTabUI();
       syncCategoryTabUI();
       validateSubcategoryFilter();
@@ -14871,12 +14964,12 @@
       syncFilterSearchClearVisibility();
       if (!document.getElementById("grid")) {
         closeHeaderSearch({ submitted: true });
-        writeArchiveBrowseRestoreSnapshot({ search: q });
-        navigateToArchiveMain();
+        writeCollectionBrowseRestoreSnapshot({ search: q });
+        navigateToCollectionMain();
         return;
       }
       closeHeaderSearch({ submitted: true });
-      submitArchiveSearchFromInput();
+      submitCollectionSearchFromInput();
     }
 
     function isHeaderSearchDropdownLayout() {
@@ -14955,13 +15048,13 @@
     }
 
     function handleMobileCategoryNavigation(jump, sub, { season } = {}) {
-      clearArchiveKeywordColourNarrowing();
-      if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
+      clearCollectionKeywordColourNarrowing();
+      if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
       const seasonRaw = normalizeSeason(season);
       if (seasonRaw === "SS" || seasonRaw === "AW" || seasonRaw === "ALL") {
         const selectedSeason = seasonRaw === "ALL" ? null : seasonRaw;
         if (!document.getElementById("grid") && selectedSeason) {
-          navigateToArchiveSeason(seasonRaw);
+          navigateToCollectionSeason(seasonRaw);
           closeMobileCategoryPanel();
           collapseFiltersMenuPanel();
           return;
@@ -14972,17 +15065,17 @@
         } catch {
           /* ignore */
         }
-        replaceArchiveSeasonQuery(seasonNavFilter);
+        replaceCollectionSeasonQuery(seasonNavFilter);
         syncSeasonTabUI();
       }
       categoryNavFilter = resolveCategoryJump(jump);
       setOnlySubcategoryFilter(sub);
-      noteArchiveSearchUserChoseMainSlotFilter();
+      noteCollectionSearchUserChoseMainSlotFilter();
       syncCategoryTabUI();
       if (!document.getElementById("grid")) {
         validateSubcategoryFilter();
-        writeArchiveBrowseRestoreSnapshot();
-        navigateToArchiveMain({
+        writeCollectionBrowseRestoreSnapshot();
+        navigateToCollectionMain({
           category: resolveCategoryJump(jump),
           subcategory: sub,
           seasonNav: seasonNavFilter,
@@ -15015,7 +15108,7 @@
         resetMobileNavDrill();
         headerMenuBtn?.setAttribute("aria-expanded", "false");
         headerMenuBtn?.setAttribute("aria-label", "Open categories menu");
-        document.body.classList.remove("archive-ui--mobile-nav-open");
+        document.body.classList.remove("collection-ui--mobile-nav-open");
         ensureBodyScrollUnlockedWhenNoOverlay();
         normalizeCatalogueHeaderMasthead();
       };
@@ -15026,7 +15119,7 @@
       }
 
       mobileShell.classList.remove("is-open");
-      document.body.classList.remove("archive-ui--mobile-nav-open");
+      document.body.classList.remove("collection-ui--mobile-nav-open");
       headerMenuBtn?.setAttribute("aria-expanded", "false");
       headerMenuBtn?.setAttribute("aria-label", "Open categories menu");
 
@@ -15051,7 +15144,7 @@
       mobileShell.hidden = false;
       mobileShell.classList.add("is-open");
       mobileShell.setAttribute("aria-hidden", "false");
-      document.body.classList.add("archive-ui--mobile-nav-open");
+      document.body.classList.add("collection-ui--mobile-nav-open");
       headerMenuBtn?.setAttribute("aria-expanded", "true");
       headerMenuBtn?.setAttribute("aria-label", "Close categories menu");
       requestAnimationFrame(() => {
@@ -15143,15 +15236,15 @@
         hideHeaderSubmenu();
         return;
       }
-      if (!ARCHIVE_RECORD_TYPE_SUBNAV_ENABLED) {
+      if (!COLLECTION_RECORD_TYPE_SUBNAV_ENABLED) {
         hideHeaderSubmenu();
         return;
       }
       if (headerSubmenuCloseAbort) {
         headerSubmenuCloseAbort();
         headerSubmenuCloseAbort = null;
-        document.body.classList.remove("archive-ui--header-submenu-closing");
-        document.body.classList.add("archive-ui--header-submenu-open");
+        document.body.classList.remove("collection-ui--header-submenu-closing");
+        document.body.classList.add("collection-ui--header-submenu-open");
         setHeaderSubmenuState(wrap, "open");
         wrap.classList.remove("site-header__submenu--opening", "site-header__submenu--switching");
         if (headerSubmenuDimEl) {
@@ -15192,7 +15285,7 @@
 
       dedupedEntries.forEach(({ raw, label }) => {
         const a = document.createElement("a");
-        a.href = archiveMainHref();
+        a.href = collectionMainHref();
         a.className = "site-header__submenu-link";
         a.textContent = label;
         a.setAttribute("data-category-jump", slot);
@@ -15232,8 +15325,8 @@
       } else {
         setHeaderSubmenuState(wrap, "open");
       }
-      document.body.classList.add("archive-ui--header-submenu-open");
-      document.body.classList.remove("archive-ui--header-submenu-closing");
+      document.body.classList.add("collection-ui--header-submenu-open");
+      document.body.classList.remove("collection-ui--header-submenu-closing");
       headerNavOpenSlot = slot;
       syncCategoryTabUI();
       if (headerSubmenuDimEl) {
@@ -15241,7 +15334,7 @@
         headerSubmenuDimEl.setAttribute("aria-hidden", "false");
       }
       requestAnimationFrame(() => {
-        if (document.body.classList.contains("archive-ui--header-submenu-open")) {
+        if (document.body.classList.contains("collection-ui--header-submenu-open")) {
           syncHeaderSubmenuBackdropInset();
         }
       });
@@ -15339,16 +15432,16 @@
       e.preventDefault();
       const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
       const sub = String(link.getAttribute("data-subcategory-jump") ?? "").trim();
-      clearArchiveKeywordColourNarrowing();
-      if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
+      clearCollectionKeywordColourNarrowing();
+      if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
       categoryNavFilter = resolveCategoryJump(jump);
       setOnlySubcategoryFilter(sub);
-      noteArchiveSearchUserChoseMainSlotFilter();
+      noteCollectionSearchUserChoseMainSlotFilter();
       syncCategoryTabUI();
       if (!document.getElementById("grid")) {
         validateSubcategoryFilter();
-        writeArchiveBrowseRestoreSnapshot();
-        navigateToArchiveMain({
+        writeCollectionBrowseRestoreSnapshot();
+        navigateToCollectionMain({
           category: resolveCategoryJump(jump),
           subcategory: sub,
         });
@@ -15359,7 +15452,7 @@
       renderCategoryDrill();
       renderGrid();
       syncCollectionUrlFromBrowseState({ replace: true });
-      scrollArchiveViewportTop();
+      scrollCollectionViewportTop();
       hideHeaderSubmenu();
     });
     headerSubmenuLinks?.addEventListener("focusout", () => {
@@ -15382,21 +15475,21 @@
           headerSearchCloseAbort = null;
         }
         cancelSearchGridDebounce();
-        headerSearchOverlayArchiveSearchFrozen = true;
-        headerSearchOpenArchiveSearchNorm =
-          archiveSubmittedSearchNorm || normalizeSearch(els.search?.value ?? "");
+        headerSearchOverlayCollectionSearchFrozen = true;
+        headerSearchOpenCollectionSearchNorm =
+          collectionSubmittedSearchNorm || normalizeSearch(els.search?.value ?? "");
         headerSearchOverlayOpeningQueryRaw = String(els.search?.value ?? "").trim();
         syncSearchKeywordChip();
         hideHeaderSubmenu();
         closeMobileCategoryPanel();
-        document.body.classList.remove("archive-ui--nav-folded", "archive-ui--header-search-closing");
+        document.body.classList.remove("collection-ui--nav-folded", "collection-ui--header-search-closing");
         syncHeaderSearchFeaturedSubcategoryCards();
         headerSearchWrap.classList.add("is-open");
         headerSearchWrap.removeAttribute("hidden");
         headerSearchWrap.setAttribute("aria-hidden", "false");
         headerSearchBtn.setAttribute("aria-expanded", "true");
         headerSearchBtn.setAttribute("aria-label", "Close search");
-        document.body.classList.add("archive-ui--header-search-open");
+        document.body.classList.add("collection-ui--header-search-open");
         if (!isHeaderCompactLayout()) {
           setHeaderSearchFlyoutState(headerSearchWrap, "opening");
           syncHeaderSubmenuBackdropInset();
@@ -15427,18 +15520,18 @@
     document.getElementById("site-header-search-close")?.addEventListener("click", () => {
       closeHeaderSearch();
     });
-    document.getElementById("archive-search-results-clear")?.addEventListener("click", () => {
-      clearArchiveKeywordSearchThenRender({ focusInput: false });
+    document.getElementById("collection-search-results-clear")?.addEventListener("click", () => {
+      clearCollectionKeywordSearchThenRender({ focusInput: false });
     });
-    document.getElementById("archive-search-results-pills")?.addEventListener("click", (e) => {
+    document.getElementById("collection-search-results-pills")?.addEventListener("click", (e) => {
       const pill = /** @type {HTMLElement | null} */ (
         e.target.closest("[data-search-result-category], [data-search-result-all]")
       );
       if (!pill) return;
       e.preventDefault();
-      archiveSearchWithinRecordCategory =
+      collectionSearchWithinRecordCategory =
         pill.dataset.searchResultAll === "1" ? "" : String(pill.dataset.searchResultCategory ?? "").trim();
-      syncArchiveSearchResultsPlpUi();
+      syncCollectionSearchResultsPlpUi();
       renderGrid();
     });
     headerSearchWrap?.addEventListener("click", (e) => {
@@ -15455,24 +15548,24 @@
       const jump = String(a.getAttribute("data-category-jump") ?? "").trim();
       const sub = String(a.getAttribute("data-subcategory-jump") ?? "").trim();
       if (sub) {
-        if (archiveSubmittedSearchNorm) exitArchiveSearchPlpRestoreBrowse({ skipRestore: true });
-        clearArchiveKeywordColourNarrowing();
+        if (collectionSubmittedSearchNorm) exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
+        clearCollectionKeywordColourNarrowing();
         categoryNavFilter = resolveCategoryJump(jump);
         setOnlySubcategoryFilter(sub);
-        noteArchiveSearchUserChoseMainSlotFilter();
+        noteCollectionSearchUserChoseMainSlotFilter();
         syncCategoryTabUI();
         hideHeaderSubmenu();
         closeHeaderSearch();
         if (!document.getElementById("grid")) {
           validateSubcategoryFilter();
-          writeArchiveBrowseRestoreSnapshot();
-          navigateToArchiveMain();
+          writeCollectionBrowseRestoreSnapshot();
+          navigateToCollectionMain();
           return;
         }
         validateSubcategoryFilter();
         renderCategoryDrill();
         renderGrid();
-        scrollArchiveViewportTop();
+        scrollCollectionViewportTop();
         return;
       }
       jumpHeaderCategory(jump);
@@ -15613,8 +15706,8 @@
       "resize",
       () => {
         if (
-          document.body.classList.contains("archive-ui--header-submenu-open") ||
-          document.body.classList.contains("archive-ui--header-submenu-closing")
+          document.body.classList.contains("collection-ui--header-submenu-open") ||
+          document.body.classList.contains("collection-ui--header-submenu-closing")
         ) {
           syncHeaderSubmenuBackdropInset();
         }
@@ -15632,7 +15725,7 @@
       const v = String(tab.dataset.seasonFilter ?? "").trim();
       if (!normalizeSeasonNavToken(v)) return;
       if (!document.getElementById("grid")) {
-        navigateToArchiveSeason(v);
+        navigateToCollectionSeason(v);
         return;
       }
       setSeasonNavFilter(v);
@@ -15663,7 +15756,7 @@
 
     els.emptyReset?.addEventListener("click", () => {
       resetNarrowingFilters();
-      showToast("Type, colour, and search cleared — showing full archive.");
+      showToast("Type, colour, and search cleared — showing full collection.");
     });
 
     const seasonNav = document.getElementById("season-nav");
@@ -15675,7 +15768,7 @@
       setSeasonNavFilter(v);
     });
 
-    document.getElementById("archive-drawer-season-chips")?.addEventListener("click", (e) => {
+    document.getElementById("collection-drawer-season-chips")?.addEventListener("click", (e) => {
       const chip = e.target.closest("button[data-season-filter]");
       if (!chip) return;
       const v = String(chip.dataset.seasonFilter ?? "").trim();
@@ -15696,9 +15789,8 @@
         const choice = e.target.closest(".category-drill__choice[data-subcategory]");
         if (!choice) return;
         const next = String(choice.dataset.subcategory ?? "").trim();
-        withPreservedArchiveScroll(() => {
-          if (!next) clearSubcategoryFilters();
-          else toggleSubcategoryFilter(next);
+        withPreservedCollectionScroll(() => {
+          pickSubcategoryFilterFromToolbar(next);
           validateSubcategoryFilter();
           renderCategoryDrill();
           renderGrid();
@@ -15719,17 +15811,17 @@
       });
     }
 
-    if (els.grid && document.body.dataset.twArchiveStylingRevealWired !== "1") {
-      document.body.dataset.twArchiveStylingRevealWired = "1";
+    if (els.grid && document.body.dataset.twCollectionStylingRevealWired !== "1") {
+      document.body.dataset.twCollectionStylingRevealWired = "1";
       document.addEventListener("click", (e) => {
-        if (!isArchiveCardCoarsePointer()) return;
+        if (!isCollectionCardCoarsePointer()) return;
         const t = e.target;
         if (!(t instanceof Element)) return;
         if (t.closest(".card--styling-reveal .card__board-add, .card--styling-reveal .card__quick-outfit")) {
           return;
         }
         if (t.closest(".card--styling-reveal .card__media")) return;
-        dismissArchiveCardStylingReveal();
+        dismissCollectionCardStylingReveal();
       });
     }
 
@@ -15791,17 +15883,17 @@
       if (!document.getElementById("grid")) {
         validateSubcategoryFilter();
         const raw = String(els.search?.value ?? "").trim();
-        writeArchiveBrowseRestoreSnapshot({ search: raw });
-        navigateToArchiveMain();
+        writeCollectionBrowseRestoreSnapshot({ search: raw });
+        navigateToCollectionMain();
         return;
       }
-      submitArchiveSearchFromInput();
+      submitCollectionSearchFromInput();
     });
     els.search?.addEventListener("blur", () => {
       syncFilterSearchClearVisibility();
     });
 
-    els.searchChip?.addEventListener("click", () => clearArchiveKeywordSearchThenRender());
+    els.searchChip?.addEventListener("click", () => clearCollectionKeywordSearchThenRender());
 
     els.colourChip?.addEventListener("click", () => {
       if (basicColourFilters.size === 0) return;
@@ -15826,7 +15918,7 @@
       renderGrid();
     });
 
-    els.searchClear?.addEventListener("click", () => clearArchiveKeywordSearchThenRender());
+    els.searchClear?.addEventListener("click", () => clearCollectionKeywordSearchThenRender());
 
     const filtersNav = document.getElementById("filters-nav");
     const filtersMenuBtn = document.getElementById("filters-menu-btn");
@@ -15855,11 +15947,11 @@
       });
     }
 
-    wireEditorialLandingPageArchiveLinks();
+    wireEditorialLandingPageCollectionLinks();
 
     installTextareaAutosizeFields();
 
-    initArchiveNavScrollFold();
+    initCollectionNavScrollFold();
 
     globalThis.addEventListener("pageshow", (e) => {
       const pe = /** @type {PageTransitionEvent} */ (e);
@@ -15869,7 +15961,7 @@
       void (async () => {
         try {
           if (isSupabaseReady()) {
-            await hydrateArchiveAndSeasonState();
+            await hydrateCollectionAndSeasonState();
           }
           await refreshCloudBackedCustomItems();
           renderOutfitStrip();
@@ -16234,7 +16326,7 @@
       savedOutfits = loadSavedOutfitsFromStorage();
     }
 
-    await hydrateArchiveAndSeasonState();
+    await hydrateCollectionAndSeasonState();
 
     if (isCloudModeActive()) {
       fileBackedCustomItems = [];
@@ -16300,9 +16392,9 @@
     }
 
     const itemRoot = document.getElementById("item-detail-root");
-    const hasArchiveGrid = Boolean(document.getElementById("grid"));
+    const hasCollectionGrid = Boolean(document.getElementById("grid"));
     const pageId = new URLSearchParams(globalThis.location.search).get("id");
-    if (itemRoot && pageId && !hasArchiveGrid) {
+    if (itemRoot && pageId && !hasCollectionGrid) {
       normalizeLegacyItemPagePath();
       initItemDetailRootDelegates();
       initFilters();
@@ -16313,9 +16405,9 @@
       return;
     }
 
-    normalizeArchiveTopLanding();
+    normalizeCollectionTopLanding();
     applyCollectionPathFromUrl();
-    consumeArchiveBrowseStateForReturn();
+    consumeCollectionBrowseStateForReturn();
     syncCollectionUrlFromBrowseState({ replace: true });
     initFilters();
     wireEvents();
@@ -16327,7 +16419,7 @@
       renderSavedOutfits();
       syncOutfitBuilderPanel();
     }
-    consumeAndRestoreArchiveListScroll();
+    consumeAndRestoreCollectionListScroll();
     if (document.getElementById("local-data-risk-banner")) {
       installLocalDataRiskBanner();
     }

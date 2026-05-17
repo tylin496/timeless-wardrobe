@@ -1,5 +1,5 @@
 /**
- * Route-level catalogue theme — runs before paint on archive/item pages.
+ * Route-level catalogue theme — runs before paint on collection/item pages.
  * Prevents OS dark-mode tokens from flashing before app.js bootstrap.
  */
 (function twPageThemeBoot() {

@@ -14,10 +14,6 @@
       ]
     }
   ],
-  "redirects": [
-    { "source": "/archive.html", "destination": "/collection", "permanent": false },
-    { "source": "/archive", "destination": "/collection", "permanent": false }
-  ],
   "rewrites": [
     { "source": "/collection/item.html", "destination": "/item.html" },
     { "source": "/collection/item", "destination": "/item.html" },
