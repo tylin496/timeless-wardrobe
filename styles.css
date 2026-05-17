@@ -617,7 +617,7 @@ body {
   text-align: left;
 }
 
-/* Monogram: SVG as background (crisp edges); overlay state inverts to white. */
+/* Monogram: mask + header token so mark tracks wordmark (overlay / solid / dark). */
 .site-title__mark {
   display: block;
   width: var(--site-title-mark-size);
@@ -626,22 +626,21 @@ body {
   border: 0;
   border-radius: 0;
   padding: 0;
-  background-color: transparent;
-  background-image: url(/icon.svg);
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
+  background-color: var(--tw-header-monogram, var(--tw-brand-monogram-green));
+  background-image: none;
+  mask-image: url(/icon.svg);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url(/icon.svg);
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
   box-shadow: none;
+  filter: none;
+  transition: background-color 0.34s var(--ease-luxe);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-}
-
-.site-header--overlay .site-title__mark {
-  filter: brightness(0) invert(1);
-}
-
-.site-header--solid .site-title__mark {
-  filter: none;
 }
 
 .site-title__wordmark,
@@ -2421,7 +2420,7 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     max-width: var(--desktop-layout-max-width);
     margin: 0 auto;
     padding: 40px max(var(--desktop-layout-inline-pad), env(safe-area-inset-right, 0px)) 56px
-      max(var(--search-flyout-pad-left, var(--desktop-layout-inline-pad)), env(safe-area-inset-left, 0px));
+      max(var(--desktop-layout-inline-pad), env(safe-area-inset-left, 0px));
     box-sizing: border-box;
     background: #ffffff;
     border: none;
@@ -2457,13 +2456,14 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
     align-items: center;
     gap: 18px;
     width: 100%;
-    min-height: 64px;
-    height: 64px;
+    min-height: 56px;
+    height: auto;
     margin: 0;
-    padding: 0;
-    border: none;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.18);
-    background: transparent;
+    padding: 0 1rem 0 1.125rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--line));
+    border-radius: 2px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(20, 19, 18, 0.04);
     box-sizing: border-box;
     cursor: text;
   }
@@ -2620,7 +2620,7 @@ body.archive-ui--search-results-plp .items-toolbar__filter-sort-btn {
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-aside-nav {
-    padding-left: 1.25rem;
+    padding-left: 0;
   }
 
   .site-header__search-wrap.desktop-search-flyout .site-header__search-trending-row {
@@ -7663,9 +7663,9 @@ body:not(.item-page) #main {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
   margin: 0;
-  padding: 0 10px 0 0;
+  padding: 0 6px 0 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -7679,9 +7679,9 @@ body:not(.item-page) #main {
 
 #grid .card__colour-tray .card__swatch {
   box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   flex-shrink: 0;
   border-width: 1px;
   border-style: solid;
@@ -7700,14 +7700,14 @@ body:not(.item-page) #main {
 }
 
 #grid .card__colour-tray__inner {
-  gap: 16px;
+  gap: 10px;
   justify-content: flex-start;
 }
 
 #grid .card__swatch-block--tray {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: calc(100% - 11.5rem);
+  max-width: calc(100% - 5.25rem);
 }
 
 #grid .card__hover-bar--solo {
@@ -7745,12 +7745,14 @@ body:not(.item-page) #main {
   flex: 0 0 auto;
   flex-shrink: 0;
   margin: 0 0 0 auto;
-  padding: 11px 18px;
+  padding: 7px 14px;
   border: 1px solid #1a2742;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-family: var(--font-sans);
+  font-size: 0.5625rem;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: lowercase;
   color: #1a2742;
   background: #ffffff;
   -webkit-backdrop-filter: none;
@@ -9665,7 +9667,7 @@ a.item-detail__breadcrumb-current {
     max-width: none;
     margin-left: 0;
     margin-right: 0;
-    padding-left: max(var(--search-flyout-pad-left, var(--header-x)), env(safe-area-inset-left, 0px));
+    padding-left: max(var(--header-x), env(safe-area-inset-left, 0px));
     padding-right: max(var(--header-x), env(safe-area-inset-right, 0px));
   }
 
@@ -10441,6 +10443,9 @@ body.home-page {
   --ed-chalk: #ffffff;
   --ed-paper-ink: rgba(38, 32, 24, 0.1);
   --ed-paper-shadow: rgba(38, 32, 24, 0.09);
+  --ed-lp-section-inline: max(var(--space-page-inline), env(safe-area-inset-left, 0px));
+  --ed-lp-section-pad-y: clamp(2.5rem, 5vw, 3.5rem);
+  --ed-lp-section-title-gap: clamp(1.25rem, 2.5vw, 1.75rem);
   --bg: var(--ed-parchment);
   --bg-elevated: var(--ed-chalk);
   --line: #e0d8cc;
@@ -10455,6 +10460,41 @@ body.home-page #main.ed-lp {
   padding: 0;
   margin: 0;
   max-width: none;
+}
+
+body.home-page .ed-lp__band-inner {
+  max-width: none;
+  margin: 0;
+  padding-left: max(var(--ed-lp-section-inline), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--ed-lp-section-inline), env(safe-area-inset-right, 0px));
+}
+
+body.home-page .ed-lp__division-rail {
+  --ed-lp-division-rail-pad-left: max(var(--ed-lp-section-inline), env(safe-area-inset-left, 0px));
+}
+
+@media (min-width: 901px) {
+  body.home-page {
+    --ed-lp-section-inline: max(var(--header-x, 48px), env(safe-area-inset-left, 0px));
+  }
+}
+
+body.home-page .ed-lp__division-rail {
+  padding-top: var(--ed-lp-section-pad-y);
+  padding-bottom: var(--ed-lp-section-pad-y);
+}
+
+body.home-page #main.ed-lp .ed-lp__band {
+  padding-top: var(--ed-lp-section-pad-y);
+  padding-bottom: var(--ed-lp-section-pad-y);
+}
+
+body.home-page .ed-lp__division-rail-title {
+  margin-bottom: var(--ed-lp-section-title-gap);
+}
+
+body.home-page .ed-lp__band-head {
+  margin-bottom: var(--ed-lp-section-title-gap);
 }
 
 /* Homepage: brand masthead → primary hero (flush) → overlay nav. */
@@ -10482,13 +10522,6 @@ body.home-page .site-utility-bar {
   position: sticky;
   top: 0;
   z-index: calc(var(--z-site-header-chrome) + 1);
-}
-
-body.home-page .ed-lp__cat-card {
-  background: color-mix(in srgb, var(--ed-chalk) 88%, var(--ed-limestone));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--ed-paper-ink) 65%, transparent),
-    0 10px 28px rgba(38, 32, 24, 0.06);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -11129,12 +11162,6 @@ video.ed-lp__hero-layer-video {
   transition: none;
 }
 
-@media (min-width: 901px) {
-  .ed-lp__division-rail {
-    --ed-lp-division-rail-pad-left: max(var(--desktop-layout-inline-pad), env(safe-area-inset-left, 0px));
-  }
-}
-
 /* Recently viewed — title left, horizontal product rail (Ralph Lauren). */
 .ed-lp__viewed-rail {
   width: 100%;
@@ -11356,108 +11383,12 @@ body.home-page .ed-lp__band--muted {
   color: var(--ink);
 }
 
-.ed-lp__cat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(1rem, 2.5vw, 1.5rem);
-}
-
-.ed-lp__cat-card {
-  position: relative;
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  overflow: hidden;
-  aspect-ratio: var(--media-frame-ratio);
-  background: color-mix(in srgb, var(--bg-elevated) 82%, var(--line));
-}
-
-.ed-lp__cat-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-
-.ed-lp__cat-card-media {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: #f4f0e8;
-}
-
-.ed-lp__cat-card-img {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 100%;
-  object-fit: contain;
-  object-position: center center;
-  transition: transform 0.55s var(--ease-luxe);
-}
-
-.ed-lp__cat-card:hover .ed-lp__cat-card-img,
-.ed-lp__cat-card:focus-visible .ed-lp__cat-card-img {
-  transform: scale(1.04);
-}
-
-.ed-lp__cat-card-shade {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.08) 45%, transparent 72%);
-}
-
-.ed-lp__cat-card-cap {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  padding: 1.25rem clamp(1rem, 2.5vw, 1.5rem);
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  pointer-events: none;
-}
-
-.ed-lp__cat-card-title {
-  font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(1.25rem, 1rem + 0.8vw, 1.6rem);
-  font-weight: 500;
-  line-height: 1.15;
-  color: #faf8f4;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
-}
-
-.ed-lp__cat-card-cta {
-  font-family: "DM Sans", system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  color: color-mix(in srgb, #fff 92%, transparent);
-}
-
-.ed-lp__cat-card-media--missing {
-  background: #e0d8cc;
-}
-
 .ed-lp__product-grid {
   display: grid;
   gap: clamp(1rem, 2.2vw, 1.35rem);
 }
 
 .ed-lp__product-grid--8 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.ed-lp__product-grid--4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -11826,15 +11757,7 @@ body.home-page #main.ed-lp .ed-lp__band--season {
     display: none;
   }
 
-  .ed-lp__cat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .ed-lp__product-grid--8 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ed-lp__product-grid--4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -11911,8 +11834,6 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ed-lp__cat-card:hover .ed-lp__cat-card-img,
-  .ed-lp__cat-card:focus-visible .ed-lp__cat-card-img,
   .ed-lp__season-piece {
     transform: rotate(var(--piece-rot, 0deg)) scale(var(--piece-scale, 1));
   }

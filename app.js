@@ -2223,7 +2223,8 @@
       /** @type {any} */ (next).__displayNonce = Math.floor(n);
       return next;
     }
-    return stampWardrobeItemMediaNonce(next, Date.now());
+    stampWardrobeItemMediaNonce(next, Date.now());
+    return next;
   }
 
   /** Ensure Supabase Storage URLs get a `cb` token when loading edit / detail views. */
@@ -2233,7 +2234,8 @@
     if (typeof o.__displayNonce === "number" && Number.isFinite(o.__displayNonce)) return item;
     const ts = String(o.updatedAt ?? o.updated_at ?? "").trim();
     const nonce = ts ? Date.parse(ts) || Date.now() : Date.now();
-    return stampWardrobeItemMediaNonce(o, nonce);
+    stampWardrobeItemMediaNonce(o, nonce);
+    return o;
   }
 
   /** Persist a just-saved row across `item.html` → archive navigation (cloud list can lag). */
@@ -4674,6 +4676,8 @@
     let scrollerDragStartX = 0;
     let scrollerDragStartScroll = 0;
     let scrollerDragMoved = false;
+    /** When true, wait for drag threshold before capture (keeps link clicks working). */
+    let scrollerDragDeferCapture = false;
 
     function scrollMax() {
       return Math.max(0, scroller.scrollWidth - scroller.clientWidth);
@@ -4724,6 +4728,7 @@
     function endScrollerDrag() {
       if (!scrollerDragActive) return;
       scrollerDragActive = false;
+      scrollerDragDeferCapture = false;
       scroller.classList.remove("is-dragging");
       if (scrollerDragPointerId != null) {
         try {
@@ -4746,20 +4751,41 @@
 
     scroller.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || trackDragActive || e.pointerType === "touch") return;
-      e.preventDefault();
+      const link =
+        e.target instanceof Element ? /** @type {HTMLAnchorElement | null} */ (e.target.closest("a")) : null;
+      const dragFromLink = !!(link && scroller.contains(link));
+
       scrollerDragActive = true;
       scrollerDragMoved = false;
+      scrollerDragDeferCapture = dragFromLink;
       scrollerDragStartX = e.clientX;
       scrollerDragStartScroll = scroller.scrollLeft;
       scrollerDragPointerId = e.pointerId;
-      scroller.classList.add("is-dragging");
-      scroller.setPointerCapture(e.pointerId);
+
+      if (!dragFromLink) {
+        e.preventDefault();
+        scroller.classList.add("is-dragging");
+        scroller.setPointerCapture(e.pointerId);
+      }
     });
 
     scroller.addEventListener("pointermove", (e) => {
       if (!scrollerDragActive) return;
       const dx = e.clientX - scrollerDragStartX;
-      if (Math.abs(dx) > 3) scrollerDragMoved = true;
+      if (!scrollerDragMoved && Math.abs(dx) > 3) {
+        scrollerDragMoved = true;
+        if (scrollerDragDeferCapture && scrollerDragPointerId != null) {
+          scrollerDragDeferCapture = false;
+          scroller.classList.add("is-dragging");
+          try {
+            scroller.setPointerCapture(scrollerDragPointerId);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (!scrollerDragMoved) return;
+      e.preventDefault();
       scroller.scrollLeft = scrollerDragStartScroll - dx;
       syncThumb();
       syncUi();
@@ -9402,7 +9428,7 @@
   }
 
   function stylingBoardCtaLabel(blocked) {
-    return blocked ? "ON BOARD" : "+ STYLING BOARD";
+    return blocked ? "on board" : "+style";
   }
 
   function dismissArchiveCardStylingReveal(except) {
@@ -12446,12 +12472,6 @@
       el.classList.toggle("is-active", activeRow);
     });
 
-    document.querySelectorAll(".ed-lp__cat-card[data-category-jump]").forEach((el) => {
-      const jump = String(el.getAttribute("data-category-jump") ?? "").trim();
-      const sub = String(el.getAttribute("data-subcategory-jump") ?? "").trim();
-      const activeRow = jump === filter && subcategoryFilterMatchesEntry(sub, subF);
-      el.classList.toggle("is-active", activeRow);
-    });
   }
 
   function setSeasonNavFilter(next) {
@@ -12916,29 +12936,6 @@
     }
   }
 
-  /** Align desktop search flyout content with the first main-nav link (e.g. Clothing). */
-  function syncSearchFlyoutPadLeft() {
-    try {
-      if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
-        document.documentElement.style.removeProperty("--search-flyout-pad-left");
-        return;
-      }
-      const navLink =
-        document.querySelector(
-          ".site-header__primary-nav .site-header__nav-link[data-category-jump]"
-        ) || document.querySelector(".site-header__primary-nav .site-header__nav-link");
-      if (!navLink) return;
-      const left = Math.max(0, Math.round(navLink.getBoundingClientRect().left));
-      document.documentElement.style.setProperty("--search-flyout-pad-left", `${left}px`);
-    } catch {
-      try {
-        document.documentElement.style.removeProperty("--search-flyout-pad-left");
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
   /** Viewport Y below utility + primary header row (flyout panels sit above the dim). */
   function measureHeaderChromeBottom() {
     const util = document.querySelector(".site-utility-bar");
@@ -12954,10 +12951,8 @@
     try {
       if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
         document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
-        document.documentElement.style.removeProperty("--search-flyout-pad-left");
         return;
       }
-      syncSearchFlyoutPadLeft();
       const submenuOpen =
         document.body.classList.contains("archive-ui--header-submenu-open") ||
         document.body.classList.contains("archive-ui--header-submenu-closing");
@@ -14383,12 +14378,10 @@
         }
         relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
         queueMicrotask(() => {
-          syncSearchFlyoutPadLeft();
           headerSearchInput?.focus();
           resetHeaderSearchOverlayResultsDom();
           syncSearchOverlayBackdropTop();
           requestAnimationFrame(() => {
-            syncSearchFlyoutPadLeft();
             syncSearchOverlayBackdropTop();
           });
         });
@@ -14577,7 +14570,6 @@
     globalThis.addEventListener(
       "resize",
       () => {
-        syncSearchFlyoutPadLeft();
         if (
           document.body.classList.contains("archive-ui--header-submenu-open") ||
           document.body.classList.contains("archive-ui--header-submenu-closing")
@@ -14590,8 +14582,6 @@
       },
       { passive: true }
     );
-
-    queueMicrotask(() => syncSearchFlyoutPadLeft());
 
     const seasonMini = document.getElementById("season-nav-mini");
     seasonMini?.addEventListener("click", (e) => {
