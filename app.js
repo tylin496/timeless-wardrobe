@@ -1995,6 +1995,33 @@
     return ok;
   }
 
+  /** Park `#collection-view-toggle` in browse title row or search-results heading row. */
+  function syncCollectionViewTogglePlacement() {
+    const toggle = document.getElementById("collection-view-toggle");
+    const searchSlot = document.getElementById("collection-search-results-view-slot");
+    const browseRow = document.querySelector(".collection-heading__title-row");
+    if (!toggle) return;
+
+    if (!toggle.dataset.twViewToggleBrowseParent && browseRow) {
+      toggle.dataset.twViewToggleBrowseParent = "1";
+    }
+
+    const searchActive =
+      document.body.classList.contains("collection-ui--search-results-plp") &&
+      isCollectionSearchResultsPlpActive();
+
+    if (searchActive && searchSlot) {
+      if (toggle.parentElement !== searchSlot) searchSlot.appendChild(toggle);
+      searchSlot.removeAttribute("aria-hidden");
+      toggle.classList.add("items-toolbar__view-toggle--search-plp");
+      return;
+    }
+
+    if (browseRow && toggle.parentElement !== browseRow) browseRow.appendChild(toggle);
+    if (searchSlot) searchSlot.setAttribute("aria-hidden", "true");
+    toggle.classList.remove("items-toolbar__view-toggle--search-plp");
+  }
+
   function syncCollectionViewToggleUi() {
     const group = document.getElementById("collection-view-toggle");
     if (!group) return;
@@ -2008,6 +2035,51 @@
     });
     document.body.classList.toggle("collection-view--compact", compact);
     if (els.grid) els.grid.classList.toggle("grid--compact", compact);
+  }
+
+  /** @param {HTMLElement} media */
+  function collectionCardBoardHoverBarInner(media) {
+    let bar = media.querySelector(":scope > .card__hover-bar.card__hover-bar--solo");
+    if (!(bar instanceof HTMLElement)) {
+      bar = document.createElement("div");
+      bar.className = "card__hover-bar card__hover-bar--solo";
+      const inner = document.createElement("div");
+      inner.className = "card__hover-bar__inner";
+      bar.appendChild(inner);
+      media.appendChild(bar);
+    }
+    let inner = bar.querySelector(":scope > .card__hover-bar__inner");
+    if (!(inner instanceof HTMLElement)) {
+      inner = document.createElement("div");
+      inner.className = "card__hover-bar__inner";
+      bar.appendChild(inner);
+    }
+    return inner;
+  }
+
+  /**
+   * Quick-find hides the colour tray; keep board CTA on the hover bar so desktop “ADD TO OUTFIT” stays visible.
+   * @param {HTMLElement} article
+   * @param {boolean} compact
+   */
+  function syncCollectionCardBoardAddPlacement(article, compact) {
+    const media = article.querySelector(":scope > .card__media");
+    if (!(media instanceof HTMLElement)) return;
+    const btn =
+      media.querySelector(".card__board-add, .card__quick-outfit") ||
+      article.querySelector(".card__board-add, .card__quick-outfit");
+    if (!(btn instanceof HTMLButtonElement)) return;
+    btn.classList.add("card__board-add--collection-hover");
+
+    const trayInner = media.querySelector(".card__colour-tray__inner");
+    const mountInColourTray =
+      !compact && !isFiltersNarrowViewport() && trayInner instanceof HTMLElement;
+    if (mountInColourTray) {
+      if (btn.parentElement !== trayInner) trayInner.appendChild(btn);
+      return;
+    }
+    const inner = collectionCardBoardHoverBarInner(media);
+    if (btn.parentElement !== inner) inner.appendChild(btn);
   }
 
   /** Quick-find: park `.card__body` on the image so caption CSS cannot be overridden by PLP theme rules. */
@@ -2029,18 +2101,19 @@
 
       if (compact) {
         if (body.parentElement !== media) media.appendChild(body);
-        return;
-      }
-      if (body.parentElement === media) {
+      } else if (body.parentElement === media) {
         media.insertAdjacentElement("afterend", body);
       }
+      syncCollectionCardBoardAddPlacement(article, compact);
     });
   }
 
   function applyCollectionViewMode() {
     collectionViewMode = normalizeCollectionViewMode(collectionViewMode);
+    syncCollectionViewTogglePlacement();
     syncCollectionViewToggleUi();
     syncCollectionQuickFindCardDom();
+    syncCollectionBoardAddButtonLabels();
   }
 
   function syncCollectionSortChipUi() {
@@ -2129,7 +2202,6 @@
     if (!countEl || !clearBtn) return;
     const n =
       (seasonNavFilter ? 1 : 0) +
-      (categoryNavFilter ? 1 : 0) +
       basicColourFilters.size +
       selectedBrandFilters.size +
       subcategoryFilters.size;
@@ -2140,10 +2212,20 @@
     if (hasFilters) countEl.textContent = n + (n === 1 ? " Filter" : " Filters");
   }
 
-  /** Drawer Clear All — full collection reset (filters, sort, section); panel stays open. */
+  /** Drawer Clear All — narrowing filters only; division stays (use breadcrumb / slot strip to leave). */
   function clearCollectionDrawerFilters() {
-    resetAllCollectionFilters({ closeDrawer: false });
+    seasonNavFilter = null;
+    try {
+      persistSeasonNav();
+    } catch {
+      /* ignore */
+    }
+    replaceCollectionSeasonQuery(seasonNavFilter);
+    syncSeasonTabUI();
+    clearBrowseNarrowingKeepDivision();
+    syncCollectionFilterDrawerAccordionState();
     syncCollectionFilterDrawerCountUi();
+    syncCollectionFilterDrawerDoneLabel();
     syncToolbarActiveFilterChips();
   }
 
@@ -5791,11 +5873,15 @@
 
       const cta = document.createElement("span");
       cta.className = "site-header__search-category-card__cta";
-      cta.textContent = "Browse Now";
+      cta.textContent = "Browse";
+
+      const copy = document.createElement("div");
+      copy.className = "site-header__search-category-card__copy";
+      copy.appendChild(titleEl);
+      copy.appendChild(cta);
 
       a.appendChild(media);
-      a.appendChild(titleEl);
-      a.appendChild(cta);
+      a.appendChild(copy);
       gridHost.appendChild(a);
     }
     syncCategoryTabUI();
@@ -7320,9 +7406,6 @@
 
   const els = {
     grid: document.getElementById("grid"),
-    emptyWrap: document.getElementById("empty-wrap"),
-    emptyMsg: document.getElementById("empty-state-msg"),
-    emptyReset: document.getElementById("empty-reset-filters"),
     count: document.getElementById("filter-count"),
     categoryChip: document.getElementById("filter-category-chip"),
     categoryChipText: document.getElementById("filter-category-chip-text"),
@@ -8237,8 +8320,9 @@
       host;
     if (field.parentElement === slot) return;
     slot.appendChild(field);
-    const closeBtn = host.querySelector("#site-header-search-close, .site-header__search-close");
-    if (closeBtn && closeBtn.parentElement === host) host.appendChild(closeBtn);
+    const head = host.closest(".site-header__search-head");
+    const closeBtn = head?.querySelector("#site-header-search-close, .site-header__search-close");
+    if (closeBtn && head && closeBtn.parentElement === host) head.appendChild(closeBtn);
   }
 
   function relocateFilterSearchFieldIntoPlpAnchor() {
@@ -8264,6 +8348,7 @@
     collectionSearchWithinRecordCategory = "";
     collectionSearchBrowseAllSlots = false;
     document.body.classList.remove("collection-ui--search-results-plp");
+    syncCollectionViewTogglePlacement();
     if (!skipRestore && collectionSearchReturnSnapshot) {
       const s = collectionSearchReturnSnapshot;
       seasonNavFilter = normalizeSeasonNavToken(s.seasonNav);
@@ -8289,6 +8374,8 @@
     syncFilterSearchFieldDomPlacement();
     syncFilterSearchClearVisibility();
     syncSearchKeywordChip();
+    syncCollectionQuickFindCardDom();
+    syncCollectionBoardAddButtonLabels();
   }
 
   function submitCollectionSearchFromInput() {
@@ -8423,6 +8510,7 @@
       if (pills) pills.replaceChildren();
       syncToolbarActiveFilterChips();
       syncCollectionCountLinePlacement();
+      syncCollectionViewTogglePlacement();
       return;
     }
 
@@ -8444,6 +8532,9 @@
     syncCollectionSearchResultCategoryPills(pills);
     syncToolbarActiveFilterChips();
     syncCollectionCountLinePlacement();
+    syncCollectionViewTogglePlacement();
+    syncCollectionQuickFindCardDom();
+    syncCollectionBoardAddButtonLabels();
   }
 
   function noteCollectionSearchUserChoseMainSlotFilter() {
@@ -8761,7 +8852,7 @@
     const searchPlp = Boolean(submitted) && document.body.classList.contains("collection-ui--search-results-plp");
 
     const searchDefs = [];
-    if (searchPlp && searchHost) {
+    if (searchPlp) {
       const wc = String(collectionSearchWithinRecordCategory ?? "").trim();
       if (wc) {
         const label = searchResultFilterDisplayLabelFromKey(wc);
@@ -8775,13 +8866,8 @@
           },
         });
       }
-      renderChipRow(searchHost, searchDefs, {
-        onClearAll() {
-          collectionSearchWithinRecordCategory = "";
-          resetAllCollectionFilters();
-        },
-      });
-    } else if (searchHost) {
+    }
+    if (searchHost) {
       searchHost.replaceChildren();
       searchHost.hidden = true;
     }
@@ -8804,25 +8890,6 @@
           syncSeasonTabUI();
           replaceCollectionSeasonQuery(seasonNavFilter);
           renderGrid();
-        },
-      });
-    }
-
-    const cat = String(categoryNavFilter ?? "").trim();
-    if (cat) {
-      const catLabel = categoryDisplayLabel(cat) || cat;
-      browseDefs.push({
-        label: catLabel,
-        removeLabel: `Remove category filter “${catLabel}”`,
-        onRemove() {
-          withPreservedCollectionScroll(() => {
-            categoryNavFilter = "";
-            clearSubcategoryFilters();
-            syncCategoryTabUI();
-            renderCategoryDrill();
-            syncFiltersMenuForViewport();
-            renderGrid();
-          });
         },
       });
     }
@@ -8871,25 +8938,6 @@
       });
     }
 
-    const clearBrowseNarrowingKeepDivision = () => {
-      withPreservedCollectionScroll(() => {
-        clearSubcategoryFilters();
-        clearBrandFilters();
-        clearCollectionKeywordColourNarrowing();
-        if (collectionSubmittedSearchNorm) {
-          exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
-        }
-        validateSubcategoryFilter();
-        renderCategoryDrill();
-        syncFiltersMenuForViewport();
-        syncCollectionBrandFilterChipUi();
-        syncBasicColourFilterChipUi();
-        renderGrid();
-        syncCollectionUrlFromBrowseState({ replace: true });
-        collapseFiltersMenuPanel();
-      });
-    };
-
     const clearAllBrowseActiveFilters = () => {
       withPreservedCollectionScroll(() => {
         seasonNavFilter = null;
@@ -8900,18 +8948,23 @@
         }
         replaceCollectionSeasonQuery(seasonNavFilter);
         syncSeasonTabUI();
-        categoryNavFilter = "";
-        syncCategoryTabUI();
         clearBrowseNarrowingKeepDivision();
       });
     };
 
     if (searchPlp) {
-      if (browseHost) {
-        browseHost.replaceChildren();
-        browseHost.hidden = true;
+      const onClearSearchPlpFilters = () => {
+        collectionSearchWithinRecordCategory = "";
+        resetAllCollectionFilters();
+      };
+      renderChipRow(browseHost, searchDefs, {
+        onClearAll: onClearSearchPlpFilters,
+      });
+      if (searchHost) {
+        searchHost.replaceChildren();
+        searchHost.hidden = true;
       }
-      syncMobileFilterSortToolbar([], { enabled: false });
+      syncMobileFilterSortToolbar(searchDefs, { onClearAll: onClearSearchPlpFilters });
     } else {
       renderChipRow(browseHost, browseDefs, {
         onClearAll: clearAllBrowseActiveFilters,
@@ -9042,6 +9095,26 @@
     } catch {
       /* ignore */
     }
+  }
+
+  /** Clear subcategory / brand / colour / search; keep main division (`categoryNavFilter`). */
+  function clearBrowseNarrowingKeepDivision() {
+    withPreservedCollectionScroll(() => {
+      clearSubcategoryFilters();
+      clearBrandFilters();
+      clearCollectionKeywordColourNarrowing();
+      if (collectionSubmittedSearchNorm) {
+        exitCollectionSearchPlpRestoreBrowse({ skipRestore: true });
+      }
+      validateSubcategoryFilter();
+      renderCategoryDrill();
+      syncFiltersMenuForViewport();
+      syncCollectionBrandFilterChipUi();
+      syncBasicColourFilterChipUi();
+      renderGrid();
+      syncCollectionUrlFromBrowseState({ replace: true });
+      collapseFiltersMenuPanel();
+    });
   }
 
   function resetNarrowingFilters() {
@@ -13355,7 +13428,8 @@
   function mountCollectionCardBoardInHoverChrome(media, boardAddBtn, { hasColourTray = false } = {}) {
     if (!boardAddBtn) return;
     boardAddBtn.classList.add("card__board-add--collection-hover");
-    const mountInColourTray = hasColourTray && !isFiltersNarrowViewport();
+    const compactQuickFind = collectionViewMode === "compact";
+    const mountInColourTray = hasColourTray && !isFiltersNarrowViewport() && !compactQuickFind;
     if (mountInColourTray) {
       const trayInner = media.querySelector(".card__colour-tray__inner");
       if (trayInner) {
@@ -13363,18 +13437,17 @@
         return;
       }
     }
-    const bar = document.createElement("div");
-    bar.className = "card__hover-bar card__hover-bar--solo";
-    const inner = document.createElement("div");
-    inner.className = "card__hover-bar__inner";
-    inner.appendChild(boardAddBtn);
-    bar.appendChild(inner);
-    media.appendChild(bar);
+    collectionCardBoardHoverBarInner(media).appendChild(boardAddBtn);
   }
 
-  function stylingBoardCtaLabel(blocked) {
-    if (blocked) return "ON BOARD";
-    return isFiltersNarrowViewport() ? "+" : "+ STYLE";
+  function stylingBoardCtaLabel() {
+    return isFiltersNarrowViewport() ? "+" : "ADD TO OUTFIT";
+  }
+
+  function syncBoardAddButtonPresentation(btn, blocked) {
+    if (!(btn instanceof HTMLButtonElement)) return;
+    btn.classList.toggle("card__board-add--on-board", Boolean(blocked));
+    btn.textContent = blocked ? "" : stylingBoardCtaLabel();
   }
 
   function syncCollectionBoardAddButtonLabels() {
@@ -13394,7 +13467,7 @@
         Boolean(variants?.length) && allVariantKeys.length > 0 && allVariantKeys.every((k) => takenKeys.has(k));
       const singleTaken = !variants?.length && outfitSlotKeySet().has(outfitSlotKey({ itemId: item.id }));
       const blocked = everyVariantTaken || singleTaken;
-      quick.textContent = stylingBoardCtaLabel(blocked);
+      syncBoardAddButtonPresentation(quick, blocked);
     });
   }
 
@@ -13435,7 +13508,7 @@
     const mediaBtn = document.querySelector(".item-detail__media .card__board-add[data-outfit-add]");
     if (mediaBtn instanceof HTMLButtonElement) {
       mediaBtn.disabled = blocked;
-      mediaBtn.textContent = stylingBoardCtaLabel(blocked);
+      syncBoardAddButtonPresentation(mediaBtn, blocked);
       mediaBtn.title = btn.title;
       mediaBtn.setAttribute("aria-label", btn.title);
     }
@@ -13558,8 +13631,8 @@
         boardAddBtn.title = blocked ? `Already on ${OUTFITS_UI_NAME.toLowerCase()}.` : `Add to ${OUTFITS_UI_NAME}`;
       }
       boardAddBtn.setAttribute("aria-label", boardAddBtn.title);
-      boardAddBtn.textContent = stylingBoardCtaLabel(blocked);
       boardAddBtn.disabled = Boolean(blocked);
+      syncBoardAddButtonPresentation(boardAddBtn, blocked);
     }
 
     const openHint = "Open piece";
@@ -13740,8 +13813,8 @@
       const singleTaken = !variants?.length && outfitSlotKeySet().has(outfitSlotKey({ itemId: item.id }));
 
       const blocked = everyVariantTaken || singleTaken;
-      quick.textContent = stylingBoardCtaLabel(blocked);
       /** @type {HTMLButtonElement} */ (quick).disabled = Boolean(blocked);
+      syncBoardAddButtonPresentation(/** @type {HTMLButtonElement} */ (quick), blocked);
       if (variants?.length) {
         quick.title = everyVariantTaken
           ? `Every colour is already on your ${OUTFITS_UI_NAME.toLowerCase()}.`
@@ -13829,6 +13902,18 @@
     return !cat && subcategoryFilters.size === 0 && !seasonNavFilter && !narrowingFiltersActive();
   }
 
+  /** Season tab only (e.g. S/S Collection) — same HOME / trail as the collection hub. */
+  function collectionHeadingSeasonOnlyBrowse() {
+    const cat = String(categoryNavFilter ?? "").trim();
+    const season = normalizeSeasonNavToken(seasonNavFilter);
+    return Boolean(season) && !cat && subcategoryFilters.size === 0;
+  }
+
+  function collectionHeadingUsesHomeCrumb(searchActive = false) {
+    if (searchActive) return false;
+    return collectionHeadingAtCollectionRoot() || collectionHeadingSeasonOnlyBrowse();
+  }
+
   /** COLLECTION root — all seasons, no division drill, no narrowing filters. */
   function navigateCollectionCollectionRoot() {
     resetAllCollectionFilters();
@@ -13888,7 +13973,6 @@
   function renderCollectionHeadingBreadcrumb(host, { searchActive = false } = {}) {
     if (!host) return;
 
-    const atRoot = collectionHeadingAtCollectionRoot();
     const cat = String(categoryNavFilter ?? "").trim();
     const season = normalizeSeasonNavToken(seasonNavFilter);
 
@@ -13927,9 +14011,10 @@
       nav.appendChild(btn);
     }
 
-    /* Collection hub — HOME only; deeper browse/search starts at COLLECTION. */
-    if (atRoot && !searchActive) {
+    /* Collection hub + season-only PLP (e.g. S/S Collection) — HOME / (title carries “Collection”). */
+    if (collectionHeadingUsesHomeCrumb(searchActive)) {
       appendCrumb("HOME", { onClick: navigateToSiteHome });
+      appendSep();
       host.appendChild(nav);
       return;
     }
@@ -14002,12 +14087,10 @@
     elTitle.removeAttribute("aria-hidden");
     elTitle.textContent = title;
     elTitle.classList.remove("items-toolbar__page-title--placeholder");
-    const atRoot = collectionHeadingAtCollectionRoot();
     const season = normalizeSeasonNavToken(seasonNavFilter);
-    const trailParts =
-      atRoot && !searchActive ? ["HOME"] : ["COLLECTION"];
+    const trailParts = collectionHeadingUsesHomeCrumb(searchActive) ? ["HOME"] : ["COLLECTION"];
     if (searchActive) trailParts.push("SEARCH");
-    else if (season) trailParts.push(collectionHeadingSeasonLabel());
+    else if (season && !collectionHeadingSeasonOnlyBrowse()) trailParts.push(collectionHeadingSeasonLabel());
     root.setAttribute("aria-label", `${trailParts.join(" / ")} · ${title}`);
   }
   /** Per-slot subcategory drill / mega menu: view entire parent category (empty `subcategoryFilter`). */
@@ -14127,22 +14210,6 @@
       spend: sumPriceInDisplayCurrency(filtered),
       layout: getCollectionCountLineLayout(n, seasonalTotal, gridSearchNorm),
     });
-    if (els.emptyMsg) {
-      const onSeasonTab = Boolean(seasonNavFilter);
-      if (gridSearchNorm) {
-        els.emptyMsg.textContent = "No pieces match this search.";
-      } else {
-        els.emptyMsg.textContent = narrowingFiltersActive()
-          ? onSeasonTab
-            ? "Nothing matches that category, type, colour, or search on this season tab."
-            : "Nothing matches that category, type, colour, or search."
-          : onSeasonTab
-            ? "No pieces on this season tab match."
-            : "No pieces match.";
-      }
-    }
-    if (els.emptyReset) els.emptyReset.hidden = !narrowingFiltersActive();
-    if (els.emptyWrap) els.emptyWrap.hidden = n > 0;
     els.grid.hidden = n === 0;
     applyCollectionViewMode();
     syncFilterSearchFieldDomPlacement();
@@ -14265,21 +14332,19 @@
     document.body.style.left = "";
     document.body.style.right = "";
     document.body.style.width = "";
-    document.body.style.paddingRight = "";
     if (y > 0) globalThis.scrollTo(0, y);
   }
 
   function lockCollectionPageScroll() {
     if (collectionPageScrollLockCount === 0) {
       collectionPageScrollLockY = globalThis.scrollY ?? globalThis.pageYOffset ?? 0;
-      const scrollbarWidth = Math.max(0, globalThis.innerWidth - document.documentElement.clientWidth);
       document.documentElement.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.top = `-${collectionPageScrollLockY}px`;
       document.body.style.left = "0";
       document.body.style.right = "0";
       document.body.style.width = "100%";
-      if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+      /* html { scrollbar-gutter: stable } already reserves gutter — extra paddingRight shifted the page inward. */
     }
     collectionPageScrollLockCount += 1;
   }
@@ -14296,7 +14361,6 @@
     document.body.style.left = "";
     document.body.style.right = "";
     document.body.style.width = "";
-    document.body.style.paddingRight = "";
     globalThis.scrollTo(0, y);
   }
 
@@ -14347,8 +14411,7 @@
       stylingBoardDrawerFocusReturn = document.activeElement;
       root.removeAttribute("hidden");
       root.setAttribute("aria-hidden", "false");
-      stylingBoardDrawerOpenRaf = requestAnimationFrame(() => {
-        stylingBoardDrawerOpenRaf = 0;
+      const revealDrawer = () => {
         if (root.hasAttribute("hidden")) return;
         root.classList.add("styling-board-drawer--visible");
         document.body.classList.add("collection-ui--styling-board");
@@ -14356,7 +14419,21 @@
         syncStylingBoardUi();
         renderOutfitStrip();
         document.getElementById("styling-board-drawer-close")?.focus();
-      });
+      };
+      if (isHeaderCompactViewport() && !twPrefersReducedMotion()) {
+        stylingBoardDrawerOpenRaf = requestAnimationFrame(() => {
+          void root.offsetWidth;
+          stylingBoardDrawerOpenRaf = requestAnimationFrame(() => {
+            stylingBoardDrawerOpenRaf = 0;
+            revealDrawer();
+          });
+        });
+      } else {
+        stylingBoardDrawerOpenRaf = requestAnimationFrame(() => {
+          stylingBoardDrawerOpenRaf = 0;
+          revealDrawer();
+        });
+      }
     } else {
       syncStylingBoardUi();
       renderOutfitStrip();
@@ -14401,7 +14478,8 @@
         finish();
       };
       sheet.addEventListener("transitionend", onEnd);
-      setTimeout(finish, 400);
+      const motionMs = isHeaderCompactViewport() ? 380 : 400;
+      setTimeout(finish, motionMs);
     } else {
       finish();
     }
@@ -17571,6 +17649,7 @@
       globalThis.addEventListener("resize", () => {
         if (!document.getElementById("grid")) return;
         syncCollectionQuickFindCardDom();
+        syncCollectionBoardAddButtonLabels();
       });
     }
 
@@ -17821,6 +17900,7 @@
 
   const TW_MOTION_MS = 280;
   const TW_SEARCH_MOTION_MS = 220;
+  const TW_MOBILE_SEARCH_MOTION_MS = 320;
 
   function twPrefersReducedMotion() {
     try {
@@ -18035,7 +18115,7 @@
     headerSearchOverlayOpeningQueryRaw = null;
     cancelHeaderSearchOverlayUiDebounce();
     resetHeaderSearchOverlayResultsDom();
-    headerSearchWrap.classList.remove("is-open");
+    headerSearchWrap.classList.remove("is-open", "is-closing");
     headerSearchWrap.setAttribute("aria-hidden", "true");
     headerSearchWrap.dataset.searchState = "closed";
     if (globalThis.matchMedia?.(HEADER_DESKTOP_MQ)?.matches) {
@@ -18629,13 +18709,12 @@
         headerSearchCloseAbort = null;
       }
 
-      headerSearchWrap.classList.remove("is-open");
-
       if (!isHeaderCompactLayout() && !twPrefersReducedMotion()) {
         setHeaderSearchFlyoutState(headerSearchWrap, "closing");
         document.body.classList.add("collection-ui--header-search-closing");
         document.body.classList.remove("collection-ui--header-search-open");
         headerSearchWrap.setAttribute("aria-hidden", "true");
+        headerSearchWrap.classList.remove("is-open");
         headerSearchCloseAbort = twAfterMotion(headerSearchWrap, HEADER_SEARCH_FLYOUT_MOTION_MS, () => {
           document.body.classList.remove("collection-ui--header-search-closing");
           finishClose();
@@ -18644,11 +18723,24 @@
       }
 
       if (isHeaderCompactLayout() && !twPrefersReducedMotion()) {
-        setHeaderSearchFlyoutState(headerSearchWrap, "closed");
-        headerSearchCloseAbort = twAfterMotion(headerSearchWrap, TW_SEARCH_MOTION_MS, finishClose);
+        setHeaderSearchFlyoutState(headerSearchWrap, "closing");
+        document.body.classList.add("collection-ui--header-search-closing");
+        document.body.classList.remove("collection-ui--header-search-open");
+        headerSearchWrap.setAttribute("aria-hidden", "true");
+        headerSearchWrap.classList.add("is-closing");
+        void headerSearchWrap.offsetWidth;
+        requestAnimationFrame(() => {
+          headerSearchWrap.classList.remove("is-open");
+          headerSearchCloseAbort = twAfterMotion(headerSearchWrap, TW_MOBILE_SEARCH_MOTION_MS, () => {
+            headerSearchWrap.classList.remove("is-closing");
+            document.body.classList.remove("collection-ui--header-search-closing");
+            finishClose();
+          });
+        });
         return;
       }
 
+      headerSearchWrap.classList.remove("is-open", "is-closing");
       finishClose();
     };
 
@@ -18870,8 +18962,6 @@
       }
 
       mobileShell.classList.remove("is-open");
-      document.body.classList.remove("collection-ui--mobile-nav-open");
-      setMobileNavDimVisible(false);
       headerMenuBtn?.setAttribute("aria-expanded", "false");
       headerMenuBtn?.setAttribute("aria-label", "Open categories menu");
 
@@ -18894,15 +18984,27 @@
       syncMobileShellTop();
       resetMobileNavDrill();
       mobileShell.hidden = false;
-      mobileShell.classList.add("is-open");
       mobileShell.setAttribute("aria-hidden", "false");
+      mobileShell.classList.remove("is-open", "is-closing");
       document.body.classList.add("collection-ui--mobile-nav-open");
       setMobileNavDimVisible(true);
       headerMenuBtn?.setAttribute("aria-expanded", "true");
       headerMenuBtn?.setAttribute("aria-label", "Close categories menu");
-      requestAnimationFrame(() => {
+
+      const revealPanel = () => {
+        if (!document.body.classList.contains("collection-ui--mobile-nav-open")) return;
+        mobileShell.classList.add("is-open");
+        requestAnimationFrame(() => syncMobileShellTop());
+      };
+
+      if (twPrefersReducedMotion()) {
+        mobileShell.classList.add("is-open");
         syncMobileShellTop();
-      });
+        return;
+      }
+
+      void mobileShell.offsetWidth;
+      requestAnimationFrame(revealPanel);
     }
 
     function openMobileHeaderSearch() {
@@ -19239,13 +19341,13 @@
         closeMobileCategoryPanel();
         document.body.classList.remove("collection-ui--nav-folded", "collection-ui--header-search-closing");
         syncHeaderSearchFeaturedSubcategoryCards();
-        headerSearchWrap.classList.add("is-open");
         headerSearchWrap.removeAttribute("hidden");
         headerSearchWrap.setAttribute("aria-hidden", "false");
         headerSearchBtn.setAttribute("aria-expanded", "true");
         headerSearchBtn.setAttribute("aria-label", "Close search");
         document.body.classList.add("collection-ui--header-search-open");
         if (!isHeaderCompactLayout()) {
+          headerSearchWrap.classList.add("is-open");
           setHeaderSearchFlyoutState(headerSearchWrap, "opening");
           syncHeaderSubmenuBackdropInset();
           void headerSearchWrap.offsetWidth;
@@ -19258,6 +19360,20 @@
         } else {
           setHeaderSearchFlyoutState(headerSearchWrap, "open");
           syncMobileShellTop();
+          if (!twPrefersReducedMotion()) {
+            headerSearchWrap.classList.remove("is-open", "is-closing");
+            void headerSearchWrap.offsetWidth;
+            requestAnimationFrame(() => {
+              if (!document.body.classList.contains("collection-ui--header-search-open")) return;
+              void headerSearchWrap.offsetWidth;
+              requestAnimationFrame(() => {
+                if (!document.body.classList.contains("collection-ui--header-search-open")) return;
+                headerSearchWrap.classList.add("is-open");
+              });
+            });
+          } else {
+            headerSearchWrap.classList.add("is-open");
+          }
         }
         relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
         queueMicrotask(() => {
@@ -19508,11 +19624,6 @@
         closeStylingBoardDrawer();
       });
     }
-
-    els.emptyReset?.addEventListener("click", () => {
-      resetNarrowingFilters();
-      showToast("Type, colour, and search cleared — showing full collection.");
-    });
 
     const seasonNav = document.getElementById("season-nav");
     seasonNav?.addEventListener("click", (e) => {

@@ -5,7 +5,7 @@
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Wardrobe piece detail — edit notes, measurements, photos, and collection metadata in Timeless Wardrobe." />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f4ed" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141312" />
     <title>Timeless Wardrobe</title>
     <link rel="icon" href="/favicon.png" type="image/png" />
@@ -192,7 +192,12 @@
             <div class="site-header__search-surface">
               <div class="site-header__search-head">
                 <div class="site-header__search-row site-header__search-field--rl">
-                  <span class="site-header__search-field-icon" aria-hidden="true"></span>
+                  <span class="site-header__search-field-icon site-header__search-icon" aria-hidden="true">
+                    <svg class="site-header__tool-glyphs" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <circle class="site-header__tool-glyph" cx="7" cy="7" r="4.25"/>
+                      <line class="site-header__tool-glyph site-header__tool-glyph--cap-round" x1="10.35" y1="10.35" x2="13.15" y2="13.15"/>
+                    </svg>
+                  </span>
                   <label class="site-header__search-input-label" for="filter-search">
                     <span class="filters__search-field">
                     <input
@@ -218,15 +223,15 @@
                     </button>
                     </span>
                   </label>
-                  <button
-                    type="button"
-                    id="site-header-search-close"
-                    class="site-header__search-close"
-                    aria-label="Close search"
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  id="site-header-search-close"
+                  class="site-header__search-close"
+                  aria-label="Close search"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
               </div>
               <div id="site-header-search-browse" class="site-header__search-browse">
                 <div class="site-header__search-dropdown-body">
@@ -333,24 +338,26 @@
           </section>
           <section class="styling-board__current" aria-labelledby="styling-board-current-heading">
             <h3 id="styling-board-current-heading" class="styling-board__section-title">On your board</h3>
-            <div
-              id="outfit-strip"
-              class="styling-board__pieces outfit-strip"
-              role="list"
-              aria-label="Pieces on outfits"
-            ></div>
+            <div class="styling-board__board-row">
+              <div
+                id="outfit-strip"
+                class="styling-board__pieces outfit-strip"
+                role="list"
+                aria-label="Pieces on outfits"
+              ></div>
+              <button
+                type="button"
+                class="btn btn--ghost styling-board__clear-link"
+                id="outfit-clear"
+                hidden
+                aria-label="Clear all pieces from the board"
+              >
+                Clear all
+              </button>
+            </div>
             <p id="outfit-empty" class="styling-board__empty" hidden>
               Save pieces here to build outfits from the collection.
             </p>
-            <button
-              type="button"
-              class="btn btn--ghost styling-board__clear-link"
-              id="outfit-clear"
-              hidden
-              aria-label="Clear all pieces from the board"
-            >
-              Clear All
-            </button>
             <div
               id="styling-board-save-form"
               class="styling-board__save outfit-actions"
