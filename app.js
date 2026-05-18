@@ -1,9 +1,18 @@
 (function () {
   const STORAGE_KEY = "timeless-wardrobe-outfits-v1";
+  /** User-visible label for the outfit builder (header, drawer, aria, toasts). */
+  const OUTFITS_UI_NAME = "Outfits";
+
   const STYLING_BOARD_DRAFT_KEY = "timeless-wardrobe-styling-board-draft-v1";
   const MAX_OUTFIT_ITEMS = 16;
   const OUTFIT_STORAGE_VERSION = 2;
   const STYLING_BOARD_DRAFT_VERSION = 1;
+
+  /** Header / mobile nav — editorial moodboard grid (single-stroke layout, 15×15). */
+  const STYLING_BOARD_GLYPH_SVG =
+    '<svg class="styling-board-glyph" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+    '<path class="styling-board-glyph__grid" pathLength="100" d="M1.45 2.2H14.55M1.45 13.8H14.5M1.45 2.2V13.8M14.5 2.25V13.75M8.9 2.15V13.85M1.5 7.05H8.85M8.92 10.42H14.52"/>' +
+    "</svg>";
 
   /** Split collection rows merged into one id — remap saved outfit lines. */
   const LEGACY_OUTFIT_ITEM_TO_SLOT = new Map([
@@ -2908,6 +2917,10 @@
     if (!(sec instanceof HTMLElement)) return;
     const textEl = sec.querySelector(".item-detail__notes-text");
     const toggle = sec.querySelector(".item-detail__notes-toggle");
+    if (!itemNotesDisplayText(textEl instanceof HTMLElement ? textEl.textContent : "")) {
+      sec.remove();
+      return;
+    }
     sec.classList.add("item-detail__notes-section--collapsed");
     sec.classList.remove("item-detail__notes-section--expanded");
     if (textEl instanceof HTMLElement) textEl.hidden = true;
@@ -2936,6 +2949,11 @@
   function installItemDetailNotesPdpGallerySync(root) {
     const notesSec = root.querySelector(".item-detail__notes-section--accordion");
     if (!(notesSec instanceof HTMLElement)) return;
+    const textEl = notesSec.querySelector(".item-detail__notes-text");
+    if (!hasItemNotesForDisplay(textEl instanceof HTMLElement ? textEl.textContent : "")) {
+      notesSec.remove();
+      return;
+    }
     const gallery =
       root.querySelector(".item-detail__gallery") || root.querySelector(".item-detail__media.item-detail__gallery-stage");
     if (!(gallery instanceof HTMLElement)) return;
@@ -2994,10 +3012,21 @@
     });
   }
 
+  /** User-entered notes only — trim and reject empty / placeholder dashes. */
+  function itemNotesDisplayText(raw) {
+    const text = String(raw ?? "").trim();
+    if (!text || text === "--" || text === "—" || text === "-") return "";
+    return text;
+  }
+
+  function hasItemNotesForDisplay(raw) {
+    return Boolean(itemNotesDisplayText(raw));
+  }
+
   /** Item notes — PDP: accordion (open by default unless taller than gallery); modal: clamp + read more. */
   function mountItemDetailNotesSection(host, notesText, opts = {}) {
-    const text = String(notesText ?? "").trim();
-    if (!text || text === "--" || text === "—") return null;
+    const text = itemNotesDisplayText(notesText);
+    if (!text) return null;
     if (!(host instanceof HTMLElement)) return null;
 
     const pdpAccordion = Boolean(opts.pdpAccordion);
@@ -6426,292 +6455,6 @@
     return out.slice(0, n);
   }
 
-  function itemSeasonToken(item) {
-    return String(item?.season ?? "").trim();
-  }
-
-  function itemSeasonalEntryBlob(item) {
-    const slot = itemSlot(item);
-    const rec = recordCategoryForDrill(item, slot);
-    const label = friendlyRecordCategory(rec);
-    return `${item?.name ?? ""} ${item?.fabric ?? ""} ${item?.category ?? ""} ${rec} ${label} ${item?.section ?? ""}`.toLowerCase();
-  }
-
-  function itemMatchesSeasonalKeywords(item, keywords) {
-    const blob = itemSeasonalEntryBlob(item);
-    return keywords.some((k) => blob.includes(String(k).toLowerCase()));
-  }
-
-  function itemMatchesSeasonalSection(item, sectionName) {
-    const sec = String(sectionName ?? "").trim().toLowerCase();
-    if (sec === "tailoring") return isTailoringSeasonalItem(item);
-    if (sec === "outerwear") return isOuterwearSeasonalItem(item);
-    if (sec === "tops") return isTopsSeasonalItem(item);
-    if (sec === "shoes" || sec === "footwear") return isFootwearSeasonalItem(item);
-    if (sec === "layering") return isLayeringSeasonalItem(item);
-    if (sec === "bags") return isBagsSeasonalItem(item);
-    if (sec === "eyewear") return isEyewearSeasonalItem(item);
-    const raw = String(item?.category ?? "").trim().toLowerCase();
-    const label = friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item))).toLowerCase();
-    return raw === sec || label === sec;
-  }
-
-  function isTailoringSeasonalItem(item) {
-    const raw = String(item?.category ?? "").trim();
-    if (raw === "Jackets") return true;
-    if (friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item))) === "Tailoring") return true;
-    if (isOuterwearSeasonalItem(item)) return false;
-    return itemMatchesSeasonalKeywords(item, ["Tweed", "Blazer", "Jacket"]);
-  }
-
-  function isOuterwearSeasonalItem(item) {
-    const raw = String(item?.category ?? "").trim();
-    if (raw === "Outerwear") return true;
-    return friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item))) === "Outerwear";
-  }
-
-  function isTopsSeasonalItem(item) {
-    const raw = String(item?.category ?? "").trim();
-    if (raw === "Tops" || raw === "Shirts") return true;
-    const label = friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item)));
-    return label === "Tops";
-  }
-
-  function isFootwearSeasonalItem(item) {
-    const raw = String(item?.category ?? "").trim();
-    if (raw === "Footwear") return true;
-    if (friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item))) === "Footwear") return true;
-    return itemMatchesSeasonalKeywords(item, ["Sandal", "Sandals", "Loafer", "Shoe", "Espadrille"]);
-  }
-
-  function isLayeringSeasonalItem(item) {
-    const raw = String(item?.category ?? "").trim();
-    if (raw === "Mid Layer" || raw === "Inner Layer" || raw === "Layering") return true;
-    return friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item))) === "Layering";
-  }
-
-  function isBagsSeasonalItem(item) {
-    const label = friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item)));
-    return label === "Bags" || String(item?.category ?? "").trim() === "Bags";
-  }
-
-  function isEyewearSeasonalItem(item) {
-    const label = friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item)));
-    return (
-      label === "Eyewear" ||
-      ["Sunglasses", "Glasses", "Eyeglasses"].includes(String(item?.category ?? "").trim())
-    );
-  }
-
-  function isJewellerySeasonalItem(item) {
-    const label = friendlyRecordCategory(recordCategoryForDrill(item, itemSlot(item)));
-    return label === "Jewellery" || String(item?.category ?? "").trim() === "Jewellery";
-  }
-
-  /** Strict season tag only — no All-season or cross-season pieces on seasonal cards. */
-  function itemMatchesStrictSeasonForSeasonalCard(item, seasonToken) {
-    return itemSeasonToken(item) === seasonToken;
-  }
-
-  /** @param {"A/W" | "S/S"} seasonToken */
-  function seasonalCardCategoryAllowed(item, seasonToken) {
-    const slot = itemSlot(item);
-    if (slot === SLOT_FRAGRANCE || isJewellerySeasonalItem(item)) return false;
-
-    if (seasonToken === "A/W") {
-      if (slot === SLOT_WATCHES) return true;
-      if (isOuterwearSeasonalItem(item)) return true;
-      if (isTailoringSeasonalItem(item)) return true;
-      if (isLayeringSeasonalItem(item)) return true;
-      if (isFootwearSeasonalItem(item)) return true;
-      if (isBagsSeasonalItem(item)) return true;
-      return false;
-    }
-
-    if (seasonToken === "S/S") {
-      if (slot === SLOT_WATCHES) return true;
-      if (isTopsSeasonalItem(item)) return true;
-      if (isFootwearSeasonalItem(item)) return true;
-      if (isBagsSeasonalItem(item)) return true;
-      if (isEyewearSeasonalItem(item)) return true;
-      if (slot === SLOT_ACCESSORIES) {
-        const raw = String(item?.category ?? "").trim();
-        if (["Hats", "Belts", "Scarves"].includes(raw)) return true;
-      }
-      return false;
-    }
-
-    return false;
-  }
-
-  /**
-   * @param {object} item
-   * @param {{ preferredKeywords?: string[] }} config
-   */
-  function seasonalCardPreferredScore(item, config = {}) {
-    let s = 8;
-    for (const kw of config.preferredKeywords || []) {
-      if (itemMatchesSeasonalKeywords(item, [kw])) s += 14;
-    }
-    if (buildCoverCandidates(item).length > 0) s += 6;
-    if (buildCoverCandidates(item).some((u) => isLikelySeasonalCutoutImageUrl(u))) s += 10;
-    return s;
-  }
-
-  /** @param {object[]} pool @param {number} count @param {(item: object) => number} scoreFn */
-  function weightedSampleWithoutReplacement(pool, count, scoreFn) {
-    const bag = pool.map((it) => ({ it, w: Math.max(1, scoreFn(it)) }));
-    const out = [];
-    for (let n = 0; n < count && bag.length; n++) {
-      const total = bag.reduce((sum, row) => sum + row.w, 0);
-      let r = Math.random() * total;
-      let idx = 0;
-      for (; idx < bag.length; idx++) {
-        r -= bag[idx].w;
-        if (r <= 0) break;
-      }
-      const pick = bag.splice(Math.max(0, Math.min(idx, bag.length - 1)), 1)[0];
-      if (pick) out.push(pick.it);
-    }
-    return out;
-  }
-
-  const SEASONAL_CARD_AW_CONFIG = {
-    preferredKeywords: ["Barbour", "Tweed", "Balmacaan", "Harrington", "Brogue", "Boot", "BB58"],
-  };
-
-  const SEASONAL_CARD_SS_CONFIG = {
-    preferredKeywords: ["Linen", "Knit", "Polo", "Tote", "GAT", "Sunglass", "Cartier", "Tank"],
-  };
-
-  /** @type {{ aw: string, ss: string }} */
-  let lastSeasonalCardCompositionSig = { aw: "", ss: "" };
-  let seasonalCardRefreshTimer = 0;
-
-  /** @param {"A/W" | "S/S"} seasonToken @param {{ preferredKeywords?: string[] }} config */
-  function buildSeasonalCardPool(seasonToken, config) {
-    return getAllWardrobeItems().filter((it) => {
-      if (!itemMatchesStrictSeasonForSeasonalCard(it, seasonToken)) return false;
-      if (!seasonalCardCategoryAllowed(it, seasonToken)) return false;
-      const covers = buildCoverCandidates(it);
-      return covers.some((u) => isLikelySeasonalCutoutImageUrl(u));
-    });
-  }
-
-  function seasonalCardCompositionSig(items) {
-    return items
-      .map((it) => String(it?.id ?? ""))
-      .filter(Boolean)
-      .sort()
-      .join("|");
-  }
-
-  /** @param {"aw" | "ss"} sigKey @param {"A/W" | "S/S"} seasonToken @param {{ preferredKeywords?: string[] }} config */
-  function pickRandomSeasonalCardComposition(sigKey, seasonToken, config) {
-    const pool = buildSeasonalCardPool(seasonToken, config);
-    if (!pool.length) return [];
-
-    const maxCount = Math.min(4, pool.length);
-    const minCount = Math.min(2, maxCount);
-    const count = minCount + Math.floor(Math.random() * (maxCount - minCount + 1));
-
-    let picked = [];
-    let attempts = 0;
-    const prevSig = lastSeasonalCardCompositionSig[sigKey];
-    do {
-      picked = weightedSampleWithoutReplacement(pool, count, (it) => seasonalCardPreferredScore(it, config));
-      attempts += 1;
-    } while (seasonalCardCompositionSig(picked) === prevSig && attempts < 12 && pool.length > count);
-
-    lastSeasonalCardCompositionSig[sigKey] = seasonalCardCompositionSig(picked);
-    return picked;
-  }
-
-  /** Editorial still-life slots (% of card); order shuffled at mount. */
-  const SEASONAL_STILL_LAYOUTS = {
-    2: [
-      { x: 6, y: 4, w: 54, z: 1, rot: -3, scale: 1.04 },
-      { x: 38, y: 10, w: 52, z: 2, rot: 2.5, scale: 0.98 },
-    ],
-    3: [
-      { x: 4, y: 2, w: 46, z: 1, rot: -4, scale: 1.02 },
-      { x: 32, y: 8, w: 44, z: 2, rot: 3, scale: 1 },
-      { x: 52, y: 0, w: 40, z: 3, rot: -1.5, scale: 0.96 },
-    ],
-    4: [
-      { x: 2, y: 0, w: 40, z: 1, rot: -5, scale: 1.03 },
-      { x: 26, y: 6, w: 38, z: 2, rot: 2, scale: 0.97 },
-      { x: 48, y: 2, w: 36, z: 3, rot: -2, scale: 1.01 },
-      { x: 62, y: 12, w: 34, z: 4, rot: 4, scale: 0.94 },
-    ],
-  };
-
-  /** @param {HTMLElement | null} host @param {object[]} items */
-  function mountSeasonalCardStillLife(host, items) {
-    if (!host) return;
-    host.replaceChildren();
-    if (!items.length) {
-      host.classList.add("ed-lp__season-media--missing");
-      return;
-    }
-    host.classList.remove("ed-lp__season-media--missing");
-
-    const still = document.createElement("div");
-    still.className = "ed-lp__season-still";
-    const n = Math.min(4, Math.max(2, items.length));
-    const layouts = SEASONAL_STILL_LAYOUTS[n] || SEASONAL_STILL_LAYOUTS[4];
-    const pieces = items.slice(0, n);
-    shuffleArrayInPlace(pieces);
-    const displayPlans = assignSeasonalCardDisplayPlans(pieces);
-
-    displayPlans.forEach((plan, i) => {
-      const item = plan.item;
-      const layout = layouts[i % layouts.length];
-      const piece = document.createElement("div");
-      piece.className = "ed-lp__season-piece";
-      const jitter = () => (Math.random() - 0.5) * 5;
-      piece.style.setProperty("--piece-x", `${layout.x + jitter() * 0.4}%`);
-      piece.style.setProperty("--piece-y", `${layout.y + jitter() * 0.35}%`);
-      piece.style.setProperty("--piece-w", `${layout.w * (0.96 + Math.random() * 0.08)}%`);
-      piece.style.setProperty("--piece-z", String(layout.z));
-      piece.style.setProperty("--piece-rot", `${layout.rot + jitter()}deg`);
-      piece.style.setProperty("--piece-scale", String(layout.scale * (0.94 + Math.random() * 0.1)));
-
-      const img = document.createElement("img");
-      img.className = "ed-lp__season-piece-img";
-      img.alt = "";
-      img.loading = i === 0 ? "eager" : "lazy";
-      img.decoding = "async";
-      piece.appendChild(img);
-      still.appendChild(piece);
-      wireHomeEditorialCardImage(img, item, plan.displaySrc, { host: piece, missingClass: null });
-    });
-
-    host.appendChild(still);
-  }
-
-  function refreshHomeSeasonalCards() {
-    const awMedia = document.getElementById("ed-lp-season-aw-media");
-    const ssMedia = document.getElementById("ed-lp-season-ss-media");
-    if (!awMedia && !ssMedia) return;
-    mountSeasonalCardStillLife(
-      awMedia,
-      pickRandomSeasonalCardComposition("aw", "A/W", SEASONAL_CARD_AW_CONFIG)
-    );
-    mountSeasonalCardStillLife(
-      ssMedia,
-      pickRandomSeasonalCardComposition("ss", "S/S", SEASONAL_CARD_SS_CONFIG)
-    );
-  }
-
-  function startSeasonalCardAutoRefresh() {
-    if (seasonalCardRefreshTimer) return;
-    seasonalCardRefreshTimer = globalThis.setInterval(() => {
-      if (!document.body.classList.contains("home-page")) return;
-      if (document.hidden) return;
-      refreshHomeSeasonalCards();
-    }, 90_000);
-  }
 
   function buildItemDetailHrefFromId(id) {
     return buildItemPageUrl(id).toString();
@@ -6761,36 +6504,6 @@
     return false;
   }
 
-  /** Cover-only display pick for seasonal cards (never `item.gallery`). */
-  function seasonalCardDisplaySrc(item) {
-    const candidates = buildCoverCandidates(item);
-    const cutouts = candidates.filter((u) => isLikelySeasonalCutoutImageUrl(u));
-    if (cutouts.length) {
-      return cutouts[Math.floor(Math.random() * cutouts.length)];
-    }
-    return homeEditorialCoverSrc(item);
-  }
-
-  /**
-   * Season cards: one cover/cutout URL per piece, no gallery mixing.
-   * @param {object[]} items
-   * @returns {{ item: object, displaySrc: string }[]}
-   */
-  function assignSeasonalCardDisplayPlans(items) {
-    const list = Array.isArray(items) ? items : [];
-    /** @type {Set<string>} */
-    const usedUrls = new Set();
-    return list.map((item) => {
-      const candidates = buildCoverCandidates(item).filter((u) => isLikelySeasonalCutoutImageUrl(u));
-      const pool = candidates.length
-        ? candidates
-        : [homeEditorialCoverSrc(item)].filter(Boolean);
-      let displaySrc = pool.find((u) => !usedUrls.has(u)) || pool[0] || "";
-      if (!displaySrc) displaySrc = seasonalCardDisplaySrc(item);
-      if (displaySrc) usedUrls.add(displaySrc);
-      return { item, displaySrc };
-    });
-  }
 
   /** Prefer on-body / outfit / detail gallery frames over duplicate cutouts. */
   function scoreHomeEditorialGalleryUrl(url, coverUrl) {
@@ -7442,7 +7155,7 @@
     const brandNavRow = document.querySelector(".site-header__brand-nav");
 
     const shouldUseSolidHeader = () => {
-      if (!isFiltersNarrowViewport() && homeHeaderRowHover) return true;
+      if (!isHeaderCompactViewport() && homeHeaderRowHover) return true;
       if (document.body.classList.contains("collection-ui--header-search-open")) return true;
       if (document.body.classList.contains("collection-ui--header-submenu-open")) return true;
       if (document.body.classList.contains("collection-ui--styling-board")) return true;
@@ -7452,20 +7165,20 @@
 
     const update = () => {
       syncHeights();
-      if (isFiltersNarrowViewport()) homeHeaderRowHover = false;
+      if (isHeaderCompactViewport()) homeHeaderRowHover = false;
       const solid = shouldUseSolidHeader();
       siteHeader.classList.toggle("site-header--overlay", !solid);
       siteHeader.classList.toggle("site-header--solid", solid);
     };
 
     const onHomeHeaderRowEnter = () => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       homeHeaderRowHover = true;
       update();
     };
 
     const onHomeHeaderRowLeave = (e) => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       const to = e.relatedTarget;
       if (to instanceof Element && brandNavRow?.contains(to)) return;
       homeHeaderRowHover = false;
@@ -7540,8 +7253,6 @@
 
     mountHomeRecentlyViewedRail(items);
 
-    refreshHomeSeasonalCards();
-    startSeasonalCardAutoRefresh();
     syncCategoryTabUI();
   }
 
@@ -7630,9 +7341,9 @@
 
   /** @type {boolean} */
   let useCloudOutfits = false;
-  let spendTotalAnimRaf = 0;
-  let spendTotalAnimToken = 0;
-  let spendTotalCurrentValue = 0;
+  let countLineAnimRaf = 0;
+  let countLineAnimToken = 0;
+  let countLineDisplay = { visible: 0, total: 0, spend: 0 };
   let stylingBoardDrawerOpen = false;
   let stylingBoardDrawerOpenRaf = 0;
   /** When set, that slot renders in the added hero instead of the strip grid. */
@@ -7701,18 +7412,84 @@
     return document.getElementById("item-detail-root");
   }
 
-  /** Standalone item.html: prefer browser back so the collection tab (and in-memory filters) is restored when possible. */
+  /** Build PLP href from a browse-restore snapshot (item page has no live filter state). */
+  function collectionHrefFromBrowseSnapshot(snap) {
+    if (!snap || typeof snap !== "object") return COLLECTION_HOME_URL;
+    let cat = String(snap.category ?? "").trim();
+    if (!SLOT_OPTIONS.includes(cat)) cat = "";
+    const slug = collectionDivisionSlug(cat);
+    const path = slug ? `${COLLECTION_BASE_PATH}/${slug}` : COLLECTION_BASE_PATH;
+    const u = new URL(path, "http://local");
+    const seasonQ = seasonNavQueryToken(normalizeSeasonNavToken(snap.seasonNav));
+    if (seasonQ) u.searchParams.set("season", seasonQ);
+    const sub = String(snap.subcategory ?? "").trim();
+    if (sub) u.searchParams.set("type", sub);
+    return `${u.pathname}${u.search}`;
+  }
+
+  function itemPageBackLabelFromSnapshot(snap) {
+    const sub = String(snap?.subcategory ?? "").trim();
+    if (sub) {
+      const label = categoryDisplayLabel(sub);
+      if (label) return label;
+    }
+    const cat = String(snap?.category ?? "").trim();
+    if (SLOT_OPTIONS.includes(cat)) return cat;
+    return "Collection";
+  }
+
+  function resolveItemPageBackHref() {
+    const snap = peekCollectionBrowseRestoreSnapshot();
+    if (snap) return collectionHrefFromBrowseSnapshot(snap);
+    try {
+      const ref = document.referrer;
+      if (ref) {
+        const refUrl = new URL(ref, globalThis.location.origin);
+        if (refUrl.origin === globalThis.location.origin && refUrl.pathname.startsWith(COLLECTION_BASE_PATH)) {
+          return `${refUrl.pathname}${refUrl.search}`;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return COLLECTION_HOME_URL;
+  }
+
+  /** Standalone item.html: browser back when possible; else return to the collection view the user came from. */
+  function navigateItemPageBack(e) {
+    if (e?.cancelable) e.preventDefault();
+    try {
+      if (globalThis.history.length > 1) {
+        globalThis.history.back();
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    const href = resolveItemPageBackHref();
+    try {
+      globalThis.location.assign(href);
+    } catch {
+      globalThis.location.href = href;
+    }
+  }
+
+  /** Standalone item.html: wire header back control + restore-friendly href. */
   function installItemPageBackNavigation() {
     if (itemPageBackNavInstalled) return;
     const back = document.querySelector(".site-header__collection-back, .item-page-header__back");
     if (!back) return;
     itemPageBackNavInstalled = true;
-    back.addEventListener("click", (e) => {
-      if (globalThis.history.length > 1) {
-        e.preventDefault();
-        globalThis.history.back();
-      }
-    });
+    const snap = peekCollectionBrowseRestoreSnapshot();
+    const href = resolveItemPageBackHref();
+    if (back instanceof HTMLAnchorElement) back.href = href;
+    const labelEl = back.querySelector(".site-header__collection-back-label");
+    if (labelEl) {
+      const label = itemPageBackLabelFromSnapshot(snap);
+      labelEl.textContent = label;
+      back.setAttribute("aria-label", `Back to ${label}`);
+    }
+    back.addEventListener("click", (e) => navigateItemPageBack(e));
   }
 
   /**
@@ -8679,14 +8456,15 @@
     }
   }
 
-  /** COLLECTION PLP: count/spend meta sits on its own line under the serif title (not beside it). */
+  /** COLLECTION PLP: count/spend meta inline after the serif title (same row). */
   function syncCollectionCountLinePlacement() {
     const heading = document.getElementById("collection-heading");
     const titleRow = document.querySelector(".collection-heading__title-row");
+    const title = document.getElementById("items-toolbar-page-title");
     const summary = document.querySelector(".items-toolbar__collection-summary--under-title");
-    if (!heading || !titleRow || !summary || !document.body.classList.contains("collection-page")) return;
-    if (summary.previousElementSibling !== titleRow) {
-      titleRow.insertAdjacentElement("afterend", summary);
+    if (!heading || !titleRow || !title || !summary || !document.body.classList.contains("collection-page")) return;
+    if (summary.parentElement !== titleRow || summary.previousElementSibling !== title) {
+      title.insertAdjacentElement("afterend", summary);
     }
   }
 
@@ -8949,6 +8727,41 @@
     }
   }
 
+  function syncMobileFilterSortToolbar(defs, { onClearAll, enabled = true } = {}) {
+    const countEl = document.getElementById("items-toolbar-filter-active-count");
+    const clearBtn = document.getElementById("items-toolbar-filter-mobile-clear");
+    const openBtn = document.getElementById("collection-filter-drawer-open");
+    const n = enabled ? defs.length : 0;
+
+    if (countEl) {
+      if (n > 0) {
+        countEl.textContent = ` (${n})`;
+        countEl.hidden = false;
+      } else {
+        countEl.textContent = "";
+        countEl.hidden = true;
+      }
+    }
+
+    if (openBtn) {
+      openBtn.setAttribute(
+        "aria-label",
+        n > 0 ? `Filter and sort, ${n} active filter${n === 1 ? "" : "s"}` : "Filter and sort"
+      );
+    }
+
+    if (clearBtn) {
+      clearBtn.hidden = !(enabled && n > 0);
+      if (!clearBtn.hidden && typeof onClearAll === "function") {
+        clearBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClearAll();
+        };
+      }
+    }
+  }
+
   /** RL-style removable chips below category / search pills (does not replace filter logic). */
   function syncToolbarActiveFilterChips() {
     const browseHost = document.getElementById("items-toolbar-active-filter-chips");
@@ -9153,11 +8966,13 @@
         browseHost.replaceChildren();
         browseHost.hidden = true;
       }
+      syncMobileFilterSortToolbar([], { enabled: false });
     } else {
       renderChipRow(browseHost, browseDefs, {
         onClearAll: clearAllBrowseActiveFilters,
         showClearAll: browseDefs.length > 1,
       });
+      syncMobileFilterSortToolbar(browseDefs, { onClearAll: clearAllBrowseActiveFilters });
     }
     hideLegacyFilterCountRowChips();
   }
@@ -10738,6 +10553,9 @@
         ? draft.editingSavedOutfitId
         : null;
     syncOutfitSaveButtonLabel();
+    if (editingSavedOutfitId || String(els.outfitName?.value ?? "").trim()) {
+      setStylingBoardSaveFormOpen(true);
+    }
     return true;
   }
 
@@ -10776,17 +10594,17 @@
     if (!item) return;
     if (!itemEligibleForOutfit(item)) {
       showToast(
-        "Only clothing, shoes, watches, and accessories go on the styling board — jewellery and perfume stay in the collection."
+        `Only clothing, shoes, watches, and accessories go on ${OUTFITS_UI_NAME.toLowerCase()} — jewellery and perfume stay in the collection.`
       );
       return;
     }
     const k = outfitSlotKey(slot);
     if (outfitSlotKeySet().has(k)) {
-      showToast("This colour is already on your styling board.");
+      showToast(`This colour is already on your ${OUTFITS_UI_NAME.toLowerCase()}.`);
       return;
     }
     if (currentOutfitSlots.length >= MAX_OUTFIT_ITEMS) {
-      showToast(`The styling board is limited to ${MAX_OUTFIT_ITEMS} pieces.`);
+      showToast(`${OUTFITS_UI_NAME} is limited to ${MAX_OUTFIT_ITEMS} pieces.`);
       return;
     }
     currentOutfitSlots.push(slot);
@@ -10875,11 +10693,12 @@
     if (els.outfitName) els.outfitName.value = "";
     if (els.outfitNotes) els.outfitNotes.value = "";
     editingSavedOutfitId = null;
+    setStylingBoardSaveFormOpen(false);
     clearStylingBoardDraft();
     clearStylingBoardAddedReveal();
     syncOutfitSaveButtonLabel();
     onOutfitChange();
-    showToast("Styling board cleared.");
+    showToast(`${OUTFITS_UI_NAME} cleared.`);
   }
 
   function clearStylingBoardAddedReveal() {
@@ -10969,6 +10788,35 @@
     renderOutfitStrip();
   }
 
+  function isStylingBoardSaveFormOpen() {
+    const form = document.getElementById("styling-board-save-form");
+    return form instanceof HTMLElement && !form.hasAttribute("hidden");
+  }
+
+  function setStylingBoardSaveFormOpen(open) {
+    const form = document.getElementById("styling-board-save-form");
+    if (!(form instanceof HTMLElement)) return;
+    if (open) {
+      form.removeAttribute("hidden");
+      form.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } else {
+      form.setAttribute("hidden", "");
+    }
+  }
+
+  function handleOutfitSaveClick() {
+    if (!currentOutfitSlots.length) {
+      showToast("Add at least one piece to the board first.");
+      return;
+    }
+    if (!isStylingBoardSaveFormOpen()) {
+      setStylingBoardSaveFormOpen(true);
+      els.outfitName?.focus();
+      return;
+    }
+    void saveCurrentOutfit();
+  }
+
   function syncOutfitSaveButtonLabel() {
     const btn = els.outfitSave || document.getElementById("outfit-save");
     if (!btn) return;
@@ -11007,6 +10855,7 @@
       return;
     }
     if (!name) {
+      setStylingBoardSaveFormOpen(true);
       showToast("Please name this outfit.");
       els.outfitName?.focus();
       return;
@@ -11050,6 +10899,7 @@
       syncOutfitSaveButtonLabel();
       if (els.outfitName) els.outfitName.value = "";
       if (els.outfitNotes) els.outfitNotes.value = "";
+      setStylingBoardSaveFormOpen(false);
       renderSavedOutfits();
       showToast(`Updated: “${name}”`);
       return;
@@ -11076,6 +10926,7 @@
     persistSavedOutfitsCache();
     if (els.outfitName) els.outfitName.value = "";
     if (els.outfitNotes) els.outfitNotes.value = "";
+    setStylingBoardSaveFormOpen(false);
     renderSavedOutfits();
     showToast(`Saved outfit: “${name}”`);
   }
@@ -11120,6 +10971,8 @@
     syncOutfitSaveButtonLabel();
     onOutfitChange();
     openStylingBoardDrawer();
+    if (forEdit) setStylingBoardSaveFormOpen(true);
+    else setStylingBoardSaveFormOpen(false);
     const skipped = before - valid.length;
     if (forEdit) {
       els.outfitName?.focus();
@@ -13589,7 +13442,8 @@
   }
 
   function stylingBoardCtaLabel(blocked) {
-    return blocked ? "ON BOARD" : "+ STYLE";
+    if (blocked) return "ON BOARD";
+    return isCollectionCardCoarsePointer() ? "+" : "+ STYLE";
   }
 
   function itemDetailBoardCtaLabel(blocked) {
@@ -13620,10 +13474,10 @@
     btn.textContent = itemDetailBoardCtaLabel(blocked);
     if (variants?.length) {
       btn.title = blocked
-        ? "Every colour is already on your styling board."
-        : "Add the selected colour to Styling Board";
+        ? `Every colour is already on your ${OUTFITS_UI_NAME.toLowerCase()}.`
+        : `Add the selected colour to ${OUTFITS_UI_NAME}`;
     } else {
-      btn.title = blocked ? "Already on styling board." : "Add to Styling Board";
+      btn.title = blocked ? `Already on ${OUTFITS_UI_NAME.toLowerCase()}.` : `Add to ${OUTFITS_UI_NAME}`;
     }
     btn.setAttribute("aria-label", btn.title);
     const mediaBtn = document.querySelector(".item-detail__media .card__board-add[data-outfit-add]");
@@ -13648,10 +13502,10 @@
     btn.dataset.outfitAdd = String(item.id);
     if (variants?.length) {
       btn.title = blocked
-        ? "Every colour is already on your styling board."
-        : "Add the selected colour to Styling Board";
+        ? `Every colour is already on your ${OUTFITS_UI_NAME.toLowerCase()}.`
+        : `Add the selected colour to ${OUTFITS_UI_NAME}`;
     } else {
-      btn.title = blocked ? "Already on styling board." : "Add to Styling Board";
+      btn.title = blocked ? `Already on ${OUTFITS_UI_NAME.toLowerCase()}.` : `Add to ${OUTFITS_UI_NAME}`;
     }
     btn.setAttribute("aria-label", btn.title);
     btn.textContent = itemDetailBoardCtaLabel(blocked);
@@ -13746,10 +13600,10 @@
       const blocked = everyVariantTaken || singleTaken;
       if (variants?.length) {
         boardAddBtn.title = everyVariantTaken
-          ? "Every colour is already on your styling board."
-          : "Add a colour to Styling Board";
+          ? `Every colour is already on your ${OUTFITS_UI_NAME.toLowerCase()}.`
+          : `Add a colour to ${OUTFITS_UI_NAME}`;
       } else {
-        boardAddBtn.title = blocked ? "Already on styling board." : "Add to Styling Board";
+        boardAddBtn.title = blocked ? `Already on ${OUTFITS_UI_NAME.toLowerCase()}.` : `Add to ${OUTFITS_UI_NAME}`;
       }
       boardAddBtn.setAttribute("aria-label", boardAddBtn.title);
       boardAddBtn.textContent = stylingBoardCtaLabel(blocked);
@@ -13768,7 +13622,7 @@
       if (ev.target.closest(".card__gallery-thumb")) return;
       if (ev.target.closest(".card__gallery-nav")) return;
       if (ev.target.closest(".card__season-chip")) return;
-      /* Collection PLP mobile: + STYLE is always visible in the colour tray — one tap opens the piece. */
+      /* Collection PLP mobile: “+” in the colour tray — first tap reveals add-to-board, second opens piece. */
       if (
         isCollectionCardCoarsePointer() &&
         !isCollectionGridCardContext() &&
@@ -13938,10 +13792,10 @@
       /** @type {HTMLButtonElement} */ (quick).disabled = Boolean(blocked);
       if (variants?.length) {
         quick.title = everyVariantTaken
-          ? "Every colour is already on your styling board."
-          : "Add a colour to Styling Board";
+          ? `Every colour is already on your ${OUTFITS_UI_NAME.toLowerCase()}.`
+          : `Add a colour to ${OUTFITS_UI_NAME}`;
       } else {
-        quick.title = blocked ? "Already on styling board." : "Add to Styling Board";
+        quick.title = blocked ? `Already on ${OUTFITS_UI_NAME.toLowerCase()}.` : `Add to ${OUTFITS_UI_NAME}`;
       }
       quick.setAttribute("aria-label", quick.title);
     }
@@ -14023,12 +13877,6 @@
     return !cat && subcategoryFilters.size === 0 && !seasonNavFilter && !narrowingFiltersActive();
   }
 
-  /** Line 1 would only repeat “COLLECTION” while line 2 is already the hub title — show HOME / instead. */
-  function collectionHeadingBreadcrumbRedundant() {
-    const cat = String(categoryNavFilter ?? "").trim();
-    return !cat && !normalizeSeasonNavToken(seasonNavFilter);
-  }
-
   /** COLLECTION root — all seasons, no division drill, no narrowing filters. */
   function navigateCollectionCollectionRoot() {
     resetAllCollectionFilters();
@@ -14061,12 +13909,7 @@
       return;
     }
     if (isItemDetailPageContext()) {
-      try {
-        sessionStorage.removeItem(COLLECTION_BROWSE_RESTORE_KEY);
-      } catch {
-        /* ignore */
-      }
-      navigateToCollectionMain();
+      navigateItemPageBack();
       return;
     }
     if (isCollectionLocation()) {
@@ -14132,14 +13975,8 @@
       nav.appendChild(btn);
     }
 
-    /* Hub root: “HOME /” trail; line 2 is “Collection”. */
-    if (!searchActive && collectionHeadingBreadcrumbRedundant()) {
-      appendCrumb("HOME", { onClick: navigateToSiteHome });
-      appendSep();
-      host.appendChild(nav);
-      return;
-    }
-
+    appendCrumb("HOME", { onClick: navigateToSiteHome });
+    appendSep();
     appendCrumb("COLLECTION", {
       onClick: navigateCollectionCollectionRoot,
       isCurrent: atRoot && !searchActive,
@@ -14209,13 +14046,10 @@
     elTitle.textContent = title;
     elTitle.classList.remove("items-toolbar__page-title--placeholder");
     const season = normalizeSeasonNavToken(seasonNavFilter);
-    const trailParts = [];
-    if (!(!searchActive && collectionHeadingBreadcrumbRedundant())) {
-      trailParts.push("COLLECTION");
-      if (searchActive) trailParts.push("SEARCH");
-      else if (season) trailParts.push(collectionHeadingSeasonLabel());
-    }
-    root.setAttribute("aria-label", trailParts.length ? `${trailParts.join(" / ")} · ${title}` : title);
+    const trailParts = ["HOME", "COLLECTION"];
+    if (searchActive) trailParts.push("SEARCH");
+    else if (season) trailParts.push(collectionHeadingSeasonLabel());
+    root.setAttribute("aria-label", `${trailParts.join(" / ")} · ${title}`);
   }
   /** Per-slot subcategory drill / mega menu: view entire parent category (empty `subcategoryFilter`). */
   const SUBCATEGORY_ALL_LABEL = "All";
@@ -14312,7 +14146,6 @@
     } else {
       lastGridStructuralKey = structuralKey;
       lastGridOutfitKey = outfitKey;
-      updateFilterSpendTotal(filtered);
       const frag = document.createDocumentFragment();
       for (let i = 0; i < sorted.length; i++) {
         frag.appendChild(
@@ -14328,21 +14161,12 @@
     const n = sorted.length;
     const seasonalTotal = countItemsForCurrentSeasonTab();
     const gridSearchNorm = effectiveCollectionKeywordSearchNorm();
-    let countText = "";
-    if (gridSearchNorm) {
-      countText = `${n} piece${n === 1 ? "" : "s"}`;
-    } else if (narrowingFiltersActive()) {
-      countText =
-        n === seasonalTotal
-          ? `${n} piece${n === 1 ? "" : "s"}`
-          : `${n} of ${seasonalTotal} piece${seasonalTotal === 1 ? "" : "s"}`;
-    } else {
-      countText = `${n} piece${n === 1 ? "" : "s"}`;
-    }
-    const spendText = els.spendTotal?.dataset.spendCompact || "";
-    if (els.count) {
-      els.count.textContent = spendText ? `${countText} · ${spendText}` : countText;
-    }
+    updateCollectionCountLine({
+      visible: n,
+      total: seasonalTotal,
+      spend: sumPriceInDisplayCurrency(filtered),
+      layout: getCollectionCountLineLayout(n, seasonalTotal, gridSearchNorm),
+    });
     if (els.emptyMsg) {
       const onSeasonTab = Boolean(seasonNavFilter);
       if (gridSearchNorm) {
@@ -14365,54 +14189,79 @@
     syncToolbarActiveFilterChips();
   }
 
-  function updateFilterSpendTotal(filteredItems) {
-    const el = els.spendTotal;
+  function getCollectionCountLineLayout(visible, total, searchNorm) {
+    if (searchNorm) return "search";
+    if (narrowingFiltersActive() && visible !== total) return "range";
+    return "solo";
+  }
+
+  function renderCollectionCountLine(el, visible, total, spend, layout) {
+    const v = Math.max(0, Math.round(visible));
+    const t = Math.max(0, Math.round(total));
+    const spendFormatted = Number.isFinite(spend)
+      ? formatMoneyInCurrency(spend, collectionDisplayCurrency)
+      : "";
+    let countHtml = "";
+    if (layout === "search") {
+      countHtml = `<span class="count-line__num" data-part="visible">${v}</span> result${v === 1 ? "" : "s"}`;
+    } else if (layout === "range") {
+      countHtml = `<span class="count-line__num" data-part="visible">${v}</span> of <span class="count-line__num" data-part="total">${t}</span>`;
+    } else {
+      countHtml = `<span class="count-line__num" data-part="visible">${v}</span>`;
+    }
+    const spendHtml = spendFormatted
+      ? `<span class="count-line__sep" aria-hidden="true"> · </span><span class="count-line__num count-line__money" data-part="spend">${spendFormatted}</span>`
+      : "";
+    el.innerHTML = countHtml + spendHtml;
+    if (spendFormatted) {
+      el.dataset.spendCompact = spendFormatted;
+      if (els.spendTotal) {
+        els.spendTotal.dataset.spendCompact = spendFormatted;
+        els.spendTotal.textContent = spendFormatted;
+      }
+    } else {
+      delete el.dataset.spendCompact;
+    }
+  }
+
+  function updateCollectionCountLine({ visible, total, spend, layout }) {
+    const el = els.count;
     if (!el) return;
-    const total = sumPriceInDisplayCurrency(filteredItems);
-    const prefix = effectiveCollectionKeywordSearchNorm()
-      ? "Search results"
-      : narrowingFiltersActive()
-        ? "Filtered spend"
-        : "Visible spend";
+    const targetSpend = Number.isFinite(spend) ? spend : 0;
     const reduce = Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
 
-    if (!Number.isFinite(total)) {
-      const formatted = formatMoneyInCurrency(0, collectionDisplayCurrency);
-      el.dataset.spendCompact = formatted;
-      el.textContent = formatted;
-      return;
-    }
-
-    const token = ++spendTotalAnimToken;
-    if (spendTotalAnimRaf) cancelAnimationFrame(spendTotalAnimRaf);
-    el.dataset.spendCompact = formatMoneyInCurrency(total, collectionDisplayCurrency);
-
     if (reduce) {
-      spendTotalCurrentValue = total;
-      el.textContent = el.dataset.spendCompact;
+      if (countLineAnimRaf) cancelAnimationFrame(countLineAnimRaf);
+      countLineAnimRaf = 0;
+      countLineDisplay = { visible, total, spend: targetSpend };
+      renderCollectionCountLine(el, visible, total, targetSpend, layout);
       return;
     }
 
-    const start = spendTotalCurrentValue;
-    const delta = total - start;
+    const token = ++countLineAnimToken;
+    if (countLineAnimRaf) cancelAnimationFrame(countLineAnimRaf);
+    const start = { ...countLineDisplay };
     const duration = 420;
     const t0 = performance.now();
+    el.classList.add("is-count-ticking");
+
     function step(now) {
-      if (token !== spendTotalAnimToken) return;
+      if (token !== countLineAnimToken) return;
       const p = Math.min(1, (now - t0) / duration);
       const eased = 1 - Math.pow(1 - p, 3);
-      const next = start + delta * eased;
-      const formatted = formatMoneyInCurrency(next, collectionDisplayCurrency);
-      el.dataset.spendCompact = formatted;
-      el.textContent = formatted;
+      const curVisible = start.visible + (visible - start.visible) * eased;
+      const curTotal = start.total + (total - start.total) * eased;
+      const curSpend = start.spend + (targetSpend - start.spend) * eased;
+      renderCollectionCountLine(el, curVisible, curTotal, curSpend, layout);
       if (p < 1) {
-        spendTotalAnimRaf = requestAnimationFrame(step);
+        countLineAnimRaf = requestAnimationFrame(step);
       } else {
-        spendTotalCurrentValue = total;
-        spendTotalAnimRaf = 0;
+        countLineDisplay = { visible, total, spend: targetSpend };
+        countLineAnimRaf = 0;
+        el.classList.remove("is-count-ticking");
       }
     }
-    spendTotalAnimRaf = requestAnimationFrame(step);
+    countLineAnimRaf = requestAnimationFrame(step);
   }
 
   function cancelSearchGridDebounce() {
@@ -14439,12 +14288,12 @@
     const h = bar ? Math.ceil(bar.getBoundingClientRect().height) : 40;
     const px = `${Math.max(h, 36)}px`;
     document.documentElement.style.setProperty("--brand-signature-bar-height", px);
-    if (globalThis.matchMedia?.("(max-width: 900px)")?.matches) {
+    if (globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.matches) {
       document.documentElement.style.setProperty("--site-mobile-shell-top", px);
     }
   }
 
-  /** Preserve window scroll when collection overlays lock the page (styling board, filter drawer). */
+  /** Preserve window scroll when collection overlays lock the page (Outfits drawer, filter drawer). */
   function forceUnlockCollectionPageScroll() {
     collectionPageScrollLockCount = 0;
     const y = collectionPageScrollLockY;
@@ -14505,9 +14354,9 @@
     }
     if (btn) {
       btn.setAttribute("aria-expanded", stylingBoardDrawerOpen ? "true" : "false");
-      const label = stylingBoardDrawerOpen ? "Close Styling Board" : "Open Styling Board";
+      const label = stylingBoardDrawerOpen ? `Close ${OUTFITS_UI_NAME}` : `Open ${OUTFITS_UI_NAME}`;
       btn.setAttribute("aria-label", label);
-      btn.title = "Styling Board";
+      btn.title = OUTFITS_UI_NAME;
     }
   }
 
@@ -14576,6 +14425,7 @@
     const finish = () => {
       if (stylingBoardDrawerOpen) return;
       clearStylingBoardAddedReveal();
+      setStylingBoardSaveFormOpen(false);
       root.setAttribute("hidden", "");
       syncStylingBoardUi();
       if (returnFocus instanceof HTMLElement && document.contains(returnFocus)) {
@@ -14775,7 +14625,7 @@
       viewBtn.type = "button";
       viewBtn.className = "saved-card__ctrl";
       viewBtn.textContent = "View";
-      viewBtn.title = "Load this outfit onto the styling board.";
+      viewBtn.title = `Load this outfit onto ${OUTFITS_UI_NAME.toLowerCase()}.`;
       viewBtn.dataset.outfitLoad = outfit.id;
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -16781,19 +16631,20 @@
 
     appendItemDetailBoardCta(body, item);
 
-    if (item.notes && !isItemPageView) {
+    const notesDisplay = itemNotesDisplayText(item.notes);
+    if (notesDisplay && !isItemPageView) {
       const nh = document.createElement("h3");
       nh.className = "item-detail__notes-h";
       nh.textContent = "Notes";
-      const np = document.createElement("motion");
+      const np = document.createElement("p");
       np.className = "item-detail__notes";
-      np.textContent = item.notes;
+      np.textContent = notesDisplay;
       body.appendChild(nh);
       body.appendChild(np);
     }
 
-    if (item.notes && isItemPageView) {
-      mountItemDetailNotesSection(body, item.notes, { pdpAccordion: true, startCollapsed: false });
+    if (notesDisplay && isItemPageView) {
+      mountItemDetailNotesSection(body, notesDisplay, { pdpAccordion: true, startCollapsed: false });
     }
 
     if (isItemPageView) {
@@ -17328,9 +17179,17 @@
     );
   }
 
-  /** Match collection mobile PLP + compact header (`max-width: 900px` in CSS / `isHeaderCompactLayout`). */
+  /** Collection PLP narrow layout (grid, toolbar) — independent of header compact breakpoint. */
   function isFiltersNarrowViewport() {
     return globalThis.matchMedia?.("(max-width: 900px)")?.matches ?? false;
+  }
+
+  /** Header hamburger + mobile shell; mega menu desktop nav off (`max-width: 1024px` in CSS). */
+  const HEADER_COMPACT_MQ = "(max-width: 1024px)";
+  const HEADER_DESKTOP_MQ = "(min-width: 1025px)";
+
+  function isHeaderCompactViewport() {
+    return globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.matches ?? false;
   }
 
   /** After changing category / type filters, bring the collection list back into view from the top. */
@@ -17838,7 +17697,7 @@
 
   function syncSearchOverlayBackdropTop() {
     try {
-      if (globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+      if (globalThis.matchMedia?.(HEADER_DESKTOP_MQ)?.matches) {
         syncHeaderFlyoutDimTop();
         return;
       }
@@ -17872,7 +17731,7 @@
   /** Desktop flyouts: dim full page below header chrome; flyouts sit above dim (z-index). */
   function syncHeaderFlyoutDimTop() {
     try {
-      if (!globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+      if (!globalThis.matchMedia?.(HEADER_DESKTOP_MQ)?.matches) {
         document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
         return;
       }
@@ -17940,7 +17799,7 @@
   }
 
   function showHeaderFlyoutDim() {
-    if (globalThis.matchMedia?.("(max-width: 900px)")?.matches) return;
+    if (globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.matches) return;
     const dim = document.getElementById("site-header-submenu-dim");
     if (!dim) return;
     dim.hidden = false;
@@ -18004,7 +17863,7 @@
     }
     const wrap = document.getElementById("site-header-submenu");
     if (wrap) {
-      if (isFiltersNarrowViewport()) {
+      if (isHeaderCompactViewport()) {
         wrap.hidden = true;
       } else {
         wrap.removeAttribute("hidden");
@@ -18162,7 +18021,7 @@
     headerSearchWrap.classList.remove("is-open");
     headerSearchWrap.setAttribute("aria-hidden", "true");
     headerSearchWrap.dataset.searchState = "closed";
-    if (globalThis.matchMedia?.("(min-width: 901px)")?.matches) {
+    if (globalThis.matchMedia?.(HEADER_DESKTOP_MQ)?.matches) {
       headerSearchWrap.setAttribute("hidden", "");
     }
     headerSearchBtn?.setAttribute("aria-expanded", "false");
@@ -18344,6 +18203,9 @@
     const collectionMainHref = () => collectionHrefForBrowseState();
 
     /** Full-screen mobile nav shell (below utility bar); replaces legacy slide-in panel. */
+    const stylingBoardIconHtml =
+      '<span class="site-header__styling-board-icon" aria-hidden="true">' + STYLING_BOARD_GLYPH_SVG + "</span>";
+
     function mountMobileNavigationShell() {
       let shell = document.getElementById("site-mobile-shell");
       if (shell) {
@@ -18392,9 +18254,8 @@
       shellStylingBtn.id = "site-mobile-shell-styling-btn";
       shellStylingBtn.className =
         "site-mobile-shell__tool site-mobile-shell__tool--board site-header__styling-board-btn";
-      shellStylingBtn.setAttribute("aria-label", "Open Styling Board");
-      shellStylingBtn.innerHTML =
-        '<span class="site-header__styling-board-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7.5" height="7.5" rx="1" stroke="currentColor" stroke-width="1.75"/><rect x="13.5" y="3" width="7.5" height="5" rx="1" stroke="currentColor" stroke-width="1.75"/><rect x="13.5" y="10" width="7.5" height="11" rx="1" stroke="currentColor" stroke-width="1.75"/><rect x="3" y="12.5" width="7.5" height="8.5" rx="1" stroke="currentColor" stroke-width="1.75"/></svg></span>';
+      shellStylingBtn.setAttribute("aria-label", `Open ${OUTFITS_UI_NAME}`);
+      shellStylingBtn.innerHTML = stylingBoardIconHtml;
 
       const shellCloseBtn = document.createElement("button");
       shellCloseBtn.type = "button";
@@ -18511,7 +18372,7 @@
     const HEADER_SUBMENU_OPEN_MOTION_MS = 300;
     const HEADER_SUBMENU_CLOSE_MOTION_MS = 120;
 
-    const headerSubmenuUsesDomHidden = () => isFiltersNarrowViewport();
+    const headerSubmenuUsesDomHidden = () => isHeaderCompactViewport();
 
     const getHeaderSubmenuState = (wrap) => {
       if (!wrap) return "closed";
@@ -18560,7 +18421,7 @@
     };
 
     const stripDesktopMegaMenuDivisionHeading = () => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       const content = document.querySelector(
         ".desktop-mega-menu-content, .desktop-mega-menu .site-header__submenu-content"
       );
@@ -18580,8 +18441,7 @@
       const labelEl = document.getElementById("site-header-submenu-preview-label");
       if (!labelEl) return;
       const s = String(slot ?? "").trim();
-      labelEl.textContent =
-        s && SLOT_OPTIONS.includes(s) ? `${categoryDisplayLabel(s)} preview` : "Items preview";
+      labelEl.textContent = "preview";
     };
 
     const clearHeaderSubmenuContent = () => {
@@ -18645,7 +18505,7 @@
         headerSubmenuCloseAbort = null;
       }
 
-      if (twPrefersReducedMotion() || isFiltersNarrowViewport()) {
+      if (twPrefersReducedMotion() || isHeaderCompactViewport()) {
         finalizeHeaderSubmenuHide(wrap);
         return;
       }
@@ -18799,11 +18659,11 @@
     }
 
     function isHeaderSearchDropdownLayout() {
-      return globalThis.matchMedia?.("(min-width: 901px)")?.matches ?? false;
+      return globalThis.matchMedia?.(HEADER_DESKTOP_MQ)?.matches ?? false;
     }
 
     function isHeaderCompactLayout() {
-      return globalThis.matchMedia?.("(max-width: 900px)")?.matches ?? false;
+      return isHeaderCompactViewport();
     }
 
     function syncMobileShellTop() {
@@ -19191,7 +19051,7 @@
         closeHeaderSearch();
       });
       headerCategoryNav.addEventListener("focusin", (e) => {
-        if (isFiltersNarrowViewport()) return;
+        if (isHeaderCompactViewport()) return;
         const link = getHeaderDivisionLink(e.target);
         if (!link) return;
         const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
@@ -19201,18 +19061,18 @@
 
     if (divisionHoverZoneRef) {
       divisionHoverZoneRef.addEventListener("mouseenter", () => {
-        if (isFiltersNarrowViewport()) return;
+        if (isHeaderCompactViewport()) return;
         cancelCloseMegaMenu();
       });
       divisionHoverZoneRef.addEventListener("mouseleave", (e) => {
-        if (isFiltersNarrowViewport()) return;
+        if (isHeaderCompactViewport()) return;
         const to = e.relatedTarget;
         if (isInMegaMenuHoverSafe(to)) return;
         scheduleCloseMegaMenu();
       });
       divisionHoverZoneRef.querySelectorAll(HEADER_DIVISION_LINK_SELECTOR).forEach((link) => {
         link.addEventListener("mouseenter", () => {
-          if (isFiltersNarrowViewport()) return;
+          if (isHeaderCompactViewport()) return;
           closeHeaderSearch();
           const jump = String(link.getAttribute("data-category-jump") ?? "").trim();
           if (jump) openMegaMenu(jump);
@@ -19224,11 +19084,11 @@
     const logoRef = document.querySelector(".site-title");
 
     utilityNavRef?.addEventListener("mouseenter", () => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       closeMegaMenuNow();
     });
     logoRef?.addEventListener("mouseenter", () => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       closeMegaMenuNow();
     });
 
@@ -19241,23 +19101,12 @@
       handleSiteHeaderBrandClick();
     });
 
-    const utilityBarHome = document.getElementById("site-utility-bar-home");
-    utilityBarHome?.addEventListener("click", (e) => {
-      e.preventDefault();
-      hideHeaderSubmenu();
-      closeMobileCategoryPanel();
-      collapseFiltersMenuPanel();
-      closeHeaderSearch();
-      closeMegaMenuNow();
-      navigateToSiteHome();
-    });
-
     megaMenuRef?.addEventListener("mouseenter", () => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       cancelCloseMegaMenu();
     });
     megaMenuRef?.addEventListener("mouseleave", (e) => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       const to = e.relatedTarget;
       if (isInMegaMenuHoverSafe(to)) return;
       scheduleCloseMegaMenu();
@@ -19294,7 +19143,7 @@
       hideHeaderSubmenu();
     });
     headerSubmenuLinks?.addEventListener("focusout", () => {
-      if (isFiltersNarrowViewport()) return;
+      if (isHeaderCompactViewport()) return;
       queueMicrotask(() => {
         const active = document.activeElement;
         const wrap = document.querySelector(".site-header__container, .site-header__inner");
@@ -19526,7 +19375,7 @@
         true
       );
     }
-    globalThis.matchMedia?.("(max-width: 900px)")?.addEventListener?.("change", (ev) => {
+    globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.addEventListener?.("change", (ev) => {
       if (ev.matches) return;
       closeMobileCategoryPanel();
       hideHeaderSubmenu();
@@ -19620,7 +19469,9 @@
         const slotBtn = e.target.closest("button[data-slot-filter]");
         if (slotBtn && categoryDrill.contains(slotBtn)) {
           const raw = slotBtn.getAttribute("data-slot-filter") ?? "";
-          applyCategoryNavFilter(raw && SLOT_OPTIONS.includes(raw) ? raw : "", { scrollTop: true });
+          let next = raw && SLOT_OPTIONS.includes(raw) ? raw : "";
+          if (next && categoryNavFilter === next) next = "";
+          applyCategoryNavFilter(next, { scrollTop: true });
           collapseFiltersMenuPanel();
           return;
         }
@@ -19676,10 +19527,14 @@
     initOutfitVariantDialog();
 
     if (els.outfitSave) {
-      els.outfitSave.addEventListener("click", () => {
-        void saveCurrentOutfit();
-      });
+      els.outfitSave.addEventListener("click", handleOutfitSaveClick);
     }
+
+    els.outfitName?.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.isComposing || e.shiftKey) return;
+      e.preventDefault();
+      handleOutfitSaveClick();
+    });
 
     const persistDraftFromFields = () => persistStylingBoardDraft();
     els.outfitName?.addEventListener("input", persistDraftFromFields);

@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;1,9..40,400&family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;1,9..40,400&family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -28,23 +28,27 @@
     <a class="skip-link" href="#item-detail-root">Skip to piece</a>
     <a class="skip-link" href="#site-header-primary-nav">Skip to categories</a>
 
+    <div class="site-header-shell">
     <div class="site-utility-bar" role="note" aria-label="Brand masthead">
-      <a
-        class="site-utility-bar__inner"
-        id="site-utility-bar-home"
-        href="/"
-        aria-label="Editorial home"
-      >
+      <div class="site-utility-bar__inner">
         <span class="site-utility-bar__left">IVDICIO ET CONSTANTIA</span>
         <span class="site-utility-bar__center">Only What Endures</span>
         <span class="site-utility-bar__right">Since 2020</span>
-      </a>
+      </div>
     </div>
-    <div class="site-header-shell">
     <header class="site-header site-header--solid">
       <div class="site-header__container site-header__inner">
         <div class="site-header__flyout">
         <div class="site-header__bar site-header__brand-nav" aria-label="Primary header">
+            <a
+              href="/collection"
+              id="item-page-collection-back"
+              class="site-header__collection-back"
+              aria-label="Back to collection"
+            >
+              <span class="site-header__collection-back-icon" aria-hidden="true"></span>
+              <span class="site-header__collection-back-label">Collection</span>
+            </a>
             <h1 class="site-title site-brand">
               <a href="/collection" id="site-header-home" class="site-title__primary">
                 <span class="site-title__mark" role="img" aria-label="Timeless Wardrobe"></span>
@@ -105,18 +109,19 @@
               class="site-header__styling-board-btn"
               aria-expanded="false"
               aria-controls="styling-board-drawer"
-              aria-label="Open Styling Board"
-              title="Styling Board"
+              aria-label="Open Outfits"
+              title="Outfits"
             >
               <span class="site-header__styling-board-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="3" width="7.5" height="7.5" rx="1" stroke="currentColor" stroke-width="1.75" />
-                  <rect x="13.5" y="3" width="7.5" height="5" rx="1" stroke="currentColor" stroke-width="1.75" />
-                  <rect x="13.5" y="10" width="7.5" height="11" rx="1" stroke="currentColor" stroke-width="1.75" />
-                  <rect x="3" y="12.5" width="7.5" height="8.5" rx="1" stroke="currentColor" stroke-width="1.75" />
+                <svg class="styling-board-glyph" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    class="styling-board-glyph__grid"
+                    pathLength="100"
+                    d="M1.45 2.2H14.55M1.45 13.8H14.5M1.45 2.2V13.8M14.5 2.25V13.75M8.9 2.15V13.85M1.5 7.05H8.85M8.92 10.42H14.52"
+                  />
                 </svg>
               </span>
-              <span class="site-header__styling-board-label">Styling Board</span>
+              <span class="site-header__styling-board-label">Outfits</span>
               <span id="styling-board-count" class="site-header__styling-board-count" hidden></span>
             </button>
               <button
@@ -153,8 +158,7 @@
                 aria-label="Category preview"
               >
                 <header class="mega-menu-preview__head">
-                  <p class="mega-menu-preview__label" id="site-header-submenu-preview-label">Items preview</p>
-                  <hr class="mega-menu-preview__rule" aria-hidden="true" />
+                  <p class="mega-menu-preview__label" id="site-header-submenu-preview-label">preview</p>
                 </header>
                 <div id="site-header-submenu-preview" class="site-header__submenu-preview"></div>
               </section>
@@ -276,7 +280,7 @@
         class="styling-board-drawer__backdrop"
         id="styling-board-drawer-backdrop"
         tabindex="-1"
-        aria-label="Close Styling Board"
+        aria-label="Close Outfits"
       ></button>
       <div
         class="styling-board-drawer__sheet"
@@ -293,12 +297,12 @@
             </span>
             <p class="styling-board-drawer__status-text" id="styling-board-drawer-status-text">Piece added to board</p>
           </div>
-          <h2 id="styling-board-heading" class="styling-board-drawer__title">Styling Board</h2>
+          <h2 id="styling-board-heading" class="styling-board-drawer__title">My Outfits</h2>
           <button
             type="button"
             class="styling-board-drawer__close"
             id="styling-board-drawer-close"
-            aria-label="Close Styling Board"
+            aria-label="Close Outfits"
           >
             <span aria-hidden="true">×</span>
           </button>
@@ -321,12 +325,18 @@
               id="outfit-strip"
               class="styling-board__pieces outfit-strip"
               role="list"
-              aria-label="Pieces on styling board"
+              aria-label="Pieces on outfits"
             ></div>
             <p id="outfit-empty" class="styling-board__empty" hidden>
               Save pieces here to build outfits from the collection.
             </p>
-            <div class="styling-board__save outfit-actions">
+            <button type="button" class="btn btn--ghost styling-board__clear-link" id="outfit-clear">Clear board</button>
+            <div
+              id="styling-board-save-form"
+              class="styling-board__save outfit-actions"
+              hidden
+              aria-label="Name and save outfit"
+            >
               <label class="field field--inline">
                 <span class="field__label">Outfit name</span>
                 <input
@@ -347,7 +357,6 @@
                   placeholder="Occasion, weather, or styling notes"
                 ></textarea>
               </label>
-              <button type="button" class="btn btn--ghost styling-board__clear-link" id="outfit-clear">Clear board</button>
             </div>
           </section>
           <section class="saved-outfits styling-board__saved" aria-labelledby="saved-outfits-heading">
@@ -359,11 +368,11 @@
           </section>
         </div>
         <footer class="styling-board-drawer__footer">
-          <button type="button" class="styling-board-drawer__cta styling-board-drawer__cta--secondary" id="styling-board-continue">
-            Continue browsing
-          </button>
-          <button type="button" class="styling-board-drawer__cta styling-board-drawer__cta--primary" id="outfit-save">
+          <button type="button" class="styling-board-drawer__cta styling-board-drawer__cta--secondary" id="outfit-save">
             Save outfit
+          </button>
+          <button type="button" class="styling-board-drawer__cta styling-board-drawer__cta--primary" id="styling-board-continue">
+            Continue browsing
           </button>
           <button type="button" class="styling-board-drawer__clear-all" id="styling-board-clear-all" hidden>
             Clear all
@@ -387,7 +396,7 @@
             <select id="outfit-variant-select" class="outfit-variant-select"></select>
           </label>
           <div class="add-item-form__actions">
-            <button type="button" class="btn" id="outfit-variant-confirm">Add to styling board</button>
+            <button type="button" class="btn" id="outfit-variant-confirm">Add to Outfits</button>
           </div>
         </div>
       </div>
