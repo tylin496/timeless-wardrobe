@@ -2216,12 +2216,31 @@
     });
   }
 
+  /** Force grid remeasure after compact ↔ default toggle (content-visibility intrinsic-size cache). */
+  function invalidateCollectionGridLayoutAfterViewChange() {
+    const grid = els.grid || document.getElementById("grid");
+    if (!grid) return;
+    const cards = grid.querySelectorAll(":scope > .card");
+    if (!cards.length) return;
+    cards.forEach((card) => {
+      if (card instanceof HTMLElement) card.style.contentVisibility = "visible";
+    });
+    void grid.offsetHeight;
+    requestAnimationFrame(() => {
+      cards.forEach((card) => {
+        if (card instanceof HTMLElement) card.style.removeProperty("content-visibility");
+      });
+      void grid.offsetHeight;
+    });
+  }
+
   function applyCollectionViewMode() {
     collectionViewMode = normalizeCollectionViewMode(collectionViewMode);
     syncCollectionViewTogglePlacement();
     syncCollectionViewToggleUi();
     syncCollectionQuickFindCardDom();
     syncCollectionBoardAddButtonLabels();
+    invalidateCollectionGridLayoutAfterViewChange();
   }
 
   function syncCollectionSortChipUi() {
@@ -7279,6 +7298,21 @@
     initHomeHeroHeader._wired = false;
   }
 
+  /** Prevent `.site-header` entrance animation from re-running when search chrome classes drop. */
+  function initSiteHeaderEnterMotion() {
+    const header = document.querySelector(".site-header");
+    if (!header || header.classList.contains("site-header--entered")) return;
+    const markEntered = () => header.classList.add("site-header--entered");
+    header.addEventListener(
+      "animationend",
+      (e) => {
+        if (e.target === header && e.animationName === "tlw-fade-up") markEntered();
+      },
+      { once: true }
+    );
+    globalThis.setTimeout(markEntered, 650);
+  }
+
   function initHomeHeroHeader() {
     if (!document.body.classList.contains("home-page")) {
       teardownHomeHeroHeader();
@@ -8349,11 +8383,10 @@
       return subcategoryFilters;
     }
     if (subcategoryEntryIsActive(key)) {
-      clearSubcategoryFilters();
-      validateSubcategoryFilters();
       return subcategoryFilters;
     }
     setOnlySubcategoryFilter(key);
+    validateSubcategoryFilters();
     return subcategoryFilters;
   }
 
@@ -9752,6 +9785,13 @@
 
     const entries = collapseRecordTypeKeysByDisplayLabel(keys, slot);
     return [{ raw: "", label: SUBCATEGORY_ALL_LABEL }, ...entries];
+  }
+
+  /** Desktop mega menu nav: subcategory links only (no “All” / division heading row). */
+  function desktopMegaMenuSubcategoryEntriesForSlot(browseSlot, pool) {
+    return megaMenuSubcategoryEntriesForSlot(browseSlot, pool).filter(
+      (entry) => String(entry.raw ?? "").trim() !== ""
+    );
   }
 
   /** Mobile drawer: “All Clothing”, “All Accessories”, etc. */
@@ -11327,6 +11367,72 @@
     onOutfitChange();
   }
 
+  function describeOutfitItemIdsForToast(ids) {
+    const list = (ids || []).map((id) => String(id ?? "").trim()).filter(Boolean);
+    if (!list.length) return "";
+    const labels = list.slice(0, 3).map((id) => {
+      const it = itemById.get(id);
+      if (!it) return id;
+      const nm = displayNameWithoutLeadingColour(it);
+      return `${it.brand}${nm ? ` ${nm}` : ""}`.trim();
+    });
+    const tail = list.length > 3 ? ` (+${list.length - 3} more)` : "";
+    return `${labels.join(", ")}${tail}`;
+  }
+
+  /**
+   * `outfit_items.item_id` FK → `wardrobe_items.id`. Upsert any in-app pieces missing from cloud before save.
+   * @param {{ itemId: string, colourKey?: string }[]} slots
+   * @returns {Promise<{ slots: { itemId: string, colourKey?: string }[], missing: string[] }>}
+   */
+  async function resolveOutfitSlotsForCloudSave(slots) {
+    const normalized = (slots || [])
+      .map((s) => {
+        const itemId = resolveCanonicalItemId(String(s?.itemId ?? "").trim());
+        if (!itemId) return null;
+        const colourKey = String(s?.colourKey ?? s?.colorKey ?? "").trim();
+        return colourKey ? { itemId, colourKey } : { itemId };
+      })
+      .filter(Boolean);
+    if (!normalized.length || !isSupabaseReady()) {
+      return { slots: normalized, missing: [] };
+    }
+
+    const uniqueIds = [...new Set(normalized.map((s) => s.itemId))];
+    const { data, error } = await supabaseClient.from(WARDROBE_TABLE).select("id").in("id", uniqueIds);
+    if (error) throw error;
+
+    /** @type {Set<string>} */
+    const inCloud = new Set((data || []).map((r) => String(r?.id ?? "").trim()).filter(Boolean));
+
+    for (const id of uniqueIds) {
+      if (inCloud.has(id)) continue;
+      const item = itemById.get(id);
+      if (!item) continue;
+      try {
+        await saveWardrobeItemToCloud(item);
+        inCloud.add(id);
+      } catch (e) {
+        console.warn("[outfits] wardrobe_items upsert before outfit save failed:", id, e);
+      }
+    }
+
+    const missing = uniqueIds.filter((id) => !inCloud.has(id));
+    const resolved = normalized.filter((s) => inCloud.has(s.itemId));
+    return { slots: resolved, missing };
+  }
+
+  function toastForOutfitCloudFkFailure(detail) {
+    const d = String(detail ?? "").trim();
+    if (/outfit_items_item_id_fkey|violates foreign key constraint/i.test(d)) {
+      return (
+        "Cloud save failed: one or more pieces are not in Supabase `wardrobe_items` yet. " +
+        "Save each piece to the cloud wardrobe first, or run `npm run db:import-seed` for the catalogue."
+      );
+    }
+    return d ? `Cloud save failed: ${d}` : "Cloud save failed.";
+  }
+
   async function saveCurrentOutfit() {
     const name = els.outfitName?.value.trim() ?? "";
     const notes = els.outfitNotes?.value.trim() ?? "";
@@ -11344,6 +11450,31 @@
       s.colourKey ? { itemId: s.itemId, colourKey: s.colourKey } : { itemId: s.itemId }
     );
 
+    let slotsForCloud = slots;
+    if (supabaseClient && useCloudOutfits) {
+      try {
+        const resolved = await resolveOutfitSlotsForCloudSave(slots);
+        if (!resolved.slots.length) {
+          const hint = describeOutfitItemIdsForToast(resolved.missing);
+          showToast(
+            hint
+              ? `Cloud save failed: not in Supabase wardrobe — ${hint}.`
+              : "Cloud save failed: none of these pieces exist in Supabase `wardrobe_items`."
+          );
+          return;
+        }
+        if (resolved.missing.length) {
+          showToast(
+            `Saved ${resolved.slots.length} piece(s); skipped ${resolved.missing.length} not in Supabase (${describeOutfitItemIdsForToast(resolved.missing)}).`
+          );
+        }
+        slotsForCloud = resolved.slots;
+      } catch (e) {
+        showToast(toastForOutfitCloudFkFailure(formatSupabaseUserMessage(e)));
+        return;
+      }
+    }
+
     const editId = editingSavedOutfitId;
     if (editId) {
       const prevIdx = savedOutfits.findIndex((o) => o.id === editId);
@@ -11358,7 +11489,7 @@
         id: editId,
         name,
         notes,
-        slots,
+        slots: supabaseClient && useCloudOutfits ? slotsForCloud : slots,
         createdAt: prev.createdAt,
       };
 
@@ -11366,7 +11497,7 @@
         const api = await import("./js/supabase-client.js");
         const res = await api.updateOutfitWithItems(supabaseClient, record);
         if (!res.ok) {
-          showToast(`Cloud update failed: ${res.error}`);
+          showToast(toastForOutfitCloudFkFailure(res.error));
           return;
         }
       }
@@ -11389,7 +11520,7 @@
       id: newOutfitRecordId(),
       name,
       notes,
-      slots,
+      slots: supabaseClient && useCloudOutfits ? slotsForCloud : slots,
       createdAt: new Date().toISOString(),
     };
 
@@ -11397,7 +11528,7 @@
       const api = await import("./js/supabase-client.js");
       const res = await api.insertOutfitWithItems(supabaseClient, record);
       if (!res.ok) {
-        showToast(`Cloud save failed: ${res.error}`);
+        showToast(toastForOutfitCloudFkFailure(res.error));
         return;
       }
     }
@@ -11610,7 +11741,7 @@
 
   function ensureItemPhotoCropDialog() {
     if (itemPhotoCropDialogEl) {
-      if (itemPhotoCropDialogEl.__twCrop?.nudgePad) return itemPhotoCropDialogEl;
+      if (itemPhotoCropDialogEl.__twCrop?.viewport) return itemPhotoCropDialogEl;
       try {
         itemPhotoCropDialogEl.remove();
       } catch {
@@ -11634,7 +11765,7 @@
 
     const meta = document.createElement("p");
     meta.className = "item-photo-crop__meta";
-    meta.textContent = "Drag or arrow keys to reposition · use position pad or zoom slider";
+    meta.textContent = "Drag to reposition · scroll or slider to zoom · arrow keys for fine moves";
 
     const viewport = document.createElement("div");
     viewport.className = "item-photo-crop__viewport";
@@ -11670,55 +11801,6 @@
     zoomRow.appendChild(zoomLabel);
     zoomRow.appendChild(zoomInput);
 
-    const nudgeRow = document.createElement("div");
-    nudgeRow.className = "item-photo-crop__nudge";
-    const nudgeLabel = document.createElement("span");
-    nudgeLabel.className = "item-photo-crop__nudge-label";
-    nudgeLabel.textContent = "Position";
-    const nudgePad = document.createElement("div");
-    nudgePad.className = "item-photo-crop__nudge-pad";
-    nudgePad.setAttribute("role", "group");
-    nudgePad.setAttribute("aria-label", "Fine-tune position");
-
-    const nudgeUp = document.createElement("button");
-    nudgeUp.type = "button";
-    nudgeUp.className = "item-photo-crop__nudge-btn item-photo-crop__nudge-btn--up";
-    nudgeUp.dataset.nudge = "up";
-    nudgeUp.setAttribute("aria-label", "Move up");
-    nudgeUp.textContent = "↑";
-
-    const nudgeMid = document.createElement("div");
-    nudgeMid.className = "item-photo-crop__nudge-mid";
-
-    const nudgeLeft = document.createElement("button");
-    nudgeLeft.type = "button";
-    nudgeLeft.className = "item-photo-crop__nudge-btn";
-    nudgeLeft.dataset.nudge = "left";
-    nudgeLeft.setAttribute("aria-label", "Move left");
-    nudgeLeft.textContent = "←";
-
-    const nudgeRight = document.createElement("button");
-    nudgeRight.type = "button";
-    nudgeRight.className = "item-photo-crop__nudge-btn";
-    nudgeRight.dataset.nudge = "right";
-    nudgeRight.setAttribute("aria-label", "Move right");
-    nudgeRight.textContent = "→";
-
-    const nudgeDown = document.createElement("button");
-    nudgeDown.type = "button";
-    nudgeDown.className = "item-photo-crop__nudge-btn item-photo-crop__nudge-btn--down";
-    nudgeDown.dataset.nudge = "down";
-    nudgeDown.setAttribute("aria-label", "Move down");
-    nudgeDown.textContent = "↓";
-
-    nudgeMid.appendChild(nudgeLeft);
-    nudgeMid.appendChild(nudgeRight);
-    nudgePad.appendChild(nudgeUp);
-    nudgePad.appendChild(nudgeMid);
-    nudgePad.appendChild(nudgeDown);
-    nudgeRow.appendChild(nudgeLabel);
-    nudgeRow.appendChild(nudgePad);
-
     const actions = document.createElement("div");
     actions.className = "item-photo-crop__actions";
 
@@ -11730,7 +11812,7 @@
     const useBtn = document.createElement("button");
     useBtn.type = "button";
     useBtn.className = "btn";
-    useBtn.textContent = "Use photo";
+    useBtn.textContent = "Confirm";
 
     actions.appendChild(cancelBtn);
     actions.appendChild(useBtn);
@@ -11739,12 +11821,11 @@
     inner.appendChild(meta);
     inner.appendChild(viewport);
     inner.appendChild(zoomRow);
-    inner.appendChild(nudgeRow);
     inner.appendChild(actions);
     dlg.appendChild(inner);
     document.body.appendChild(dlg);
 
-    dlg.__twCrop = { title, meta, viewport, img, frame, zoomInput, nudgePad, cancelBtn, useBtn };
+    dlg.__twCrop = { title, meta, viewport, img, frame, zoomInput, cancelBtn, useBtn };
     itemPhotoCropDialogEl = dlg;
     return dlg;
   }
@@ -12011,7 +12092,7 @@
         return;
       }
 
-      const { title, meta, viewport, img: cropImg, frame, zoomInput, nudgePad, cancelBtn, useBtn } = ui;
+      const { title, meta, viewport, img: cropImg, frame, zoomInput, cancelBtn, useBtn } = ui;
 
       /** @type {{ left: number, top: number, width: number, height: number, right: number, bottom: number }} */
       let frameRect = { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 };
@@ -12059,7 +12140,6 @@
         resizeObserver = null;
         endDrag();
         dlg.removeEventListener("keydown", onCropKeyDown);
-        nudgePad?.removeEventListener("click", onNudgePadClick);
         if (objectUrl) {
           try {
             URL.revokeObjectURL(objectUrl);
@@ -12382,23 +12462,11 @@
         nudgePan(dx, dy, ev.shiftKey);
       };
 
-      const onNudgePadClick = (ev) => {
-        const btn = ev.target instanceof Element ? ev.target.closest("[data-nudge]") : null;
-        if (!btn || !(btn instanceof HTMLButtonElement)) return;
-        ev.preventDefault();
-        const dir = btn.dataset.nudge;
-        if (dir === "left") nudgePan(-1, 0, ev.shiftKey);
-        else if (dir === "right") nudgePan(1, 0, ev.shiftKey);
-        else if (dir === "up") nudgePan(0, -1, ev.shiftKey);
-        else if (dir === "down") nudgePan(0, 1, ev.shiftKey);
-      };
-
       zoomInput.oninput = onZoom;
       viewport.onwheel = onWheel;
       viewport.onpointerdown = onPointerDown;
       dlg.oncancel = onDialogCancel;
       dlg.addEventListener("keydown", onCropKeyDown);
-      nudgePad?.addEventListener("click", onNudgePadClick);
 
       title.textContent = "Crop photo";
       useBtn.disabled = false;
@@ -14949,7 +15017,10 @@
     const h = bar ? Math.ceil(bar.getBoundingClientRect().height) : 40;
     const px = `${Math.max(h, 36)}px`;
     document.documentElement.style.setProperty("--brand-signature-bar-height", px);
-    if (globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.matches) {
+    if (
+      globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.matches &&
+      !document.body.classList.contains("collection-ui--mobile-nav-open")
+    ) {
       document.documentElement.style.setProperty("--site-mobile-shell-top", px);
     }
   }
@@ -15160,6 +15231,18 @@
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", String(index));
         slot.classList.add("outfit-slot--dragging");
+        if (typeof e.dataTransfer.setDragImage === "function") {
+          try {
+            const rect = slot.getBoundingClientRect();
+            e.dataTransfer.setDragImage(
+              slot,
+              Math.max(0, e.clientX - rect.left),
+              Math.max(0, e.clientY - rect.top)
+            );
+          } catch {
+            e.dataTransfer.setDragImage(slot, 20, 20);
+          }
+        }
       });
 
       slot.addEventListener("dragend", () => {
@@ -15187,6 +15270,8 @@
       thumb.className = "outfit-slot__thumb";
       const simg = document.createElement("img");
       simg.alt = "";
+      simg.draggable = false;
+      simg.setAttribute("draggable", "false");
       wireCoverImageWithFallbacks(simg, proj, {
         host: thumb,
         missingClass: null,
@@ -18439,13 +18524,22 @@
     }
   }
 
-  /** Viewport Y below utility + primary header row (flyout panels sit above the dim). */
-  function measureHeaderChromeBottom() {
+  /** Viewport Y below the brand signature strip only. */
+  function measureUtilityBarBottom() {
     const util = document.querySelector(".site-utility-bar");
+    return util ? Math.ceil(util.getBoundingClientRect().bottom) : 0;
+  }
+
+  /** Viewport Y below utility + header chrome (flyout panels sit below this line). */
+  function measureHeaderChromeBottom() {
+    const utilBottom = measureUtilityBarBottom();
+    const headerInner =
+      document.querySelector(".site-header__container.site-header__inner") ||
+      document.querySelector(".site-header__inner");
     const brandNav = document.querySelector(".site-header__brand-nav");
-    let bottom = 0;
-    if (util) bottom = Math.max(bottom, Math.ceil(util.getBoundingClientRect().bottom));
-    if (brandNav) bottom = Math.max(bottom, Math.ceil(brandNav.getBoundingClientRect().bottom));
+    let bottom = utilBottom;
+    if (headerInner) bottom = Math.max(bottom, Math.ceil(headerInner.getBoundingClientRect().bottom));
+    else if (brandNav) bottom = Math.max(bottom, Math.ceil(brandNav.getBoundingClientRect().bottom));
     return bottom;
   }
 
@@ -18473,15 +18567,19 @@
         return;
       }
       const tools = document.querySelector(".site-header__tools");
+      const plpInlineX = readCssLengthPx("var(--catalogue-plp-inline-x)");
       const flyoutInset = readCssLengthPx("var(--chrome-x)");
+      const navInset = plpInlineX > 0 ? plpInlineX : flyoutInset;
 
-      document.documentElement.style.setProperty("--header-mega-nav-inset-left", `${flyoutInset}px`);
+      document.documentElement.style.setProperty("--header-mega-nav-inset-left", `${navInset}px`);
+      document.documentElement.style.setProperty(
+        "--header-mega-preview-inset-right",
+        `${plpInlineX > 0 ? plpInlineX : flyoutInset}px`
+      );
 
-      if (tools) {
+      if (tools && plpInlineX <= 0) {
         const right = Math.max(0, Math.round(window.innerWidth - tools.getBoundingClientRect().right));
         document.documentElement.style.setProperty("--header-mega-preview-inset-right", `${right}px`);
-      } else {
-        document.documentElement.style.setProperty("--header-mega-preview-inset-right", `${flyoutInset}px`);
       }
 
       document.documentElement.style.removeProperty("--header-mega-menu-rail-width");
@@ -18499,10 +18597,6 @@
   /** Desktop flyouts: dim full page below header chrome; flyouts sit above dim (z-index). */
   function syncHeaderFlyoutDimTop() {
     try {
-      if (!globalThis.matchMedia?.(HEADER_DESKTOP_MQ)?.matches) {
-        document.documentElement.style.removeProperty("--site-header-submenu-dim-top");
-        return;
-      }
       const submenuOpen =
         document.body.classList.contains("collection-ui--header-submenu-open") ||
         document.body.classList.contains("collection-ui--header-submenu-closing");
@@ -18567,7 +18661,6 @@
   }
 
   function showHeaderFlyoutDim() {
-    if (globalThis.matchMedia?.(HEADER_COMPACT_MQ)?.matches) return;
     const dim = document.getElementById("site-header-submenu-dim");
     if (!dim) return;
     dim.hidden = false;
@@ -18995,10 +19088,21 @@
         back.className = "site-header__mobile-nav-back site-mobile-shell__submenu-back";
         back.hidden = true;
         back.setAttribute("aria-label", "Back to main menu");
-        back.innerHTML =
-          '<span class="site-mobile-nav__back-chevron" aria-hidden="true"></span>' +
-          '<span class="site-mobile-shell__submenu-title" id="site-mobile-nav-drill-title"></span>';
+        back.innerHTML = '<span class="site-mobile-nav__back-chevron" aria-hidden="true"></span>';
+        const drillTitle = document.createElement("span");
+        drillTitle.id = "site-mobile-nav-drill-title";
+        drillTitle.className = "site-mobile-shell__submenu-title";
+        drillTitle.hidden = true;
         brandNav.insertBefore(back, brandNav.firstChild);
+        brandNav.insertBefore(drillTitle, back.nextSibling);
+      } else {
+        const drillTitle = document.getElementById("site-mobile-nav-drill-title");
+        if (drillTitle && back.contains(drillTitle)) {
+          drillTitle.remove();
+          back.innerHTML = '<span class="site-mobile-nav__back-chevron" aria-hidden="true"></span>';
+          brandNav.insertBefore(drillTitle, back.nextSibling);
+        }
+        if (drillTitle instanceof HTMLElement) drillTitle.hidden = back.hidden;
       }
       return back;
     }
@@ -19213,7 +19317,7 @@
       if (!content) return;
       content
         .querySelectorAll(
-          "#site-header-submenu-title, .mega-menu-content__heading, .site-header__submenu-title"
+          ".site-header__submenu-content #site-header-submenu-title, .mega-menu-content__heading, .site-header__submenu-content > .site-header__submenu-title"
         )
         .forEach((el) => el.remove());
       content.querySelectorAll("hr").forEach((el) => el.remove());
@@ -19344,14 +19448,14 @@
         headerSearchCloseAbort = null;
         headerSearchWrap.setAttribute("aria-hidden", "true");
         setHeaderSearchFlyoutState(headerSearchWrap, "closed");
-        if (!isHeaderCompactLayout()) {
-          headerSearchWrap.setAttribute("hidden", "");
-        }
+        headerSearchWrap.setAttribute("hidden", "");
+        headerSearchWrap.classList.remove("is-open", "is-closing");
         headerSearchBtn?.setAttribute("aria-expanded", "false");
         headerSearchBtn?.setAttribute("aria-label", "Open search");
         document.body.classList.remove("collection-ui--header-search-open", "collection-ui--header-search-closing");
         document.documentElement.style.removeProperty("--tw-search-dim-top");
         hideHeaderFlyoutDimIfIdle();
+        headerSearchWrap.style.removeProperty("--tw-mobile-search-sheet-top");
         if (!clear && !submitted && snap != null && headerSearchInput) {
           headerSearchInput.value = snap;
         }
@@ -19367,12 +19471,24 @@
         } else {
           syncFilterSearchClearVisibility();
         }
-        syncSearchKeywordChip();
-        syncFilterSearchFieldDomPlacement();
-        if (document.getElementById("grid")) renderGrid();
+        initSiteHeaderEnterMotion();
+        const runPostCloseLayout = () => {
+          syncSearchKeywordChip();
+          syncFilterSearchFieldDomPlacement();
+          if (document.getElementById("grid")) {
+            if (submitted || clear) renderGrid();
+            else {
+              syncToolbarActiveFilterChips();
+              syncCollectionToolbarHeading();
+            }
+          }
+          ensureBodyScrollUnlockedWhenNoOverlay();
+          normalizeCatalogueHeaderMasthead();
+        };
+        requestAnimationFrame(() => {
+          requestAnimationFrame(runPostCloseLayout);
+        });
         if (refocusMagnifier) queueMicrotask(() => headerSearchBtn?.focus({ preventScroll: true }));
-        ensureBodyScrollUnlockedWhenNoOverlay();
-        normalizeCatalogueHeaderMasthead();
       };
 
       if (headerSearchCloseAbort) {
@@ -19401,26 +19517,26 @@
       }
 
       if (isHeaderCompactLayout() && !twPrefersReducedMotion()) {
+        syncHeaderSearchSheetInset();
         setHeaderSearchFlyoutState(headerSearchWrap, "closing");
         document.body.classList.add("collection-ui--header-search-closing");
         document.body.classList.remove("collection-ui--header-search-open");
         headerSearchWrap.setAttribute("aria-hidden", "true");
         headerSearchWrap.classList.add("is-closing");
-        void headerSearchWrap.offsetWidth;
-        requestAnimationFrame(() => {
-          headerSearchWrap.classList.remove("is-open");
-          void headerSearchWrap.offsetWidth;
-          headerSearchCloseAbort = twAfterMotion(
-            headerSearchWrap,
-            TW_MOBILE_SEARCH_MOTION_MS,
-            () => {
-              headerSearchWrap.classList.remove("is-closing");
-              document.body.classList.remove("collection-ui--header-search-closing");
-              finishClose();
-            },
-            ["transform", "visibility"]
-          );
-        });
+        const sheet = headerSearchWrap.querySelector(
+          ".desktop-search-flyout-inner, .site-header__search-megamenu-inner"
+        );
+        void (sheet ?? headerSearchWrap).offsetWidth;
+        headerSearchCloseAbort = twAfterMotion(
+          sheet ?? headerSearchWrap,
+          TW_MOBILE_SEARCH_MOTION_MS,
+          () => {
+            document.body.classList.remove("collection-ui--header-search-closing");
+            headerSearchWrap.classList.remove("is-closing");
+            finishClose();
+          },
+          ["transform"]
+        );
         return;
       }
 
@@ -19474,10 +19590,32 @@
     function syncMobileShellTop() {
       syncBrandSignatureBarHeight();
       try {
+        const utilBottom = measureUtilityBarBottom();
+        const chromeBottom = measureHeaderChromeBottom();
+        const homeNavOpen =
+          document.body.classList.contains("home-page") &&
+          document.body.classList.contains("collection-ui--mobile-nav-open");
+        const sigPx = readCssLengthPx("var(--brand-signature-bar-height)") || utilBottom || 40;
+        const shellTop = homeNavOpen
+          ? Math.max(utilBottom, sigPx)
+          : Math.max(utilBottom, chromeBottom);
+        if (shellTop > 0) {
+          document.documentElement.style.setProperty("--site-mobile-shell-top", `${shellTop}px`);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    /** Compact search: full-bleed sheet from viewport top; chrome bottom drives inner padding only. */
+    function syncHeaderSearchSheetInset() {
+      syncBrandSignatureBarHeight();
+      try {
         const chromeBottom = measureHeaderChromeBottom();
         if (chromeBottom > 0) {
-          document.documentElement.style.setProperty("--site-mobile-shell-top", `${chromeBottom}px`);
+          document.documentElement.style.setProperty("--site-header-chrome-bottom", `${chromeBottom}px`);
         }
+        headerSearchWrap?.style.setProperty("--tw-mobile-search-sheet-top", "0px");
       } catch {
         /* ignore */
       }
@@ -19523,6 +19661,8 @@
       shell?.classList.remove("site-mobile-shell--submenu");
       document.body.classList.remove("collection-ui--mobile-nav-drill");
       if (back instanceof HTMLElement) back.hidden = true;
+      const drillTitle = document.getElementById("site-mobile-nav-drill-title");
+      if (drillTitle instanceof HTMLElement) drillTitle.hidden = true;
       root.removeAttribute("aria-hidden");
       drill.setAttribute("aria-hidden", "true");
       if (focusMain) {
@@ -19564,6 +19704,7 @@
       drill.classList.remove("is-active");
       document.body.classList.add("collection-ui--mobile-nav-drill");
       if (back instanceof HTMLElement) back.hidden = false;
+      title.hidden = false;
       root.setAttribute("aria-hidden", "true");
       drill.setAttribute("aria-hidden", "false");
       requestAnimationFrame(() => {
@@ -19810,7 +19951,7 @@
       }
 
       const seasonalPool = poolItemsForDrillSubcategories({ respectCategory: false });
-      const dedupedEntries = megaMenuSubcategoryEntriesForSlot(slot, seasonalPool);
+      const dedupedEntries = desktopMegaMenuSubcategoryEntriesForSlot(slot, seasonalPool);
       if (!dedupedEntries.length) {
         hideHeaderSubmenu();
         return;
@@ -20045,21 +20186,22 @@
             });
           });
         } else {
-          setHeaderSearchFlyoutState(headerSearchWrap, "open");
-          syncMobileShellTop();
-          if (!twPrefersReducedMotion()) {
-            headerSearchWrap.classList.remove("is-open", "is-closing");
-            void headerSearchWrap.offsetWidth;
-            requestAnimationFrame(() => {
-              if (!document.body.classList.contains("collection-ui--header-search-open")) return;
-              void headerSearchWrap.offsetWidth;
-              requestAnimationFrame(() => {
-                if (!document.body.classList.contains("collection-ui--header-search-open")) return;
-                headerSearchWrap.classList.add("is-open");
-              });
-            });
-          } else {
+          hideHeaderFlyoutDimIfIdle();
+          syncHeaderSearchSheetInset();
+          headerSearchWrap.classList.remove("is-open", "is-closing");
+          setHeaderSearchFlyoutState(headerSearchWrap, "closed");
+          const revealCompactSearch = () => {
+            if (!document.body.classList.contains("collection-ui--header-search-open")) return;
+            setHeaderSearchFlyoutState(headerSearchWrap, "open");
             headerSearchWrap.classList.add("is-open");
+          };
+          if (twPrefersReducedMotion()) {
+            revealCompactSearch();
+          } else {
+            requestAnimationFrame(() => {
+              void headerSearchWrap.offsetWidth;
+              requestAnimationFrame(revealCompactSearch);
+            });
           }
         }
         relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
@@ -20076,6 +20218,10 @@
       }
     });
     document.getElementById("site-header-search-close")?.addEventListener("click", () => {
+      closeHeaderSearch();
+    });
+    headerSearchWrap?.querySelector(".site-header__search-dim")?.addEventListener("click", () => {
+      if (!isHeaderCompactLayout()) return;
       closeHeaderSearch();
     });
     document.getElementById("collection-search-results-clear")?.addEventListener("click", () => {
@@ -20271,7 +20417,9 @@
         }
         syncBrandSignatureBarHeight();
         if (mobileShell?.classList.contains("is-open")) syncMobileShellTop();
-        if (headerSearchWrap?.classList.contains("is-open") && isHeaderCompactLayout()) syncMobileShellTop();
+        if (headerSearchWrap?.classList.contains("is-open") && isHeaderCompactLayout()) {
+          syncHeaderSearchSheetInset();
+        }
       },
       { passive: true }
     );
@@ -20518,6 +20666,7 @@
 
     installTextareaAutosizeFields();
 
+    initSiteHeaderEnterMotion();
     initCollectionNavScrollFold();
 
     globalThis.addEventListener("pageshow", (e) => {
