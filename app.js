@@ -13472,7 +13472,7 @@
   }
 
   function itemDetailBoardCtaLabel(blocked) {
-    return blocked ? "ON BOARD" : "ADD TO BOARD";
+    return blocked ? "ON OUTFIT" : "ADD TO OUTFIT";
   }
 
   function itemDetailBoardBlockedState(item) {
