@@ -8026,57 +8026,36 @@
       surface.classList.remove("is-hero-dragging");
     };
 
-    surface.addEventListener(
-      "pointerdown",
-      (e) => {
-        // Touch pointer may report non-primary button values on some engines; only enforce button for mouse.
-        if ((e.pointerType === "mouse" && e.button !== 0) || isInteractiveTarget(e.target)) return;
-        tracking = true;
-        dragging = false;
-        activePointerId = e.pointerId;
-        startX = e.clientX;
-        startY = e.clientY;
-      },
-      { passive: true }
-    );
+    const beginSwipe = (x, y) => {
+      tracking = true;
+      dragging = false;
+      startX = x;
+      startY = y;
+    };
 
-    surface.addEventListener(
-      "pointermove",
-      (e) => {
-        if (!tracking || e.pointerId !== activePointerId) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        if (!dragging) {
-          if (Math.abs(dx) < LOCK_MIN_PX && Math.abs(dy) < LOCK_MIN_PX) return;
-          // Mobile: allow slight diagonal swipes; only cancel when clearly vertical.
-          if (Math.abs(dy) > Math.abs(dx) * 1.18) {
-            reset();
-            return;
-          }
-          dragging = true;
-          surface.classList.add("is-hero-dragging");
-          try {
-            surface.setPointerCapture(e.pointerId);
-          } catch {
-            /* ignore */
-          }
+    const moveSwipe = (x, y, preventDefault) => {
+      if (!tracking) return;
+      const dx = x - startX;
+      const dy = y - startY;
+      if (!dragging) {
+        if (Math.abs(dx) < LOCK_MIN_PX && Math.abs(dy) < LOCK_MIN_PX) return;
+        // Mobile: allow slight diagonal swipes; only cancel when clearly vertical.
+        if (Math.abs(dy) > Math.abs(dx) * 1.18) {
+          reset();
+          return;
         }
-        if (dragging) e.preventDefault();
-      },
-      { passive: false }
-    );
+        dragging = true;
+        surface.classList.add("is-hero-dragging");
+      }
+      if (dragging) preventDefault();
+    };
 
-    const finish = (/** @type {PointerEvent} */ e) => {
-      if (!tracking || e.pointerId !== activePointerId) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+    const finishSwipe = (x, y) => {
+      if (!tracking) return;
+      const dx = x - startX;
+      const dy = y - startY;
       const wasDragging = dragging;
       reset();
-      try {
-        surface.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
       if (!wasDragging || Math.abs(dx) < SWIPE_MIN_PX) return;
       if (Math.abs(dy) > 96 && Math.abs(dy) > Math.abs(dx) * 1.2) return;
       onSwipe(dx < 0 ? 1 : -1);
@@ -8087,6 +8066,89 @@
         };
         surface.addEventListener("click", blockClick, { capture: true, once: true });
       }
+    };
+
+    if (isCoarsePointer) {
+      surface.addEventListener(
+        "touchstart",
+        (e) => {
+          if (e.touches.length !== 1) return;
+          const t = e.target;
+          if (isInteractiveTarget(t)) return;
+          const touch = e.touches[0];
+          beginSwipe(touch.clientX, touch.clientY);
+        },
+        { passive: true }
+      );
+      surface.addEventListener(
+        "touchmove",
+        (e) => {
+          if (!tracking || e.touches.length !== 1) return;
+          const touch = e.touches[0];
+          moveSwipe(touch.clientX, touch.clientY, () => e.preventDefault());
+        },
+        { passive: false }
+      );
+      surface.addEventListener(
+        "touchend",
+        (e) => {
+          const touch = e.changedTouches?.[0];
+          if (!touch) {
+            reset();
+            return;
+          }
+          finishSwipe(touch.clientX, touch.clientY);
+        },
+        { passive: true }
+      );
+      surface.addEventListener(
+        "touchcancel",
+        () => {
+          reset();
+        },
+        { passive: true }
+      );
+      return;
+    }
+
+    surface.addEventListener(
+      "pointerdown",
+      (e) => {
+        // Touch pointer may report non-primary button values on some engines; only enforce button for mouse.
+        if ((e.pointerType === "mouse" && e.button !== 0) || isInteractiveTarget(e.target)) return;
+        beginSwipe(e.clientX, e.clientY);
+        activePointerId = e.pointerId;
+      },
+      { passive: true }
+    );
+
+    surface.addEventListener(
+      "pointermove",
+      (e) => {
+        if (!tracking || e.pointerId !== activePointerId) return;
+        const wasDragging = dragging;
+        moveSwipe(e.clientX, e.clientY, () => e.preventDefault());
+        if (!wasDragging && dragging) {
+          try {
+            surface.setPointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    const finish = (/** @type {PointerEvent} */ e) => {
+      if (!tracking || e.pointerId !== activePointerId) return;
+      const wasDragging = dragging;
+      finishSwipe(e.clientX, e.clientY);
+      try {
+        surface.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (!wasDragging) return;
     };
 
     surface.addEventListener("pointerup", finish);
