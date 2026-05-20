@@ -2489,15 +2489,8 @@
       out.setAttribute("aria-label", "Sign out editor");
       out.addEventListener("click", () => void signOutGoogleEditor());
       wrap.appendChild(out);
-      return;
     }
-    const signIn = document.createElement("button");
-    signIn.type = "button";
-    signIn.className = "site-header__editor-auth-btn btn btn--small btn--ghost";
-    signIn.textContent = "Sign in";
-    signIn.setAttribute("aria-label", "Sign in to edit wardrobe");
-    signIn.addEventListener("click", () => void signInWithGoogleEditor());
-    wrap.appendChild(signIn);
+    /* Signed-out editors use `/login` (no header sign-in control). */
   }
 
   /** Vercel production default origin. */
@@ -2511,6 +2504,28 @@
       return path === "/login" || path === "/login.html";
     } catch {
       return false;
+    }
+  }
+
+  /** @param {string} [nextPath] Same-origin path to return to after sign-in. */
+  function twLoginUrl(nextPath) {
+    const next = String(nextPath ?? "").trim() || "/collection.html";
+    try {
+      const u = new URL("/login", globalThis.location.origin);
+      const safe = next.startsWith("/") ? next : `/${next}`;
+      u.searchParams.set("next", safe);
+      return `${u.pathname}${u.search}`;
+    } catch {
+      return "/login";
+    }
+  }
+
+  /** @param {string} [nextPath] */
+  function redirectToTwLogin(nextPath) {
+    try {
+      globalThis.location.assign(new URL(twLoginUrl(nextPath), globalThis.location.origin).href);
+    } catch {
+      globalThis.location.assign("/login");
     }
   }
 
@@ -2757,8 +2772,14 @@
 
   function setTwAdminMode(enabled) {
     if (!isTwLocalDevHost()) {
-      if (enabled) void signInWithGoogleEditor();
-      else void signOutGoogleEditor();
+      if (enabled) {
+        if (!isTwEditorUser()) {
+          const path = `${globalThis.location.pathname || "/"}${globalThis.location.search || ""}`;
+          redirectToTwLogin(path);
+        }
+      } else {
+        void signOutGoogleEditor();
+      }
       return;
     }
     const on = Boolean(enabled);
@@ -19395,7 +19416,9 @@
       if (!isSupabaseReady()) {
         showToast(CLOUD_WRITE_REQUIRED_MESSAGE);
       } else if (!isTwLocalDevHost() && !isTwEditorUser()) {
-        showToast("Sign in from the header to edit this piece.");
+        const next = buildItemPageUrl(item.id, { edit: true });
+        globalThis.location.replace(twLoginUrl(`${next.pathname}${next.search}`));
+        return;
       }
       replaceItemPageUrl(item.id, false);
       allowEdit = false;
