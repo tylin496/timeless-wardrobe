@@ -9053,11 +9053,11 @@
   function itemPageBackLabelFromSnapshot(snap) {
     const sub = String(snap?.subcategory ?? "").trim();
     if (sub) {
-      const label = categoryDisplayLabel(sub);
+      const label = recordTypeDisplayLabel(sub);
       if (label) return label;
     }
     const cat = String(snap?.category ?? "").trim();
-    if (SLOT_OPTIONS.includes(cat)) return cat;
+    if (SLOT_OPTIONS.includes(cat)) return categoryDisplayLabel(cat) || cat;
     return "Collection";
   }
 
@@ -12011,10 +12011,19 @@
     return /^(?:\/)?images\//i.test(s);
   }
 
-  /** True when a bucket URL lives under this item's storage folder (skips stale paths after re-id / merge). */
+  /** Storage object path from a Supabase URL or a local `/images/wardrobe/…` path. */
+  function wardrobeImageObjectPath(url) {
+    const cloud = storagePathFromWardrobeImageUrl(url);
+    if (cloud) return cloud;
+    const s = String(url ?? "").trim().split("?")[0];
+    const m = s.match(/^(?:\/)?images\/wardrobe\/(.+)$/i);
+    return m ? m[1] : "";
+  }
+
+  /** True when cover URL lives under this item's folder (skips stale paths after re-id / merge). */
   function primaryCoverUrlBelongsToItem(item, url) {
     const id = String(item?.id ?? "").trim();
-    const path = storagePathFromWardrobeImageUrl(url);
+    const path = wardrobeImageObjectPath(url);
     if (!id || !path) return true;
     return path === id || path.startsWith(`${id}/`);
   }

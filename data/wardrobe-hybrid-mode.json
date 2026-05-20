@@ -1,7 +1,7 @@
 {
   "_schema": "timeless-wardrobe-hybrid-local-v1",
   "enabled": true,
-  "migratedAt": "2026-05-20T15:22:55.687Z",
+  "migratedAt": "2026-05-20T15:28:28.783Z",
   "localCatalogueCount": 70,
   "localImageRoot": "/images/wardrobe",
   "note": "Frozen catalogue ids load from data/wardrobe.js with local images. New wardrobe_items rows (not in the lock) still load from Supabase until you run db:backup-to-local again."

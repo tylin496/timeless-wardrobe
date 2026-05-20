@@ -24,6 +24,7 @@ import {
   localPublicUrlForStoragePath,
   rewriteItemMediaUrlsToLocal,
   storagePathFromWardrobeImageUrl,
+  normalizeFrozenItemLocalMedia,
 } from "./lib/wardrobe-image-local.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -145,7 +146,7 @@ const migratedAt = new Date().toISOString();
 const seedItems = rawRows
   .map((r) => cloudRowToSeedItem(r))
   .filter(Boolean)
-  .map((item) => rewriteItemMediaUrlsToLocal(item));
+  .map((item) => normalizeFrozenItemLocalMedia(rewriteItemMediaUrlsToLocal(item)));
 
 const wardrobeJsPath = path.join(root, "data", "wardrobe.js");
 if (fs.existsSync(wardrobeJsPath)) {
