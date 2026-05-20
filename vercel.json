@@ -21,6 +21,7 @@
   ],
   "rewrites": [
     { "source": "/login", "destination": "/login.html" },
+    { "source": "/:path*/login", "destination": "/login.html" },
     { "source": "/collection/item.html", "destination": "/item.html" },
     { "source": "/collection/item", "destination": "/item.html" },
     { "source": "/collection", "destination": "/collection.html" },

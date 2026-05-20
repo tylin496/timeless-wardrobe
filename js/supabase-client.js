@@ -254,11 +254,22 @@ export async function insertOutfitWithItems(client, record) {
   }
 
   // Guard against silent RLS no-op writes: verify the persisted row matches this insert.
-  const { data: verifyRow, error: verifyErr } = await client
+  let verifyHasNotes = true;
+  let verifyRow;
+  let verifyErr;
+  ({ data: verifyRow, error: verifyErr } = await client
     .from("outfits")
     .select("id, name, notes, outfit_items(item_id, sort_order, colour_key)")
     .eq("id", record.id)
-    .maybeSingle();
+    .maybeSingle());
+  if (verifyErr && /notes|column/i.test(String(verifyErr.message ?? ""))) {
+    verifyHasNotes = false;
+    ({ data: verifyRow, error: verifyErr } = await client
+      .from("outfits")
+      .select("id, name, created_at, outfit_items(item_id, sort_order, colour_key)")
+      .eq("id", record.id)
+      .maybeSingle());
+  }
   if (verifyErr) return { ok: false, error: verifyErr.message };
   if (!verifyRow) return { ok: false, error: "Cloud save did not persist (outfit row not returned)." };
 
@@ -276,7 +287,7 @@ export async function insertOutfitWithItems(client, record) {
   }
 
   const nameMatches = String(verifyRow.name ?? "") === String(record.name ?? "");
-  const notesMatches = String(verifyRow.notes ?? "").trim() === String(record.notes ?? "").trim();
+  const notesMatches = !verifyHasNotes || String(verifyRow.notes ?? "").trim() === String(record.notes ?? "").trim();
   if (!nameMatches || !notesMatches) {
     return {
       ok: false,
@@ -311,7 +322,7 @@ export async function updateOutfitWithItems(client, record) {
   patch.notes = notes || null;
   let eUp;
   ({ error: eUp } = await client.from("outfits").update(patch).eq("id", record.id));
-  if (eUp && notes && /notes|column/i.test(String(eUp.message ?? ""))) {
+  if (eUp && /notes|column/i.test(String(eUp.message ?? ""))) {
     ({ error: eUp } = await client.from("outfits").update({ name: record.name }).eq("id", record.id));
   }
   if (eUp) return { ok: false, error: eUp.message };
@@ -339,11 +350,22 @@ export async function updateOutfitWithItems(client, record) {
   }
 
   // Guard against silent RLS no-op writes: verify the persisted row matches this update.
-  const { data: verifyRow, error: verifyErr } = await client
+  let verifyHasNotes = true;
+  let verifyRow;
+  let verifyErr;
+  ({ data: verifyRow, error: verifyErr } = await client
     .from("outfits")
     .select("id, name, notes, outfit_items(item_id, sort_order, colour_key)")
     .eq("id", record.id)
-    .maybeSingle();
+    .maybeSingle());
+  if (verifyErr && /notes|column/i.test(String(verifyErr.message ?? ""))) {
+    verifyHasNotes = false;
+    ({ data: verifyRow, error: verifyErr } = await client
+      .from("outfits")
+      .select("id, name, created_at, outfit_items(item_id, sort_order, colour_key)")
+      .eq("id", record.id)
+      .maybeSingle());
+  }
   if (verifyErr) return { ok: false, error: verifyErr.message };
   if (!verifyRow) return { ok: false, error: "Cloud update did not persist (outfit row not returned)." };
 
@@ -361,7 +383,7 @@ export async function updateOutfitWithItems(client, record) {
   }
 
   const nameMatches = String(verifyRow.name ?? "") === String(record.name ?? "");
-  const notesMatches = String(verifyRow.notes ?? "").trim() === String(record.notes ?? "").trim();
+  const notesMatches = !verifyHasNotes || String(verifyRow.notes ?? "").trim() === String(record.notes ?? "").trim();
   if (!nameMatches || !notesMatches) {
     return {
       ok: false,

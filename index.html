@@ -694,7 +694,18 @@
             <div id="styling-board-added-hero" class="styling-board-drawer__added-hero"></div>
           </section>
           <section class="styling-board__current" aria-labelledby="styling-board-current-heading">
-            <h3 id="styling-board-current-heading" class="styling-board__section-title">Current outfit</h3>
+            <div class="styling-board__current-head">
+              <h3 id="styling-board-current-heading" class="styling-board__section-title">Current outfit</h3>
+              <button
+                type="button"
+                class="btn btn--ghost styling-board__clear-link styling-board__clear-link--head"
+                id="outfit-clear"
+                hidden
+                aria-label="Clear All pieces from Outfits"
+              >
+                Clear All
+              </button>
+            </div>
             <div class="styling-board__board-row">
               <div class="styling-board__board-stack">
                 <div
@@ -703,15 +714,6 @@
                   role="list"
                   aria-label="Pieces on outfits"
                 ></div>
-                <button
-                  type="button"
-                  class="btn btn--ghost styling-board__clear-link"
-                  id="outfit-clear"
-                  hidden
-                  aria-label="Clear All pieces from Outfits"
-                >
-                  Clear All
-                </button>
               </div>
             </div>
             <p id="outfit-empty" class="styling-board__empty" hidden>

@@ -1,7 +1,7 @@
 /**
  * Timeless Wardrobe — frozen catalogue seed (offline fallback + dev).
  *
- * Frozen from Supabase wardrobe_items on 2026-05-20T17:35:39.172Z.
+ * Frozen from Supabase wardrobe_items on 2026-05-20T17:43:25.444Z.
  * Regenerate: npm run db:freeze-catalogue
  *
  * Collection thesis is described in the site header. Each row uses `category` (and optional
@@ -116,9 +116,10 @@ const WARDROBE_ITEMS = [
     "colourCode": "#D6C082",
     "size": "50 cm",
     "purchaseDate": "2024-08-20",
-    "updatedAt": "2026-05-21T01:35:00.000Z",
     "image": "/images/wardrobe/rolo-chain/1778704232768-cover-edit.png",
-    "gallery": ["/images/wardrobe/rolo-chain/main/gallery/01.png"],
+    "gallery": [
+      "/images/wardrobe/rolo-chain/main/gallery/01.png"
+    ],
     "notes": "Size: 50 cm\nWeight: 9.29 g\nGold price: 514 CNY/g (base: 431, +25% vs 2020)\nMaking: 83 CNY/g\nTotal: 4,778 CNY ≈ 21,400 TWD (2024)\n\u001aDate: 20 August 2024",
     "metadata": {
       "price": 21400,
@@ -141,15 +142,16 @@ const WARDROBE_ITEMS = [
     "purchaseDate": "2024-08-04",
     "image": "/images/wardrobe/ruby-gypsy-ring/1778698277222-cover-edit.png",
     "gallery": [
-      "/images/wardrobe/ruby-gypsy-ring/main/gallery/01.jpg"
+      "/images/wardrobe/ruby-gypsy-ring/main/gallery/01.png",
+      "/images/wardrobe/ruby-gypsy-ring/main/gallery/02.png"
     ],
-    "notes": "Size: HK 22 (2024-10-10; adjusted to 22.5–23 on 2026-04-07)\nWeight: 8.20 g (total, including stones)   Gold price: 604 CNY/g (base 450, +47% vs 2020)\nRuby: 3 × 4 mm (~0.2 ct)\nDiamonds: 2.3 mm × 2 (total ~0.1 ct)\nMaking: 154 CNY/g\nTotal: 5,057 CNY ≈ 22,600 TWD (2024)\nDate: 4 October 2024\n\nEngraving\nInscription: Ad Meliora . 2024\n￼\n\nReference: A gold ring inset with a single turquoise, inscribed Rumpenheim, 1843",
+    "notes": "Size: HK 22 (2024-10-10; adjusted to 22.5–23 on 2026-04-07)\nWeight: 8.20 g (total, including stones)       Gold price: 604 CNY/g (base 450, +47% vs 2020)\nRuby: 3 × 4 mm (~0.2 ct)\nDiamonds: 2.3 mm × 2 (total ~0.1 ct)\nMaking: 154 CNY/g\nTotal: 5,057 CNY ≈ 22,600 TWD (2024)\n\nEngraving\nInscription: Ad Meliora . 2024\n\nReference: A gold ring inset with a single turquoise, inscribed Rumpenheim, 1843",
     "metadata": {
       "price": 22600,
       "basicColour": "gold",
       "priceCurrency": "TWD",
       "secondaryColour": "Pigeon's Blood Ruby",
-      "secondaryColourCode": "#7C0A02"
+      "secondaryColourCode": "b7172a"
     }
   },
 

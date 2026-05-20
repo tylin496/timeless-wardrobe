@@ -6,15 +6,21 @@
  * Usage: npm run dev
  * Open: http://127.0.0.1:8787/
  */
-import { createReadStream } from "node:fs";
+import { createReadStream, watch as watchFs } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const customJsonPath = path.join(root, "data", "custom-items.json");
+const cssBuildScriptPath = path.join(root, "scripts", "build-css.mjs");
+const cssWatchDir = path.join(root, "css");
+let cssBuildRunning = false;
+let cssBuildQueued = false;
+let cssBuildDebounceTimer = 0;
 const heroMediaExtensions = new Set([
   ".avif",
   ".gif",
@@ -251,6 +257,57 @@ async function handleStatic(/** @type {http.IncomingMessage} */ req, /** @type {
   createReadStream(filePath).pipe(res);
 }
 
+function runCssBuild(reason = "change") {
+  if (cssBuildRunning) {
+    cssBuildQueued = true;
+    return;
+  }
+  cssBuildRunning = true;
+  const started = Date.now();
+  console.log(`[css] building styles.css (${reason})`);
+  const child = spawn(process.execPath, [cssBuildScriptPath], {
+    cwd: root,
+    stdio: "inherit",
+    env: process.env,
+  });
+  child.once("exit", (code) => {
+    cssBuildRunning = false;
+    if (code === 0) {
+      console.log(`[css] build complete in ${Date.now() - started}ms`);
+    } else {
+      console.warn(`[css] build failed (exit ${code ?? "unknown"})`);
+    }
+    if (cssBuildQueued) {
+      cssBuildQueued = false;
+      runCssBuild("queued");
+    }
+  });
+}
+
+function queueCssBuild(reason = "change") {
+  if (cssBuildDebounceTimer) clearTimeout(cssBuildDebounceTimer);
+  cssBuildDebounceTimer = setTimeout(() => {
+    cssBuildDebounceTimer = 0;
+    runCssBuild(reason);
+  }, 120);
+}
+
+function installCssAutoBuildWatcher() {
+  try {
+    const watcher = watchFs(cssWatchDir, { persistent: true }, (eventType, filename) => {
+      const file = String(filename || "");
+      if (!file || !file.toLowerCase().endsWith(".css")) return;
+      queueCssBuild(`${eventType}:${file}`);
+    });
+    watcher.on("error", (err) => {
+      console.warn("[css] watch error:", err?.message || err);
+    });
+    console.log("[css] watching css/*.css for changes");
+  } catch (err) {
+    console.warn("[css] watcher unavailable:", err?.message || err);
+  }
+}
+
 const preferredPort = Number(process.env.PORT) || 8787;
 const maxPortTries = 20;
 
@@ -266,6 +323,8 @@ const server = http.createServer((req, res) => {
   res.writeHead(405, { Allow: "GET, HEAD, PUT" });
   res.end();
 });
+
+installCssAutoBuildWatcher();
 
 function listenWithFallback(port, triesLeft) {
   server.once("error", (err) => {

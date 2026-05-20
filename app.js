@@ -7873,7 +7873,7 @@
       video.className = "ed-lp__hero-layer-img ed-lp__hero-layer-video";
       video.muted = true;
       video.defaultMuted = true;
-      video.loop = true;
+      video.loop = false;
       video.playsInline = true;
       video.autoplay = eager;
       video.controls = false;
@@ -8082,7 +8082,7 @@
 
     const slideMotionClasses = HERO_SLIDE_MOTION_CLASSES;
 
-    const autoplayMs = () => 6000 + Math.floor(Math.random() * 2001);
+    const autoplayMs = () => 9000 + Math.floor(Math.random() * 2001);
 
     const syncHeroSlideUi = () => {
       slides.forEach((slide, i) => {
@@ -8195,6 +8195,24 @@
     const scheduleAutoplay = () => {
       clearAutoplay();
       if (reduceMotion || n < 2) return;
+      const activeVideo = slides[index]?.querySelector("video.ed-lp__hero-layer-video");
+      if (activeVideo instanceof HTMLVideoElement) {
+        if (!Number.isFinite(activeVideo.duration) || activeVideo.duration <= 0) {
+          const resume = () => scheduleAutoplay();
+          activeVideo.addEventListener("loadedmetadata", resume, { once: true });
+          activeVideo.addEventListener("durationchange", resume, { once: true });
+          playHomeHeroVideo(activeVideo);
+          return;
+        }
+        const now = Number.isFinite(activeVideo.currentTime) ? activeVideo.currentTime : 0;
+        const remainingMs = Math.max(0, (activeVideo.duration - now) * 1000);
+        autoplayTimer = setTimeout(() => {
+          autoplayTimer = 0;
+          goTo(index + 1, 1);
+          scheduleAutoplay();
+        }, Math.max(320, Math.ceil(remainingMs) + 120));
+        return;
+      }
       autoplayTimer = setTimeout(() => {
         autoplayTimer = 0;
         goTo(index + 1, 1);
@@ -8223,8 +8241,76 @@
       });
     }
 
+    const carouselUiHost = document.getElementById("ed-lp-hero-carousel");
+    if (carouselUiHost && carouselUiHost.dataset.twHeroArrowsMounted !== "1") {
+      carouselUiHost.dataset.twHeroArrowsMounted = "1";
+      const prevBtn = document.createElement("button");
+      prevBtn.type = "button";
+      prevBtn.className = "ed-lp__hero-arrow ed-lp__hero-arrow--prev";
+      prevBtn.setAttribute("aria-label", "Previous hero image");
+      prevBtn.innerHTML =
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9.9 2.9 4.8 8l5.1 5.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      prevBtn.addEventListener("click", () => step(-1, { manual: true }));
+
+      const nextBtn = document.createElement("button");
+      nextBtn.type = "button";
+      nextBtn.className = "ed-lp__hero-arrow ed-lp__hero-arrow--next";
+      nextBtn.setAttribute("aria-label", "Next hero image");
+      nextBtn.innerHTML =
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.1 2.9 11.2 8l-5.1 5.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      nextBtn.addEventListener("click", () => step(1, { manual: true }));
+
+      carouselUiHost.appendChild(prevBtn);
+      carouselUiHost.appendChild(nextBtn);
+    }
+
     const heroSwipeSurface = document.querySelector(".ed-lp__hero") || heroHost;
     wireEditorialHomeHeroSwipe(heroSwipeSurface, (dir) => step(dir, { manual: true }));
+    if (heroSwipeSurface instanceof HTMLElement && heroSwipeSurface.dataset.twHeroDesktopInputWired !== "1") {
+      heroSwipeSurface.dataset.twHeroDesktopInputWired = "1";
+      heroSwipeSurface.tabIndex = heroSwipeSurface.tabIndex >= 0 ? heroSwipeSurface.tabIndex : 0;
+      heroSwipeSurface.setAttribute("role", "region");
+      heroSwipeSurface.setAttribute("aria-label", "Homepage hero carousel");
+      let wheelAccumX = 0;
+      let wheelAccumResetTimer = 0;
+
+      const resetWheelAccum = () => {
+        wheelAccumX = 0;
+        if (wheelAccumResetTimer) {
+          clearTimeout(wheelAccumResetTimer);
+          wheelAccumResetTimer = 0;
+        }
+      };
+
+      heroSwipeSurface.addEventListener(
+        "wheel",
+        (e) => {
+          const absX = Math.abs(e.deltaX);
+          const absY = Math.abs(e.deltaY);
+          /* Desktop hero: support both trackpad horizontal deltas and regular mouse wheel (deltaY). */
+          if (absX < 1 && absY < 1) return;
+          if (wheelAccumResetTimer) clearTimeout(wheelAccumResetTimer);
+          wheelAccumResetTimer = setTimeout(resetWheelAccum, 320);
+          const primaryDelta = absX >= 4 ? e.deltaX : e.deltaY;
+          wheelAccumX += primaryDelta;
+          if (Math.abs(wheelAccumX) < 14) return;
+          e.preventDefault();
+          step(wheelAccumX > 0 ? 1 : -1, { manual: true });
+          resetWheelAccum();
+        },
+        { passive: false }
+      );
+
+      heroSwipeSurface.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          step(-1, { manual: true });
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          step(1, { manual: true });
+        }
+      });
+    }
 
     setActiveInstant(index);
     scheduleAutoplay();
@@ -8521,6 +8607,12 @@
       working = working.slice(0, options.galleryMax);
     }
 
+    // Gallery highlights render in 2 columns on both desktop and mobile — keep even count to avoid a lone last tile.
+    const isTwoColGallery = mode === "gallery";
+    if (isTwoColGallery && working.length > 1 && working.length % 2 === 1) {
+      working = working.slice(0, -1);
+    }
+
     /** @type {Set<string>} */
     const usedUrls = new Set();
 
@@ -8603,8 +8695,12 @@
     const usedItemIds = new Set(reservedItemIds);
     /** @type {Set<string>} */
     const usedUrls = new Set();
+    /** Prefer unique browse categories before allowing repeats. */
+    /** @type {Set<string>} */
+    const usedCategoryKeys = new Set();
 
     for (const slot of HOME_DIVISION_RAIL_SLOTS) {
+      const targetPerDivision = Math.max(1, perDivision);
       const candidates = list.filter((it) => {
         const id = String(it?.id ?? "").trim();
         if (!id || usedItemIds.has(id)) return false;
@@ -8612,7 +8708,19 @@
         return homeEditorialGalleryPool(it).length > 0;
       });
       shuffleArrayInPlace(candidates);
-      for (const item of candidates.slice(0, Math.max(1, perDivision))) {
+      /** @type {typeof candidates} */
+      const deferredSameCategory = [];
+
+      for (const item of candidates) {
+        if (plans.filter((p) => p.slot === slot).length >= targetPerDivision) break;
+        const recKey = String(recordCategoryForDrill(item, slot) ?? "")
+          .trim()
+          .toLowerCase();
+        const categoryKey = `${slot}::${recKey || "__unknown__"}`;
+        if (usedCategoryKeys.has(categoryKey)) {
+          deferredSameCategory.push(item);
+          continue;
+        }
         const galleryPool = homeEditorialGalleryPool(item);
         const available = galleryPool.filter((u) => !usedUrls.has(u));
         const pickFrom = available.length ? available : galleryPool;
@@ -8622,7 +8730,24 @@
         const id = String(item.id ?? "").trim();
         usedItemIds.add(id);
         usedUrls.add(displaySrc);
+        usedCategoryKeys.add(categoryKey);
         plans.push({ item, displaySrc, slot });
+      }
+
+      if (plans.filter((p) => p.slot === slot).length < targetPerDivision) {
+        for (const item of deferredSameCategory) {
+          if (plans.filter((p) => p.slot === slot).length >= targetPerDivision) break;
+          const galleryPool = homeEditorialGalleryPool(item);
+          const available = galleryPool.filter((u) => !usedUrls.has(u));
+          const pickFrom = available.length ? available : galleryPool;
+          const displaySrc =
+            pickWeightedHomeEditorialGalleryUrl(pickFrom, homeEditorialCoverSrc(item)) || pickFrom[0] || "";
+          if (!displaySrc) continue;
+          const id = String(item.id ?? "").trim();
+          usedItemIds.add(id);
+          usedUrls.add(displaySrc);
+          plans.push({ item, displaySrc, slot });
+        }
       }
     }
 
@@ -8723,6 +8848,10 @@
     let scrollerDragMoved = false;
     /** When true, wait for drag threshold before capture (keeps link clicks working). */
     let scrollerDragDeferCapture = false;
+    let wasAtRailStart = true;
+    let wasAtRailEnd = false;
+    let railEdgeFeedbackTimer = 0;
+    let railEdgeFeedbackAt = 0;
 
     function scrollMax() {
       return Math.max(0, scroller.scrollWidth - scroller.clientWidth);
@@ -8761,6 +8890,8 @@
     function syncUi() {
       const max = scrollMax();
       const canScroll = max > 4;
+      const atStart = scroller.scrollLeft <= 2;
+      const atEnd = canScroll && scroller.scrollLeft >= max - 2;
       if (track instanceof HTMLElement) {
         track.hidden = !canScroll;
         const pct = Math.round(scrollRatio() * 100);
@@ -8768,6 +8899,34 @@
         track.setAttribute("aria-valuetext", `${pct}%`);
       }
       if (!trackDragActive) syncThumb();
+      const reduceMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+      const canAnimateEdge = !reduceMotion;
+      const now = Date.now();
+      if (canAnimateEdge && atEnd && !wasAtRailEnd && now - railEdgeFeedbackAt > 280) {
+        railEdgeFeedbackAt = now;
+        scroller.classList.remove("is-edge-bump-left");
+        scroller.classList.remove("is-edge-bump-right");
+        void scroller.offsetWidth;
+        scroller.classList.add("is-edge-bump-right");
+        if (railEdgeFeedbackTimer) globalThis.clearTimeout(railEdgeFeedbackTimer);
+        railEdgeFeedbackTimer = globalThis.setTimeout(() => {
+          scroller.classList.remove("is-edge-bump-right");
+          railEdgeFeedbackTimer = 0;
+        }, 420);
+      } else if (canAnimateEdge && atStart && !wasAtRailStart && now - railEdgeFeedbackAt > 280) {
+        railEdgeFeedbackAt = now;
+        scroller.classList.remove("is-edge-bump-right");
+        scroller.classList.remove("is-edge-bump-left");
+        void scroller.offsetWidth;
+        scroller.classList.add("is-edge-bump-left");
+        if (railEdgeFeedbackTimer) globalThis.clearTimeout(railEdgeFeedbackTimer);
+        railEdgeFeedbackTimer = globalThis.setTimeout(() => {
+          scroller.classList.remove("is-edge-bump-left");
+          railEdgeFeedbackTimer = 0;
+        }, 420);
+      }
+      wasAtRailStart = atStart;
+      wasAtRailEnd = atEnd;
     }
 
     function endScrollerDrag() {
@@ -8841,6 +9000,41 @@
 
     scroller.addEventListener("pointerup", endScrollerDrag);
     scroller.addEventListener("pointercancel", endScrollerDrag);
+
+    scroller.addEventListener(
+      "wheel",
+      (e) => {
+        const isDesktop = globalThis.matchMedia?.("(min-width: 901px)")?.matches ?? false;
+        const isBrowseByCategoryRail =
+          scroller.id === "ed-lp-division-rail" ||
+          scroller.classList.contains("ed-lp__division-rail-scroller");
+        if (isDesktop && isBrowseByCategoryRail) {
+          const absX = Math.abs(e.deltaX);
+          const absY = Math.abs(e.deltaY);
+          /* Hard block: rail never reacts to wheel on desktop. */
+          if (e.cancelable) e.preventDefault();
+          if (absY >= absX && absY > 0.2) {
+            globalThis.scrollBy({ top: e.deltaY, left: 0, behavior: "auto" });
+          }
+          return;
+        }
+        if (trackDragActive || scrollerDragActive) return;
+        const max = scrollMax();
+        if (max <= 4) return;
+        const absX = Math.abs(e.deltaX);
+        const absY = Math.abs(e.deltaY);
+        const horizontalDelta = absX > absY ? e.deltaX : e.deltaY;
+        if (Math.abs(horizontalDelta) < 1) return;
+        const prev = scroller.scrollLeft;
+        const next = Math.max(0, Math.min(max, prev + horizontalDelta));
+        if (next === prev) return;
+        e.preventDefault();
+        scroller.scrollLeft = next;
+        syncThumb();
+        syncUi();
+      },
+      { passive: false, capture: true }
+    );
 
     scroller.addEventListener("scroll", syncUi, { passive: true });
     window.addEventListener("resize", syncUi);
@@ -10204,6 +10398,8 @@
       return subcategoryFilters;
     }
     if (subcategoryEntryIsActive(key)) {
+      removeSubcategoryFilterKey(key);
+      validateSubcategoryFilters();
       return subcategoryFilters;
     }
     setOnlySubcategoryFilter(key);
@@ -11374,6 +11570,8 @@
         },
       });
     }
+
+    /* Category/record-type filters are controlled by the top drill pills, not shown in bottom active chips. */
 
     const clearAllBrowseActiveFilters = () => {
       withPreservedCollectionScroll(() => {
@@ -13725,6 +13923,9 @@
   }
 
   async function deleteSavedOutfit(id) {
+    const found = savedOutfits.find((o) => o.id === id) || null;
+    const label = found ? `“${String(found.name ?? "").trim() || "Untitled outfit"}”` : "this outfit";
+    if (!globalThis.confirm(`Delete ${label}? This cannot be undone.`)) return;
     if (editingSavedOutfitId === id) {
       editingSavedOutfitId = null;
       syncOutfitSaveButtonLabel();
@@ -14851,6 +15052,13 @@
 
     /** @type {number | null} */
     let dragFrom = null;
+    /** Touch/pointer fallback for mobile browsers without native HTML DnD. */
+    let touchDragFrom = null;
+    /** @type {number | null} */
+    let touchDragPointerId = null;
+    let touchDragMoved = false;
+    let touchDragStartX = 0;
+    let touchDragStartY = 0;
 
     function syncEntries() {
       host.__twPhotoEntries = entries;
@@ -15052,6 +15260,70 @@
           renderList();
           opts.onDirty?.();
         });
+
+        tile.addEventListener("pointerdown", (ev) => {
+          if (ev.pointerType === "mouse") return;
+          if (ev.target instanceof Element && ev.target.closest(".item-edit-photo-tile__action")) return;
+          touchDragFrom = index;
+          touchDragPointerId = ev.pointerId;
+          touchDragMoved = false;
+          touchDragStartX = ev.clientX;
+          touchDragStartY = ev.clientY;
+          try {
+            tile.setPointerCapture(ev.pointerId);
+          } catch {
+            /* ignore */
+          }
+        });
+
+        tile.addEventListener("pointermove", (ev) => {
+          if (touchDragPointerId == null || ev.pointerId !== touchDragPointerId) return;
+          const dx = ev.clientX - touchDragStartX;
+          const dy = ev.clientY - touchDragStartY;
+          if (!touchDragMoved && Math.hypot(dx, dy) > 8) {
+            touchDragMoved = true;
+            tile.classList.add("is-dragging");
+          }
+          if (touchDragMoved) ev.preventDefault();
+        });
+
+        const finishTouchDrag = (ev) => {
+          if (touchDragPointerId == null || ev.pointerId !== touchDragPointerId) return;
+          const from = Number.isFinite(touchDragFrom) ? touchDragFrom : index;
+          const wasMoved = touchDragMoved;
+          touchDragPointerId = null;
+          touchDragFrom = null;
+          touchDragMoved = false;
+          try {
+            tile.releasePointerCapture(ev.pointerId);
+          } catch {
+            /* ignore */
+          }
+          tile.classList.remove("is-dragging");
+          if (!wasMoved) return;
+
+          const hit =
+            document
+              .elementFromPoint(ev.clientX, ev.clientY)
+              ?.closest?.(".item-edit-photo-tile[data-index]") ?? null;
+          const to = Number.parseInt(String(hit?.getAttribute?.("data-index") ?? ""), 10);
+          if (!Number.isFinite(from) || from < 0 || from >= entries.length) return;
+          if (Number.isFinite(to) && to >= 0 && to < entries.length && to !== from) {
+            const [moved] = entries.splice(from, 1);
+            entries.splice(to, 0, moved);
+            renderList();
+            opts.onDirty?.();
+          }
+
+          const blockClick = (/** @type {MouseEvent} */ clickEv) => {
+            clickEv.preventDefault();
+            clickEv.stopImmediatePropagation();
+          };
+          tile.addEventListener("click", blockClick, { capture: true, once: true });
+        };
+
+        tile.addEventListener("pointerup", finishTouchDrag);
+        tile.addEventListener("pointercancel", finishTouchDrag);
 
         list.appendChild(tile);
       });
@@ -16265,9 +16537,18 @@
     if (isCollectionCardCoarsePointer()) return;
 
     const restoreCover = () => {
-      const cover = String(img.dataset.coverSrc ?? "").trim();
+      const frames = collectionCardGalleryFrames(resolveCoverItem());
+      const cover = String(
+        img.dataset.coverSrc ??
+          frames[0] ??
+          wardrobeImageForFrame(effectiveCoverSrc(resolveCoverItem()), resolveCoverItem(), COLLECTION_GRID_CARD_RENDER) ??
+          ""
+      ).trim();
       media.dataset.galleryFrameIndex = "0";
-      if (cover) img.src = cover;
+      if (cover) {
+        img.dataset.coverSrc = cover;
+        img.src = cover;
+      }
     };
 
     const showHoverGallery = () => {
@@ -16307,7 +16588,8 @@
   }
 
   function stylingBoardCtaLabel() {
-    return isFiltersNarrowViewport() ? "+" : `ADD TO ${OUTFITS_UI_NAME.toUpperCase()}`;
+    const compactQuickFind = collectionViewMode === "compact";
+    return isFiltersNarrowViewport() || compactQuickFind ? "+" : `ADD TO ${OUTFITS_UI_NAME.toUpperCase()}`;
   }
 
   function syncBoardAddButtonPresentation(btn, blocked) {
@@ -16626,6 +16908,8 @@
 
   /** Outfit slots key: when only this changes, patch card UI in place. */
   let lastGridOutfitKey = "";
+  /** Cancels stale idle chunk appends when a newer grid render starts. */
+  let gridRenderChunkToken = 0;
 
   function buildCollectionGridStructuralKey(sorted, searchNorm) {
     const ids = sorted.map((x) => String(x.id)).join("\x1f");
@@ -17094,16 +17378,55 @@
     } else {
       lastGridStructuralKey = structuralKey;
       lastGridOutfitKey = outfitKey;
-      const frag = document.createDocumentFragment();
-      for (let i = 0; i < sorted.length; i++) {
-        frag.appendChild(
+      const renderToken = ++gridRenderChunkToken;
+      const FIRST_PAINT_COUNT = 24;
+      const CHUNK_SIZE = 16;
+      const firstCount = Math.min(FIRST_PAINT_COUNT, sorted.length);
+
+      const firstFrag = document.createDocumentFragment();
+      for (let i = 0; i < firstCount; i++) {
+        firstFrag.appendChild(
           createCard(sorted[i], {
             fetchPriority: i < 4 ? "high" : "auto",
             skipEnterAnimation: i >= 8,
           })
         );
       }
-      els.grid.replaceChildren(frag);
+      els.grid.replaceChildren(firstFrag);
+
+      const appendChunked = (startAt) => {
+        if (!els.grid || renderToken !== gridRenderChunkToken) return;
+        if (startAt >= sorted.length) return;
+        const end = Math.min(sorted.length, startAt + CHUNK_SIZE);
+        const frag = document.createDocumentFragment();
+        for (let i = startAt; i < end; i++) {
+          frag.appendChild(
+            createCard(sorted[i], {
+              fetchPriority: i < 4 ? "high" : "auto",
+              skipEnterAnimation: true,
+            })
+          );
+        }
+        if (renderToken !== gridRenderChunkToken) return;
+        els.grid.appendChild(frag);
+        if (end < sorted.length) {
+          const ric = globalThis.requestIdleCallback;
+          if (typeof ric === "function") {
+            ric(() => appendChunked(end), { timeout: 650 });
+          } else {
+            globalThis.setTimeout(() => appendChunked(end), 20);
+          }
+        }
+      };
+
+      if (firstCount < sorted.length) {
+        const ric = globalThis.requestIdleCallback;
+        if (typeof ric === "function") {
+          ric(() => appendChunked(firstCount), { timeout: 380 });
+        } else {
+          globalThis.setTimeout(() => appendChunked(firstCount), 0);
+        }
+      }
     }
 
     const n = sorted.length;
@@ -17442,31 +17765,16 @@
     syncStylingBoardUi();
   }
 
-  function mountOutfitClearAfterStripSlots() {
-    const clearBtn = els.outfitClear || document.getElementById("outfit-clear");
-    const strip = els.outfitStrip;
-    if (!(clearBtn instanceof HTMLElement) || !(strip instanceof HTMLElement)) return;
-    clearBtn.classList.add("outfit-strip__clear");
-    strip.appendChild(clearBtn);
-  }
-
   function renderOutfitStrip() {
     if (!els.outfitStrip) return;
-    const clearBtn = els.outfitClear || document.getElementById("outfit-clear");
     const animateEntrance = outfitStripEntranceOnNextRender;
     outfitStripEntranceOnNextRender = false;
-    if (clearBtn instanceof HTMLElement && clearBtn.parentElement === els.outfitStrip) {
-      clearBtn.remove();
-    }
     els.outfitStrip.innerHTML = "";
     const boardEmpty = currentOutfitSlots.length === 0;
     if (els.outfitEmpty) {
       els.outfitEmpty.hidden = !boardEmpty;
     }
     if (boardEmpty) {
-      if (clearBtn instanceof HTMLElement && els.outfitStrip.parentElement) {
-        els.outfitStrip.parentElement.appendChild(clearBtn);
-      }
       syncOutfitBuilderPanel();
       return;
     }
@@ -17583,7 +17891,6 @@
       slot.appendChild(meta);
       els.outfitStrip.appendChild(slot);
     });
-    mountOutfitClearAfterStripSlots();
     syncOutfitBuilderPanel();
   }
 
@@ -22177,6 +22484,94 @@
       }
     }
 
+    /**
+     * Mobile bottom-sheet swipe-to-close (down or right).
+     * Keeps existing close animation flow (`onClose`) and only adds gesture detection + light drag feedback.
+     * @param {HTMLElement | null | undefined} sheet
+     * @param {() => void} onClose
+     * @param {{ handleSelector?: string, shouldHandle?: () => boolean }} [opts]
+     */
+    function wireMobileSheetSwipeDismiss(sheet, onClose, opts = {}) {
+      if (!(sheet instanceof HTMLElement) || sheet.dataset.mobileSwipeDismissWired === "1") return;
+      sheet.dataset.mobileSwipeDismissWired = "1";
+      const handleSelector = String(opts.handleSelector ?? "").trim();
+      const shouldHandle = typeof opts.shouldHandle === "function" ? opts.shouldHandle : () => true;
+      let active = false;
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+
+      const resetDragVisual = () => {
+        if (!dragging) return;
+        dragging = false;
+        sheet.style.transition = "";
+        sheet.style.transform = "";
+      };
+
+      sheet.addEventListener(
+        "touchstart",
+        (e) => {
+          if (!shouldHandle() || e.touches.length !== 1) return;
+          const t = e.target;
+          if (handleSelector && t instanceof Element && !t.closest(handleSelector)) return;
+          const touch = e.touches[0];
+          startX = touch.clientX;
+          startY = touch.clientY;
+          active = true;
+          dragging = false;
+        },
+        { passive: true }
+      );
+
+      sheet.addEventListener(
+        "touchmove",
+        (e) => {
+          if (!active || !shouldHandle() || e.touches.length !== 1) return;
+          const touch = e.touches[0];
+          const dx = touch.clientX - startX;
+          const dy = touch.clientY - startY;
+          const shiftX = dx > 0 ? Math.min(76, dx * 0.34) : 0;
+          const shiftY = dy > 0 ? Math.min(132, dy * 0.44) : 0;
+          if (shiftX > 1 || shiftY > 1) {
+            dragging = true;
+            sheet.style.transition = "none";
+            sheet.style.transform = `translate3d(${shiftX}px, ${shiftY}px, 0)`;
+          }
+          if ((dy > 8 && dy > Math.abs(dx)) || (dx > 8 && dx > Math.abs(dy))) {
+            e.preventDefault();
+          }
+        },
+        { passive: false }
+      );
+
+      sheet.addEventListener(
+        "touchend",
+        (e) => {
+          if (!active) return;
+          active = false;
+          const touch = e.changedTouches?.[0];
+          const dx = touch ? touch.clientX - startX : 0;
+          const dy = touch ? touch.clientY - startY : 0;
+          const closeByDown = dy > 72 && dy > Math.abs(dx) * 1.12;
+          const closeByRight = dx > 84 && dx > Math.abs(dy) * 1.04;
+          resetDragVisual();
+          if (closeByDown || closeByRight) {
+            onClose();
+          }
+        },
+        { passive: true }
+      );
+
+      sheet.addEventListener(
+        "touchcancel",
+        () => {
+          active = false;
+          resetDragVisual();
+        },
+        { passive: true }
+      );
+    }
+
     function ensureMobileNavDim() {
       let dim = document.getElementById("site-mobile-nav-dim");
       if (!dim) {
@@ -22753,9 +23148,12 @@
         }
         cancelSearchGridDebounce();
         headerSearchOverlayCollectionSearchFrozen = true;
-        headerSearchOpenCollectionSearchNorm =
-          collectionSubmittedSearchNorm || normalizeSearch(els.search?.value ?? "");
-        headerSearchOverlayOpeningQueryRaw = String(els.search?.value ?? "").trim();
+        /* Re-open behavior: always start overlay with a clean keyword field. */
+        headerSearchOpenCollectionSearchNorm = "";
+        headerSearchOverlayOpeningQueryRaw = "";
+        if (headerSearchInput) headerSearchInput.value = "";
+        if (els.search && els.search !== headerSearchInput) els.search.value = "";
+        syncFilterSearchClearVisibility();
         syncSearchKeywordChip();
         hideHeaderSubmenu();
         closeMobileCategoryPanel();
@@ -23107,6 +23505,22 @@
     });
     document.getElementById("styling-board-continue")?.addEventListener("click", () => {
       closeStylingBoardDrawer();
+    });
+
+    const stylingBoardSheet = /** @type {HTMLElement | null} */ (
+      document.querySelector("#styling-board-drawer .styling-board-drawer__sheet")
+    );
+    wireMobileSheetSwipeDismiss(stylingBoardSheet, () => closeStylingBoardDrawer(), {
+      handleSelector: ".styling-board-drawer__header",
+      shouldHandle: () => isHeaderCompactLayout() && stylingBoardDrawerOpen,
+    });
+
+    const mobileSearchSheet = /** @type {HTMLElement | null} */ (
+      headerSearchWrap?.querySelector(".desktop-search-flyout-inner, .site-header__search-megamenu-inner")
+    );
+    wireMobileSheetSwipeDismiss(mobileSearchSheet, () => closeHeaderSearch(), {
+      handleSelector: ".site-header__search-head, .site-header__search-top",
+      shouldHandle: () => isHeaderCompactLayout() && isHeaderSearchWrapOpen(),
     });
     if (document.body.dataset.twStylingBoardEscapeWired !== "1") {
       document.body.dataset.twStylingBoardEscapeWired = "1";
@@ -23624,6 +24038,32 @@
     return new Promise((r) => setTimeout(r, ms));
   }
 
+  /**
+   * Promise timeout guard for cloud bootstrap fetches.
+   * @template T
+   * @param {Promise<T>} promise
+   * @param {number} ms
+   * @param {string} label
+   * @returns {Promise<T>}
+   */
+  function withTimeout(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+      const timer = globalThis.setTimeout(() => {
+        reject(new Error(`${label} timed out after ${ms}ms`));
+      }, Math.max(1, Math.floor(ms)));
+      promise.then(
+        (value) => {
+          globalThis.clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          globalThis.clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
+
   let twPageLoaderShellInstalled = false;
 
   async function getSupabaseApiModule() {
@@ -23677,10 +24117,12 @@
   async function completeTwInitialPageLoader(startedAt) {
     const root = document.getElementById("tw-page-loader");
     if (!root || !document.body.classList.contains("tw-page-loader-active")) return;
-    const minMs = 1000;
-    const logoInMs = 1000;
-    const fadeOutMs = 520;
-    const mainInMs = 500;
+    const isCollectionGridPage = Boolean(document.getElementById("grid")) && !document.body.classList.contains("home-page");
+    /* Collection should feel immediate: keep brand cue but shorten enforced loader timings. */
+    const minMs = isCollectionGridPage ? 420 : 1000;
+    const logoInMs = isCollectionGridPage ? 280 : 1000;
+    const fadeOutMs = isCollectionGridPage ? 280 : 520;
+    const mainInMs = isCollectionGridPage ? 220 : 500;
     const elapsed = () => performance.now() - startedAt;
     await twSleep(Math.max(0, logoInMs - elapsed()));
     await twSleep(Math.max(0, minMs - elapsed()));
@@ -23738,7 +24180,7 @@
           let wardrobeFromSupabase = false;
           /** @type {Promise<{ ok: boolean, outfits?: unknown, error?: string }> | null} */
           let outfitsFetchPromise = null;
-          const res = await api.fetchWardrobeItems(supabaseClient);
+          const res = await withTimeout(api.fetchWardrobeItems(supabaseClient), 9000, "fetchWardrobeItems");
           if (res.ok && res.items.length) {
             if (isHybridLocalCatalogueEnabled()) {
               refreshCatalogueSeedSnapshot();
@@ -23777,8 +24219,8 @@
 
           if (wardrobeFromSupabase || outfitsFetchPromise) {
             const outfitsRes = outfitsFetchPromise
-              ? await outfitsFetchPromise
-              : await api.fetchOutfits(supabaseClient);
+              ? await withTimeout(outfitsFetchPromise, 7000, "fetchOutfits")
+              : await withTimeout(api.fetchOutfits(supabaseClient), 7000, "fetchOutfits");
             if (outfitsRes.ok) {
               const fromCloud = (outfitsRes.outfits || [])
                 .map((o) => normalizeSavedOutfitRecord(o))
@@ -23842,9 +24284,9 @@
 
     if (isCloudModeActive()) {
       fileBackedCustomItems = [];
-      if (isHybridLocalCatalogueEnabled()) {
+          if (isHybridLocalCatalogueEnabled()) {
         if (!cloudBackedCustomItems.length) {
-          const allCloud = await loadWardrobeItemsFromCloud();
+              const allCloud = await withTimeout(loadWardrobeItemsFromCloud(), 5000, "loadWardrobeItemsFromCloud");
           cloudBackedCustomItems = filterCloudRowsForHybridCatalogue(allCloud);
           if (allCloud.length) {
             stripCustomIdsFromLocalStorage(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
@@ -23855,7 +24297,7 @@
         cloudBackedCustomItems = wardrobeBase.map((r) => (r && typeof r === "object" ? { ...r } : /** @type {any} */ (r)));
         stripCustomIdsFromLocalStorage(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
       } else {
-        cloudBackedCustomItems = await loadWardrobeItemsFromCloud();
+            cloudBackedCustomItems = await withTimeout(loadWardrobeItemsFromCloud(), 5000, "loadWardrobeItemsFromCloud");
         if (cloudBackedCustomItems.length) {
           stripCustomIdsFromLocalStorage(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
           mergeWardrobeBaseWithFetchedCloudRows(cloudBackedCustomItems);
