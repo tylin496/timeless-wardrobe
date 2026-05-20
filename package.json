@@ -6,7 +6,8 @@
     "css:build": "node scripts/build-css.mjs",
     "css:migrate-margins": "node scripts/migrate-margins-to-tailwind.mjs",
     "predev": "node scripts/build-css.mjs",
-    "build": "node scripts/build-css.mjs && node scripts/vercel-build.mjs",
+    "og:build": "node scripts/build-og-image.mjs",
+    "build": "node scripts/build-css.mjs && node scripts/build-og-image.mjs && node scripts/vercel-build.mjs",
     "dev": "node scripts/tw-dev-server.mjs",
     "export:wardrobe-json": "node scripts/export_wardrobe_json.mjs",
     "db:export-wardrobe": "node scripts/export_wardrobe_from_supabase.mjs",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.0",
     "image-size": "^2.0.2",
+    "sharp": "^0.34.2",
     "tailwindcss": "^4.3.0"
   }
 }

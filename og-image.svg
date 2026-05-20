@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f7f4ed"/>
+  <rect width="1200" height="4" fill="#1b352d" opacity="0.28"/>
+  <image href="monogram.png" x="520" y="108" width="160" height="160" preserveAspectRatio="xMidYMid meet"/>
+  <text
+    x="600"
+    y="338"
+    text-anchor="middle"
+    font-family="Georgia, Times New Roman, serif"
+    font-size="54"
+    fill="#141210"
+    letter-spacing="0.04em"
+  >Timeless Wardrobe</text>
+  <text
+    x="600"
+    y="396"
+    text-anchor="middle"
+    font-family="Georgia, Times New Roman, serif"
+    font-size="27"
+    fill="#736e66"
+  >A private wardrobe catalogue of classic menswear</text>
+  <text
+    x="600"
+    y="444"
+    text-anchor="middle"
+    font-family="Georgia, Times New Roman, serif"
+    font-size="21"
+    fill="#9a948c"
+    letter-spacing="0.02em"
+  >Curated and maintained by Thomas Yanwen Lin</text>
+</svg>

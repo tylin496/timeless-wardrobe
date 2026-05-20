@@ -7681,6 +7681,8 @@
   let stylingBoardDrawerOpen = false;
   let stylingBoardDrawerOpenRaf = 0;
   let headerSearchOpenRaf = 0;
+  /** Ignore document outside-click closes right after opening (iOS ghost click / bubble). */
+  let headerSearchOutsideClickGuardUntil = 0;
   /** When set, that slot renders in the added hero instead of the strip grid. */
   let stylingBoardAddedRevealKey = null;
   let stylingBoardDrawerFocusReturn = /** @type {Element | null} */ (null);
@@ -8906,13 +8908,16 @@
     if (!(input instanceof HTMLElement) || document.activeElement !== input) return;
     const wrap = document.getElementById("site-header-search-wrap");
     if (!(wrap instanceof HTMLElement)) return;
+    const vv = globalThis.visualViewport;
+    const layoutH = globalThis.innerHeight || document.documentElement.clientHeight || 0;
+    /* Keyboard not up yet — keep full-screen sheet; avoids zero-height vv flash on iOS. */
+    if (!layoutH || vv.height > layoutH * 0.9) return;
     wrap.classList.add("site-header__search-wrap--vv-bound");
     const onVisualViewportChange = () => {
       syncCompactHeaderSearchVisualViewport();
       const input = document.getElementById("filter-search");
       if (document.activeElement === input) scrollCompactHeaderSearchFieldIntoView();
     };
-    const vv = globalThis.visualViewport;
     vv.addEventListener("resize", onVisualViewportChange);
     vv.addEventListener("scroll", onVisualViewportChange);
     globalThis.addEventListener("orientationchange", onVisualViewportChange);
@@ -8982,6 +8987,8 @@
   function isHeaderSearchWrapOpen() {
     const wrap = document.getElementById("site-header-search-wrap");
     if (!wrap) return false;
+    const state = String(wrap.dataset.searchState || "closed").trim();
+    if (state === "opening" || state === "open") return true;
     return (
       wrap.classList.contains("is-open") || wrap.classList.contains(HEADER_SEARCH_SHEET_VISIBLE_CLASS)
     );
@@ -20180,6 +20187,7 @@
     function openMobileHeaderSearch() {
       if (!headerSearchWrap || isHeaderSearchWrapOpen()) return;
       closeMobileCategoryPanel();
+      headerSearchOutsideClickGuardUntil = performance.now() + 500;
       headerSearchBtn?.click();
     }
 
@@ -20492,10 +20500,12 @@
       });
     });
 
-    headerSearchBtn?.addEventListener("click", () => {
+    headerSearchBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (!headerSearchWrap) return;
       const open = !isHeaderSearchWrapOpen();
       if (open) {
+        headerSearchOutsideClickGuardUntil = performance.now() + 500;
         if (headerSearchCloseAbort) {
           headerSearchCloseAbort();
           headerSearchCloseAbort = null;
@@ -20538,19 +20548,21 @@
           });
         } else {
           hideHeaderFlyoutDimIfIdle();
-          relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
-          headerSearchWrap.classList.remove("is-open", "is-closing", HEADER_SEARCH_SHEET_VISIBLE_CLASS);
-          setHeaderSearchFlyoutState(headerSearchWrap, "closed");
           if (headerSearchOpenRaf) {
             cancelAnimationFrame(headerSearchOpenRaf);
             headerSearchOpenRaf = 0;
           }
+          relocateFilterSearchFieldIntoHeaderOverlayPillWrap();
+          headerSearchWrap.classList.remove("is-open", "is-closing", HEADER_SEARCH_SHEET_VISIBLE_CLASS);
+          setHeaderSearchFlyoutState(headerSearchWrap, "opening");
+          document.body.classList.add("collection-ui--header-search-open");
+          headerSearchWrap.removeAttribute("hidden");
+          headerSearchWrap.setAttribute("aria-hidden", "false");
+          resetCompactHeaderSearchSheetScroll();
           const sheet = headerSearchWrap.querySelector(
             ".desktop-search-flyout-inner, .site-header__search-megamenu-inner"
           );
           const revealCompactSearch = () => {
-            headerSearchWrap.removeAttribute("hidden");
-            headerSearchWrap.setAttribute("aria-hidden", "false");
             syncHeaderSearchSheetInset();
             setHeaderSearchFlyoutState(headerSearchWrap, "open");
             headerSearchWrap.classList.add(HEADER_SEARCH_SHEET_VISIBLE_CLASS);
@@ -20560,27 +20572,16 @@
               headerSearchInput
             );
           };
-          if (headerSearchWrap.hasAttribute("hidden")) {
-            headerSearchWrap.removeAttribute("hidden");
-            headerSearchWrap.setAttribute("aria-hidden", "false");
-            resetCompactHeaderSearchSheetScroll();
-            if (sheet instanceof HTMLElement) {
-              headerSearchWrap.classList.remove(HEADER_SEARCH_SHEET_VISIBLE_CLASS);
-              void sheet.offsetHeight;
-            }
-            if (twPrefersReducedMotion()) {
-              revealCompactSearch();
-            } else {
-              headerSearchOpenRaf = requestAnimationFrame(() => {
-                void (sheet ?? headerSearchWrap).offsetWidth;
-                headerSearchOpenRaf = requestAnimationFrame(() => {
-                  headerSearchOpenRaf = 0;
-                  revealCompactSearch();
-                });
-              });
-            }
-          } else {
+          if (twPrefersReducedMotion()) {
             revealCompactSearch();
+          } else {
+            if (sheet instanceof HTMLElement) void sheet.offsetHeight;
+            headerSearchOpenRaf = requestAnimationFrame(() => {
+              headerSearchOpenRaf = requestAnimationFrame(() => {
+                headerSearchOpenRaf = 0;
+                revealCompactSearch();
+              });
+            });
           }
         }
         if (!isHeaderCompactLayout()) {
@@ -20695,7 +20696,8 @@
     document.getElementById("site-mobile-shell-close-btn")?.addEventListener("click", () => {
       closeMobileCategoryPanel();
     });
-    document.getElementById("site-mobile-shell-search-btn")?.addEventListener("click", () => {
+    document.getElementById("site-mobile-shell-search-btn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
       openMobileHeaderSearch();
     });
     document.getElementById("site-mobile-shell-styling-btn")?.addEventListener("click", () => {
@@ -20759,12 +20761,13 @@
       }
     });
     document.addEventListener("click", (e) => {
+      if (performance.now() < headerSearchOutsideClickGuardUntil) return;
       if (!isHeaderSearchWrapOpen()) return;
       const t = e.target;
       if (!(t instanceof Element)) return;
-      const flyoutInner = t.closest(".desktop-search-flyout-inner");
-      if (flyoutInner) return;
+      if (headerSearchWrap?.contains(t)) return;
       if (headerSearchBtn?.contains(t)) return;
+      if (document.getElementById("site-mobile-shell-search-btn")?.contains(t)) return;
       closeHeaderSearch();
     });
     if (document.body.dataset.twSearchDimResizeWired !== "1") {

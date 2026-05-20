@@ -43,6 +43,8 @@ const rootFiles = [
   "logo.svg",
   "monogram.png",
   "loading-logo.png",
+  "og-image.png",
+  "og-image.svg",
 ];
 
 const rootDirs = ["js", "data", "images"];
