@@ -2499,11 +2499,8 @@
     }
   }
 
-  /** Per-section active-filter badges in the drawer (all sections except Season). */
+  /** Per-section active-filter badges in the drawer (multi-select sections only; not Season or Sort). */
   function syncCollectionFilterDrawerSectionCountBadges() {
-    const sortActive =
-      normalizeCollectionSortMode(collectionSortMode) !== COLLECTION_DEFAULT_SORT_MODE ? 1 : 0;
-    syncAfdSectionCountBadge("collection-drawer-sort-count", sortActive);
     syncAfdSectionCountBadge("collection-drawer-record-types-count", subcategoryFilters.size);
     syncAfdSectionCountBadge("collection-colour-filter-count", basicColourFilters.size);
     syncAfdSectionCountBadge("collection-drawer-brands-count", selectedBrandFilters.size);
@@ -20665,6 +20662,9 @@
       stripDesktopMegaMenuDivisionHeading();
 
       const subF = subcategoryFiltersKey();
+      /** Match `syncCategoryTabUI` — use collection browse slot, not `headerNavOpenSlot` (still previous slot while links build). */
+      const activeSubForMega =
+        String(categoryNavFilter ?? "").trim() === slot ? subF : "";
 
       dedupedEntries.forEach(({ raw, label }) => {
         const a = document.createElement("a");
@@ -20673,7 +20673,7 @@
         a.textContent = label;
         a.setAttribute("data-category-jump", slot);
         a.setAttribute("data-subcategory-jump", raw);
-        if (subcategoryFilterMatchesEntry(raw, headerNavOpenSlot === slot ? subF : "")) {
+        if (subcategoryFilterMatchesEntry(raw, activeSubForMega)) {
           a.classList.add("is-active");
         }
         a.addEventListener("pointerenter", () => {
@@ -20689,7 +20689,7 @@
         links.appendChild(a);
       });
       const initialPreview =
-        dedupedEntries.find((e) => subcategoryFilterMatchesEntry(e.raw, headerNavOpenSlot === slot ? subF : "")) ??
+        dedupedEntries.find((e) => subcategoryFilterMatchesEntry(e.raw, activeSubForMega)) ??
         dedupedEntries[0];
       renderHeaderSubmenuPreview(slot, initialPreview?.raw ?? "");
       if (headerSubmenuUsesDomHidden()) {
