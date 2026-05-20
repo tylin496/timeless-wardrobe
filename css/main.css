@@ -8382,7 +8382,6 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
 }
 
 .styling-board__clear-link {
-  @apply mt-0.5;
   padding-left: 0;
   padding-right: 0;
   text-transform: none;
@@ -8401,14 +8400,25 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   box-shadow: none;
 }
 
-.styling-board-drawer .styling-board__board-stack > #outfit-clear:hover,
-.styling-board-drawer .styling-board__board-stack > #outfit-clear:focus-visible {
+.styling-board-drawer .styling-board__current > #outfit-clear:hover,
+.styling-board-drawer .styling-board__current > #outfit-clear:focus-visible {
   background: transparent;
   box-shadow: none;
   color: var(--sb-ink);
   text-decoration-color: currentColor;
 }
 
+.styling-board-drawer .styling-board__current > #outfit-clear {
+  align-self: flex-start;
+  margin: 0.15rem 0 0.2rem;
+  padding: 0;
+  min-height: 0;
+  line-height: 1.15;
+}
+
+.styling-board-drawer .styling-board__current > #outfit-clear[hidden] {
+  display: none !important;
+}
 
 .styling-board-drawer .styling-board__section-title,
 .styling-board-drawer .saved-outfits__title {
@@ -8450,18 +8460,16 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   display: none;
 }
 
-.styling-board-drawer .styling-board__board-stack:has(> #outfit-strip:empty) > #outfit-clear {
-  display: none !important;
-}
-
-.styling-board-drawer .styling-board__current:has(#outfit-empty:not([hidden])) .styling-board__section-title {
-  margin-bottom: 0.65rem;
+.styling-board-drawer .styling-board__current:has(#outfit-empty:not([hidden])) > .styling-board__section-title {
+  margin-bottom: 0.5rem;
 }
 
 .styling-board__pieces.outfit-strip > .outfit-slot {
   --outfit-card-overlap: 2.85rem;
+  --outfit-card-min-w: 5.5rem;
+  --outfit-card-max-w: 9.25rem;
   flex: 0 0 auto;
-  width: min(9.25rem, 44vw);
+  width: min(var(--outfit-card-max-w), 44vw);
   max-width: none;
   margin: 0 0 0 calc(-1 * var(--outfit-card-overlap));
   position: relative;
@@ -8540,10 +8548,24 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   display: none;
 }
 
+.styling-board-drawer .styling-board__pieces.outfit-strip > .outfit-slot {
+  --outfit-card-overlap: 3.75rem;
+  --outfit-card-min-w: 5.35rem;
+  --outfit-card-max-w: 9.25rem;
+  width: fit-content;
+  min-width: min(var(--outfit-card-min-w), var(--outfit-card-max-w), 44vw);
+  max-width: min(var(--outfit-card-max-w), 44vw);
+}
+
 .styling-board-drawer .outfit-slot {
+  display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 0.55rem 0.6rem 0.5rem;
+  box-sizing: border-box;
+  height: var(--outfit-slot-h, 13.375rem);
+  min-height: var(--outfit-slot-h, 13.375rem);
+  max-height: var(--outfit-slot-h, 13.375rem);
+  padding: 0.5rem 0.55rem 0.45rem;
   cursor: grab;
   background: var(--sb-surface);
   border: 1px solid color-mix(in srgb, var(--sb-line) 88%, transparent);
@@ -8558,7 +8580,9 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
 
 .styling-board-drawer .outfit-slot__thumb {
   width: 100%;
-  height: 5.75rem;
+  height: var(--outfit-thumb-h, 5.15rem);
+  min-height: var(--outfit-thumb-h, 5.15rem);
+  flex-shrink: 0;
   border-radius: 0;
   overflow: visible;
   background: transparent;
@@ -8580,17 +8604,32 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
 }
 
 .styling-board-drawer .outfit-slot__meta {
-  padding: 0.35rem 0.05rem 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.3rem 0.05rem 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .styling-board-drawer .outfit-slot__brand {
   color: var(--sb-ink-muted);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .styling-board-drawer .outfit-slot__name {
   color: var(--sb-ink);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+  line-height: 1.22;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .styling-board-drawer .outfit-slot__colour {
@@ -8598,8 +8637,10 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
 }
 
 .styling-board-drawer .outfit-slot__remove {
-  @apply mt-1.5;
+  margin-top: auto;
+  padding-top: 0.35rem;
   align-self: flex-start;
+  flex-shrink: 0;
 }
 
 .styling-board__empty {
@@ -8609,12 +8650,16 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   line-height: 1.5;
 }
 
-/* Board: overlapping cards; Clear All aligns to the strip/card baseline (bottom-right). */
+/* Board: overlapping cards; Clear All sits under the strip (compact margins). */
 .styling-board-drawer .styling-board__current {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.75rem;
+  gap: 0.2rem;
+}
+
+.styling-board-drawer .styling-board__current > .styling-board__section-title {
+  margin-bottom: 0.5rem;
 }
 
 .styling-board-drawer .styling-board__board-row {
@@ -8653,31 +8698,8 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   overflow-x: visible;
   overflow-y: visible;
   padding-right: 0.15rem;
+  padding-bottom: 0.05rem;
   scroll-snap-type: none;
-}
-
-.styling-board-drawer .styling-board__board-stack > #outfit-clear {
-  position: static;
-  z-index: auto;
-  flex: 0 0 auto;
-  align-self: flex-end;
-  margin: 0 0 0.15rem;
-  scroll-snap-align: end;
-  padding: 0.15rem 0;
-  min-height: 0;
-  line-height: 1.2;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-color: currentColor;
-  color: var(--sb-ink-soft);
-}
-
-.styling-board-drawer .styling-board__board-stack > #outfit-clear[hidden] {
-  display: none !important;
 }
 
 .styling-board-drawer .styling-board__current > #outfit-empty {
@@ -8685,7 +8707,7 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
 }
 
 .styling-board-drawer .styling-board__current > #styling-board-save-form {
-  margin-top: 0.15rem;
+  margin-top: 0.35rem;
 }
 
 .styling-board__save {
@@ -14912,9 +14934,33 @@ a.item-detail__breadcrumb-current {
   @apply m-0;
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  gap: 0.5rem 0.75rem;
   padding: clamp(1.25rem, 3vw, 2rem) 0 max(1.5rem, calc(0.75rem + env(safe-area-inset-bottom, 0px)));
   animation: tlw-fade-in 0.44s var(--ease-luxe) 0.08s both;
+}
+
+/* Editor-only — low-contrast copy control beside “+ NEW PIECE”. */
+.collection-actions__copy-list {
+  min-height: 2.25rem;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+  border-color: transparent;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--ink-muted) 88%, transparent);
+  opacity: 0.45;
+}
+
+.collection-actions__copy-list:hover,
+.collection-actions__copy-list:focus-visible {
+  opacity: 1;
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 18%, var(--line));
+  background: color-mix(in srgb, var(--ink) 4%, var(--bg));
 }
 
 body.collection-page .collection-container > .collection-actions {

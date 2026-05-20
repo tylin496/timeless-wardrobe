@@ -2875,7 +2875,7 @@
   const COLLECTION_SORT_MODES = ["default", "price-asc", "price-desc", "date-desc", "date-asc"];
   const COLLECTION_DEFAULT_SORT_MODE = "default";
   const COLLECTION_SORT_LABELS = {
-    default: "Default",
+    default: "Archive order",
     "date-desc": "Newest",
     "date-asc": "Oldest",
     "price-asc": "Price low–high",
@@ -4773,16 +4773,47 @@
     }, ms);
   }
 
-  async function copyItemPlainTextForAi(item, opts = {}) {
-    const text = buildItemAiStylingBrief(item);
-    const btn = opts.button instanceof HTMLButtonElement ? opts.button : null;
+  /** Plain numbered list for editors: `1. Brand Name #hex Size` */
+  function wardrobePlainListLineParts(item) {
+    if (!item || typeof item !== "object") return [];
+    return [
+      String(item.brand ?? "").trim(),
+      displayNameWithoutLeadingColour(item),
+      itemColourCode(item),
+      String(item.size ?? "").trim(),
+    ].filter(Boolean);
+  }
+
+  function compareWardrobePlainListItems(a, b) {
+    const tax = compareByTaxonomy(a, b);
+    if (tax !== 0) return tax;
+    const ka = `${String(a?.brand ?? "")}\0${displayNameWithoutLeadingColour(a)}\0${String(a?.id ?? "")}`;
+    const kb = `${String(b?.brand ?? "")}\0${displayNameWithoutLeadingColour(b)}\0${String(b?.id ?? "")}`;
+    return ka.localeCompare(kb, undefined, { sensitivity: "base" });
+  }
+
+  function getWardrobeItemsForPlainListCopy() {
+    return getAllWardrobeItems().sort(compareWardrobePlainListItems);
+  }
+
+  function buildWardrobePlainNumberedList(list) {
+    return list
+      .map((item, i) => {
+        const parts = wardrobePlainListLineParts(item);
+        return `${i + 1}. ${parts.length ? parts.join(" ") : "—"}`;
+      })
+      .join("\n");
+  }
+
+  async function writeTextToClipboard(text, { successToast } = {}) {
+    const msg = String(successToast ?? "").trim();
     const onCopied = () => {
-      if (btn) playItemDetailCopyAiSuccess(btn);
-      showToast("Copied AI styling brief.");
+      if (msg) showToast(msg);
     };
     try {
       await navigator.clipboard.writeText(text);
       onCopied();
+      return true;
     } catch (err) {
       console.warn(err);
       try {
@@ -4796,10 +4827,31 @@
         document.execCommand("copy");
         ta.remove();
         onCopied();
+        return true;
       } catch {
         showToast("Could not copy automatically.");
+        return false;
       }
     }
+  }
+
+  async function copyWardrobePlainListToClipboard() {
+    const list = getWardrobeItemsForPlainListCopy();
+    if (!list.length) {
+      showToast("No pieces to copy.");
+      return;
+    }
+    const text = buildWardrobePlainNumberedList(list);
+    await writeTextToClipboard(text, {
+      successToast: `Copied ${list.length} piece${list.length === 1 ? "" : "s"} as plain text.`,
+    });
+  }
+
+  async function copyItemPlainTextForAi(item, opts = {}) {
+    const text = buildItemAiStylingBrief(item);
+    const btn = opts.button instanceof HTMLButtonElement ? opts.button : null;
+    const ok = await writeTextToClipboard(text, { successToast: "Copied AI styling brief." });
+    if (ok && btn) playItemDetailCopyAiSuccess(btn);
   }
 
   /** Previously saved Chinese clothing slots → Clothing (典藏·配件 handled in `itemSlot`). */
@@ -5048,6 +5100,224 @@
     const ca = String(recordCategoryForDrill(a, itemSlot(a)) ?? "");
     const cb = String(recordCategoryForDrill(b, itemSlot(b)) ?? "");
     return ca.localeCompare(cb, undefined, { sensitivity: "base" });
+  }
+
+  /**
+   * Editorial archive taxonomy — worldview order (not ecommerce category tabs).
+   * Outerwear → tailoring → knitwear → shirts → trousers → bags → footwear → jewellery → accessories → watches → fragrance.
+   */
+  const EDITORIAL_ARCHIVE_CATEGORY_RANK = {
+    Outerwear: 0,
+    Jackets: 1,
+    Tailoring: 1,
+    "Mid Layer": 2,
+    Layering: 2,
+    Knitwear: 2,
+    Shirts: 3,
+    Tops: 4,
+    "Inner Layer": 4,
+    Bottoms: 5,
+    Trousers: 5,
+    Bags: 6,
+    Footwear: 7,
+    Jewellery: 8,
+    Necklace: 8,
+    Bracelet: 8,
+    Ring: 8,
+    Accessories: 9,
+    "Small accessories": 9,
+    Eyewear: 9,
+    Sunglasses: 9,
+    Glasses: 9,
+    Hats: 9,
+    Dress: 10,
+    Everyday: 10,
+    Dive: 10,
+    Beater: 10,
+    "Dress watch": 10,
+    "Dive watch": 10,
+    Watches: 10,
+    Fragrance: 11,
+    Day: 11,
+    Daywear: 11,
+    Evening: 11,
+  };
+
+  const EDITORIAL_RHYTHM_GROUPS = new Set(["navy_dark", "earth", "grey", "green"]);
+
+  /** @param {object} item */
+  function editorialPrioritySource(item) {
+    const id = String(item?.id ?? "").trim();
+    const globalMap =
+      typeof WARDROBE_EDITORIAL_PRIORITIES !== "undefined" && WARDROBE_EDITORIAL_PRIORITIES
+        ? WARDROBE_EDITORIAL_PRIORITIES[id]
+        : null;
+    const meta =
+      item?.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) ? item.metadata : null;
+    return { globalMap, meta, item };
+  }
+
+  /** 2 = hero, 1 = archive core, 0 = normal. */
+  function itemFeaturedRank(item) {
+    const { globalMap, meta, item: row } = editorialPrioritySource(item);
+    const raw = row?.featured_rank ?? meta?.featured_rank ?? globalMap?.featured_rank;
+    const n = Number(raw);
+    return n === 2 || n === 1 ? n : 0;
+  }
+
+  function itemCanonicalScore(item) {
+    const { globalMap, meta, item: row } = editorialPrioritySource(item);
+    const raw = row?.canonical_score ?? meta?.canonical_score ?? globalMap?.canonical_score;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** @param {object} item */
+  function inferItemColourGroup(item) {
+    const blob = [
+      item?.colour,
+      item?.color,
+      item?.colourCode,
+      item?.colorCode,
+      item?.fabric,
+      item?.name,
+    ]
+      .map((x) => String(x ?? "").trim().toLowerCase())
+      .join(" ");
+    if (!blob) return "neutral";
+    if (/\b(navy|midnight|indigo|charcoal|black|espresso|chocolate|dark)\b/.test(blob)) return "navy_dark";
+    if (/\b(camel|tan|brown|cognac|tobacco|rust|burgundy|wine|color 8|cordovan)\b/.test(blob)) return "earth";
+    if (/\b(sage|olive|green|moss)\b/.test(blob)) return "green";
+    if (/\b(grey|gray|heather|slate|smoke)\b/.test(blob)) return "grey";
+    if (/\b(white|cream|ivory|ecru|linen|sand|beige|natural)\b/.test(blob)) return "light";
+    if (/\b(gold|yellow)\b/.test(blob)) return "gold";
+    if (/\b(blue|azure|ice)\b/.test(blob)) return "blue";
+    if (/\b(red|ruby)\b/.test(blob)) return "red";
+    return "neutral";
+  }
+
+  function itemColourGroup(item) {
+    const { globalMap, meta, item: row } = editorialPrioritySource(item);
+    const raw = String(row?.colour_group ?? meta?.colour_group ?? globalMap?.colour_group ?? "").trim();
+    return raw ? raw.toLowerCase() : inferItemColourGroup(item);
+  }
+
+  function editorialRecordCategoryRank(item) {
+    const c = recordCategoryForDrill(item, itemSlot(item));
+    if (!c) return 900;
+    if (Object.prototype.hasOwnProperty.call(EDITORIAL_ARCHIVE_CATEGORY_RANK, c)) {
+      return EDITORIAL_ARCHIVE_CATEGORY_RANK[c];
+    }
+    return recordCategoryRank(item);
+  }
+
+  /** A/W → all-season → S/S for archive cohesion. */
+  function editorialSeasonRank(item) {
+    const tags = normalizedItemSeasonTags(item);
+    if (tags.includes("AW")) return 0;
+    if (tags.includes("SS")) return 2;
+    return 1;
+  }
+
+  /**
+   * Default collection order — identity-first personal archive (not newest-first).
+   * @param {object} a
+   * @param {object} b
+   */
+  function compareEditorialArchiveItems(a, b) {
+    const fr = itemFeaturedRank(b) - itemFeaturedRank(a);
+    if (fr !== 0) return fr;
+    const cat = editorialRecordCategoryRank(a) - editorialRecordCategoryRank(b);
+    if (cat !== 0) return cat;
+    const slot = browseSlotRank(a) - browseSlotRank(b);
+    if (slot !== 0) return slot;
+    const sea = editorialSeasonRank(a) - editorialSeasonRank(b);
+    if (sea !== 0) return sea;
+    const cs = itemCanonicalScore(b) - itemCanonicalScore(a);
+    if (cs !== 0) return cs;
+    const ka = `${String(a?.brand ?? "")}\0${displayNameWithoutLeadingColour(a)}\0${String(a?.id ?? "")}`;
+    const kb = `${String(b?.brand ?? "")}\0${displayNameWithoutLeadingColour(b)}\0${String(b?.id ?? "")}`;
+    return ka.localeCompare(kb, undefined, { sensitivity: "base" });
+  }
+
+  /**
+   * Light pass — break runs of identical colour_group (esp. navy / earth) without breaking priority tiers.
+   * @param {object[]} list
+   */
+  function applyEditorialColourRhythm(list) {
+    const out = [...list];
+    if (out.length < 3) return out;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < out.length; i++) {
+        const g0 = itemColourGroup(out[i - 1]);
+        const g1 = itemColourGroup(out[i]);
+        if (!EDITORIAL_RHYTHM_GROUPS.has(g0) || g0 !== g1) continue;
+        for (let j = i + 1; j < Math.min(out.length, i + 6); j++) {
+          if (itemColourGroup(out[j]) === g0) continue;
+          if (itemFeaturedRank(out[i]) !== itemFeaturedRank(out[j])) continue;
+          const tmp = out[i];
+          out[i] = out[j];
+          out[j] = tmp;
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  /** @param {object[]} list */
+  function sortItemsEditorialArchive(list) {
+    return applyEditorialColourRhythm([...list].sort(compareEditorialArchiveItems));
+  }
+
+  /**
+   * Homepage opening grid — heroes + balanced slots / colour rhythm (~12–18 pieces).
+   * @param {object[]} pool
+   * @param {{ min?: number, max?: number, target?: number }} [options]
+   */
+  function pickHomeCuratedSelection(pool, options = {}) {
+    const min = Math.max(1, Number(options.min) || 12);
+    const max = Math.max(min, Number(options.max) || 18);
+    const target = Math.min(max, Math.max(min, Number(options.target) || 15));
+    const sorted = sortItemsEditorialArchive(Array.isArray(pool) ? pool : []);
+    /** @type {object[]} */
+    const picked = [];
+    /** @type {Set<string>} */
+    const usedIds = new Set();
+    /** @type {Map<string, number>} */
+    const slotCounts = new Map();
+
+    const tryAdd = (item, { force = false } = {}) => {
+      const id = String(item?.id ?? "").trim();
+      if (!id || usedIds.has(id)) return false;
+      const slot = itemSlot(item);
+      const count = slotCounts.get(slot) ?? 0;
+      if (!force && count >= 5) return false;
+      if (!force && picked.length >= 2) {
+        const g = itemColourGroup(item);
+        const tail = picked.slice(-2).map(itemColourGroup);
+        if (tail[0] === g && tail[1] === g && EDITORIAL_RHYTHM_GROUPS.has(g)) return false;
+      }
+      picked.push(item);
+      usedIds.add(id);
+      slotCounts.set(slot, count + 1);
+      return true;
+    };
+
+    for (const item of sorted.filter((it) => itemFeaturedRank(it) >= 2).slice(0, 9)) {
+      tryAdd(item, { force: true });
+    }
+    for (const item of sorted) {
+      if (picked.length >= target) break;
+      tryAdd(item);
+    }
+    if (picked.length < min) {
+      for (const item of sorted) {
+        if (picked.length >= min) break;
+        tryAdd(item, { force: true });
+      }
+    }
+    return applyEditorialColourRhythm(picked.slice(0, max));
   }
 
   function sanitizeCurrentOutfit() {
@@ -6370,6 +6640,9 @@
     document.getElementById("local-data-download-text-json")?.addEventListener("click", () => {
       downloadWardrobeTextLocalJson();
     });
+    document.getElementById("collection-copy-plain-list")?.addEventListener("click", () => {
+      void copyWardrobePlainListToClipboard();
+    });
   }
 
   /** Push merged custom rows (browser + file) into `data/custom-items.json` when `npm run dev` is running. */
@@ -6806,7 +7079,8 @@
     const key = buildCollectionSortedCacheKey();
     if (key === collectionSortedCacheKey && collectionSortedCache) return collectionSortedCache;
     const filtered = applyFilters(items);
-    collectionSortedCache = [...filtered].sort(compareGridItems);
+    collectionSortedCache =
+      collectionSortMode === "default" ? sortItemsEditorialArchive(filtered) : [...filtered].sort(compareGridItems);
     collectionSortedCacheKey = key;
     return collectionSortedCache;
   }
@@ -8523,10 +8797,9 @@
     const highHost = document.getElementById("ed-lp-highlights");
     const pool = items.filter((it) => buildCoverCandidates(it).length > 0);
     const hlPool = pool.length ? pool : items.slice();
-    shuffleArrayInPlace(hlPool);
-    const highlightItems = hlPool.slice(0, 8);
+    const highlightItems = pickHomeCuratedSelection(hlPool, { min: 12, max: 16, target: 14 });
     if (highHost) {
-      mountHomeEditorialProductSection(highHost, highlightItems, { galleryMax: 4 });
+      mountHomeEditorialProductSection(highHost, highlightItems, { galleryMax: 5 });
     }
 
     /** @type {Set<string>} */
@@ -8681,7 +8954,6 @@
     outfitNotes: document.getElementById("outfit-notes"),
     outfitSave: document.getElementById("outfit-save"),
     outfitClear: document.getElementById("outfit-clear"),
-    stylingBoardClearAll: document.getElementById("styling-board-clear-all"),
     outfitToast: document.getElementById("outfit-toast"),
     savedList: document.getElementById("saved-outfits-list"),
     savedEmpty: document.getElementById("saved-outfits-empty"),
@@ -12721,8 +12993,6 @@
     btn.title = editingSavedOutfitId
       ? "Save changes to the outfit you opened with Edit."
       : "Save the current strip as a new named outfit.";
-    const clearAll = els.stylingBoardClearAll || document.getElementById("styling-board-clear-all");
-    if (clearAll) clearAll.hidden = n === 0;
     const clearBoard = els.outfitClear || document.getElementById("outfit-clear");
     if (clearBoard) clearBoard.hidden = n === 0;
   }
@@ -15910,11 +16180,7 @@
   function compareCollectionGridItems(a, b) {
     const drilled = subcategoryFilters.size > 0;
     if (!drilled) {
-      const tax = compareByTaxonomy(a, b);
-      if (tax !== 0) return tax;
-      const ka = `${String(a?.brand ?? "")}\0${String(a?.name ?? "")}\0${String(a?.id ?? "")}`;
-      const kb = `${String(b?.brand ?? "")}\0${String(b?.name ?? "")}\0${String(b?.id ?? "")}`;
-      return ka.localeCompare(kb, undefined, { sensitivity: "base" });
+      return compareEditorialArchiveItems(a, b);
     }
 
     const ca = isCustomWardrobeItem(a);
@@ -22256,10 +22522,6 @@
 
     if (els.outfitClear) {
       els.outfitClear.addEventListener("click", runClearStylingBoard);
-    }
-
-    if (els.stylingBoardClearAll) {
-      els.stylingBoardClearAll.addEventListener("click", runClearStylingBoard);
     }
 
     if (els.savedList) {

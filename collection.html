@@ -544,6 +544,15 @@
       </section>
       <div id="grid" class="grid" role="list"></div>
       <footer class="collection-actions tw-admin-only" hidden aria-label="Collection actions">
+        <button
+          type="button"
+          class="btn btn--ghost collection-actions__copy-list tw-admin-only"
+          id="collection-copy-plain-list"
+          title="Copy all pieces as a numbered plain-text list (brand, name, colour code, size)"
+          aria-label="Copy wardrobe list as plain text"
+        >
+          Copy list
+        </button>
         <button type="button" class="btn btn--ghost collection-actions__add" id="add-item-open">
           + NEW PIECE
         </button>
@@ -603,17 +612,17 @@
                   role="list"
                   aria-label="Pieces on outfits"
                 ></div>
-                <button
-                  type="button"
-                  class="btn btn--ghost styling-board__clear-link"
-                  id="outfit-clear"
-                  hidden
-                  aria-label="Clear All pieces from Outfits"
-                >
-                  Clear All
-                </button>
               </div>
             </div>
+            <button
+              type="button"
+              class="btn btn--ghost styling-board__clear-link"
+              id="outfit-clear"
+              hidden
+              aria-label="Clear All pieces from Outfits"
+            >
+              Clear All
+            </button>
             <p id="outfit-empty" class="styling-board__empty" hidden>
               Save pieces here to build outfits from the collection.
             </p>
@@ -659,9 +668,6 @@
           </button>
           <button type="button" class="styling-board-drawer__cta styling-board-drawer__cta--primary" id="styling-board-continue">
             Continue Browsing
-          </button>
-          <button type="button" class="styling-board-drawer__clear-all" id="styling-board-clear-all" hidden>
-            Clear All
           </button>
         </footer>
       </div>
@@ -1048,6 +1054,7 @@
     </dialog>
 
     <script src="data/wardrobe.js"></script>
+    <script src="data/editorial-priorities.js"></script>
     <script src="js/tw-supabase-config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.4/dist/umd/supabase.js"></script>
     <script src="app.js"></script>
