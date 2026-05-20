@@ -56,8 +56,8 @@ The migration enables RLS with **prototype** policies:
 ## 6. Google Sign-In (editors only)
 
 1. Supabase Dashboard → **Authentication → Providers** → enable **Google** (OAuth client from Google Cloud Console).
-2. **URL Configuration → Site URL:** `https://timless-wardrobe.vercel.app` (note spelling: **timless**, not timeless — `timeless-wardrobe.vercel.app` 404s).
-3. **Redirect URLs:** `http://127.0.0.1:8787/**`, `http://localhost:8787/**`, `https://timless-wardrobe.vercel.app/**`, optional `https://tylin496.github.io/timeless-wardrobe/**` if you use GitHub Pages.
+2. **URL Configuration → Site URL:** `https://timeless-wardrobe.vercel.app`
+3. **Redirect URLs:** `http://127.0.0.1:8787/**`, `http://localhost:8787/**`, `https://timeless-wardrobe.vercel.app/**`, optional `https://tylin496.github.io/timeless-wardrobe/**` if you use GitHub Pages.
 4. In `js/tw-supabase-config.js`, set `SITE_ORIGIN` to the same URL (OAuth return base).
 5. Run `supabase/migrations/20260520120000_wardrobe_editor_auth.sql` in the SQL editor.
 6. Insert your Gmail into `wardrobe_editors`:

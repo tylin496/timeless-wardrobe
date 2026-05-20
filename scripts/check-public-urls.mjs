@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Fail if the broken Vercel hostname appears anywhere in the repo (except this script and DEPLOYMENT docs).
+ * Fail if the legacy misspelled Vercel hostname appears outside docs.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const BAD = "timeless-wardrobe.vercel.app";
+const BAD = "timless-wardrobe.vercel.app";
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".cursor"]);
 const SKIP_FILES = new Set(["check-public-urls.mjs"]);
-const ALLOW_PATH_SNIPPETS = ["docs/DEPLOYMENT.md", "docs/SUPABASE.md", "README.md", "app.js"];
+const ALLOW_PATH_SNIPPETS = ["docs/DEPLOYMENT.md", "docs/SUPABASE.md", "README.md"];
 
 /** @param {string} dir */
 function walk(dir, out = []) {
@@ -38,7 +38,7 @@ for (const file of walk(root)) {
 }
 
 if (hits.length) {
-  console.error(`Found forbidden URL "${BAD}" (Vercel 404). Fix or document in allowlist:\n`);
+  console.error(`Found forbidden URL "${BAD}" (legacy Vercel typo). Fix or document in allowlist:\n`);
   for (const h of hits) console.error(`  ${h}`);
   process.exit(1);
 }

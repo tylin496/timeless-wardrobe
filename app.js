@@ -1995,8 +1995,8 @@
     document.getElementById("tw-editor-auth")?.remove();
   }
 
-  /** Vercel production (project name is `timless-wardrobe`, not timeless-wardrobe). */
-  const TW_VERCEL_PRODUCTION_ORIGIN = "https://timless-wardrobe.vercel.app";
+  /** Vercel production default origin. */
+  const TW_VERCEL_PRODUCTION_ORIGIN = "https://timeless-wardrobe.vercel.app";
 
   function twSiteBaseUrl() {
     const configured = String(globalThis.APP_CONFIG?.SITE_ORIGIN ?? "").trim().replace(/\/$/, "");
@@ -2009,7 +2009,7 @@
   }
 
   /**
-   * OAuth must return to the live deployment. `timeless-wardrobe.vercel.app` is not wired (404).
+   * OAuth must return to the live deployment (`SITE_ORIGIN` or current `.vercel.app` host).
    * @returns {string}
    */
   function twOAuthRedirectUrl() {
@@ -2036,9 +2036,14 @@
     }
     if (itemIdForEditAfter) twPendingItemEditId = String(itemIdForEditAfter).trim();
     const redirectTo = twOAuthRedirectUrl();
+    /** Force Google account picker when there is no editor session (hidden `/edit` entry). */
+    const oauthOptions = { redirectTo };
+    if (!isTwEditorUser()) {
+      oauthOptions.queryParams = { prompt: "login" };
+    }
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo },
+      options: oauthOptions,
     });
     if (error) {
       console.warn("Google sign-in failed:", error);
@@ -2092,14 +2097,12 @@
       }
     });
     removeTwEditorAuthUi();
-    if (
-      !isTwLocalDevHost() &&
-      isTwEditorGateActive() &&
-      !isTwEditorUser() &&
-      isSupabaseReady() &&
-      !document.getElementById("item-detail-root")
-    ) {
-      void signInWithGoogleEditor();
+    if (!isTwLocalDevHost() && isTwEditorGateActive() && !isTwEditorUser() && isSupabaseReady()) {
+      const route = parseItemPageRoute();
+      if (route.id && route.hiddenEdit) twPendingItemEditId = String(route.id);
+      void signInWithGoogleEditor(
+        twPendingItemEditId ? { itemIdForEditAfter: twPendingItemEditId } : {}
+      );
     }
     if (isTwEditorUser() && twPendingItemEditId) {
       const pendingId = twPendingItemEditId;
@@ -10360,13 +10363,6 @@
     return [{ raw: "", label: SUBCATEGORY_ALL_LABEL }, ...entries];
   }
 
-  /** Desktop mega menu nav: subcategory links only (no “All” / division heading row). */
-  function desktopMegaMenuSubcategoryEntriesForSlot(browseSlot, pool) {
-    return megaMenuSubcategoryEntriesForSlot(browseSlot, pool).filter(
-      (entry) => String(entry.raw ?? "").trim() !== ""
-    );
-  }
-
   /** Mobile drawer drill: first row is always “All” (not “All Clothing”, etc.). */
   function mobileNavSubcategoryAllLabel(_browseSlot) {
     return SUBCATEGORY_ALL_LABEL;
@@ -17182,6 +17178,21 @@
       const wrap = document.createElement("div");
       wrap.className = "item-detail__body item-detail__body--edit";
 
+      if (isPageEdit && isTwEditorUser() && twEditorSession?.email) {
+        const sessionBar = document.createElement("div");
+        sessionBar.className = "item-detail__editor-session";
+        const who = document.createElement("span");
+        who.className = "item-detail__editor-session-label";
+        who.textContent = `Editing as ${twEditorSession.email}`;
+        const signOutBtn = document.createElement("button");
+        signOutBtn.type = "button";
+        signOutBtn.className = "btn btn--ghost item-detail__editor-session-signout";
+        signOutBtn.textContent = "Sign out";
+        signOutBtn.addEventListener("click", () => void signOutGoogleEditor());
+        sessionBar.append(who, signOutBtn);
+        wrap.appendChild(sessionBar);
+      }
+
       const statusEl = document.createElement("p");
       statusEl.id = "item-detail-edit-status";
       statusEl.className = "item-edit-save-status";
@@ -18416,6 +18427,43 @@
     return hit || null;
   }
 
+  function renderItemDetailEditorSignInGate(root, item) {
+    detailItemId = item.id;
+    root.innerHTML = "";
+    root.classList.remove("item-detail__root--edit");
+    const wrap = document.createElement("div");
+    wrap.className = "item-detail__editor-gate";
+    wrap.setAttribute("role", "region");
+    wrap.setAttribute("aria-labelledby", "item-editor-gate-heading");
+    const h = document.createElement("h2");
+    h.id = "item-editor-gate-heading";
+    h.className = "item-detail__editor-gate-title";
+    h.textContent = "Sign in to edit";
+    const hint = document.createElement("p");
+    hint.className = "item-detail__editor-gate-hint";
+    hint.textContent =
+      "This hidden URL is for wardrobe editors only. Sign in with your approved Google account to open the edit form.";
+    const actions = document.createElement("div");
+    actions.className = "item-detail__editor-gate-actions";
+    const signInBtn = document.createElement("button");
+    signInBtn.type = "button";
+    signInBtn.className = "btn";
+    signInBtn.textContent = "Sign in with Google";
+    signInBtn.addEventListener("click", () => {
+      twPendingItemEditId = String(item.id);
+      void signInWithGoogleEditor({ itemIdForEditAfter: item.id });
+    });
+    const viewLink = document.createElement("a");
+    viewLink.className = "btn btn--ghost";
+    viewLink.href = buildItemPageUrl(item.id, { edit: false }).toString();
+    viewLink.textContent = "View piece (read-only)";
+    actions.append(signInBtn, viewLink);
+    wrap.append(h, hint, actions);
+    root.appendChild(wrap);
+    document.title = `${item.brand} — ${displayNameWithoutLeadingColour(item)} · Timeless Wardrobe`;
+    recordRecentlyViewedItem(item.id);
+  }
+
   async function runItemDetailPage(root, pageId) {
     const route = parseItemPageRoute();
     const resolvedPageId = String(pageId ?? route.id ?? "")
@@ -18445,7 +18493,16 @@
       if (!isSupabaseReady()) {
         showToast(CLOUD_WRITE_REQUIRED_MESSAGE);
         replaceItemPageUrl(item.id, false);
-      } else if (hiddenEdit || (isTwLocalDevHost() && wantEdit)) {
+        renderItemDetailContent(root, item, { edit: false });
+        return;
+      }
+      if (hiddenEdit && !isTwLocalDevHost()) {
+        twPendingItemEditId = String(item.id);
+        renderItemDetailEditorSignInGate(root, item);
+        void signInWithGoogleEditor({ itemIdForEditAfter: item.id });
+        return;
+      }
+      if (isTwLocalDevHost() && wantEdit) {
         twPendingItemEditId = String(item.id);
         void signInWithGoogleEditor({ itemIdForEditAfter: item.id });
       } else {
@@ -20606,7 +20663,7 @@
       }
 
       const seasonalPool = poolItemsForDrillSubcategories({ respectCategory: false });
-      const dedupedEntries = desktopMegaMenuSubcategoryEntriesForSlot(slot, seasonalPool);
+      const dedupedEntries = megaMenuSubcategoryEntriesForSlot(slot, seasonalPool);
       if (!dedupedEntries.length) {
         hideHeaderSubmenu();
         return;
