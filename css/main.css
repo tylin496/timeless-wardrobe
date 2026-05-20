@@ -3605,6 +3605,13 @@ body.collection-ui--search-results-plp .items-toolbar__filter-sort-btn {
 }
 
 @media (max-width: 900px) {
+  .site-header__search-wrap,
+  .site-header__search-megamenu,
+  .site-header__search-megamenu-inner,
+  .site-header__search-surface {
+    overflow-x: hidden;
+  }
+
   .site-header__search-wrap {
     --tw-search-inline-gutter: clamp(1.25rem, 7vw + 0.45rem, 11rem);
     --tw-search-container-pad: var(--tw-search-inline-gutter);
@@ -3616,9 +3623,9 @@ body.collection-ui--search-results-plp .items-toolbar__filter-sort-btn {
     flex-direction: column;
     gap: 1.375rem;
     box-sizing: border-box;
-    width: calc(100% + var(--tw-search-inline-gutter) + env(safe-area-inset-right, 0px));
+    width: 100%;
     max-width: none;
-    margin-right: calc(-1 * (var(--tw-search-inline-gutter) + env(safe-area-inset-right, 0px)));
+    margin-right: 0;
     max-height: none;
     overflow: visible;
     padding-top: 0;

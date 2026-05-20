@@ -8028,7 +8028,8 @@
     surface.addEventListener(
       "pointerdown",
       (e) => {
-        if (e.button !== 0 || isInteractiveTarget(e.target)) return;
+        // Touch pointer may report non-primary button values on some engines; only enforce button for mouse.
+        if ((e.pointerType === "mouse" && e.button !== 0) || isInteractiveTarget(e.target)) return;
         tracking = true;
         dragging = false;
         activePointerId = e.pointerId;
@@ -23585,6 +23586,12 @@
     wireMobileSheetSwipeDismiss(mobileSearchSheet, () => closeHeaderSearch(), {
       handleSelector: ".site-header__search-head, .site-header__search-top",
       shouldHandle: () => isHeaderCompactLayout() && isHeaderSearchWrapOpen(),
+    });
+    wireMobileSheetSwipeDismiss(mobileShell, () => closeMobileCategoryPanel(), {
+      shouldHandle: () =>
+        isHeaderCompactLayout() &&
+        document.body.classList.contains("collection-ui--mobile-nav-open") &&
+        !mobileShell?.classList.contains("is-closing"),
     });
     if (document.body.dataset.twStylingBoardEscapeWired !== "1") {
       document.body.dataset.twStylingBoardEscapeWired = "1";
