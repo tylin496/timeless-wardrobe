@@ -1923,11 +1923,10 @@
     return Boolean(twEditorSession?.email && !twEditorSession.denied);
   }
 
-  /** Collection-wide admin tools (add piece, export, duplicate on PDP, etc.). */
-  function isTwAdminMode() {
-    if (isTwLocalDevHost()) return true;
+  function isTwAdminIntentRequested() {
     try {
-      if (new URLSearchParams(globalThis.location.search).get("admin") === "true") return true;
+      const params = new URLSearchParams(globalThis.location.search);
+      if (params.get("admin") === "true" || params.get("editor") === "1") return true;
     } catch {
       /* */
     }
@@ -1937,6 +1936,12 @@
       /* private mode */
     }
     return false;
+  }
+
+  /** Collection-wide admin tools (add piece, export, duplicate on PDP, etc.). */
+  function isTwAdminMode() {
+    if (isTwLocalDevHost()) return true;
+    return isTwEditorUser() && isTwAdminIntentRequested();
   }
 
   /**
@@ -1987,6 +1992,11 @@
     if (isTwLocalDevHost()) return true;
     const route = parseItemPageRoute();
     if (route.editorGate) return true;
+    try {
+      if (new URLSearchParams(globalThis.location.search).get("admin") === "true") return true;
+    } catch {
+      /* */
+    }
     return Boolean(route.hiddenEdit && route.id);
   }
 
@@ -2053,6 +2063,11 @@
 
   async function signOutGoogleEditor() {
     twPendingItemEditId = "";
+    try {
+      localStorage.removeItem(TW_ADMIN_MODE_STORAGE_KEY);
+    } catch {
+      /* private mode */
+    }
     if (supabaseClient?.auth) {
       const { error } = await supabaseClient.auth.signOut();
       if (error) console.warn("Sign out failed:", error);
@@ -2149,8 +2164,15 @@
 
   function setTwAdminMode(enabled) {
     if (!isTwLocalDevHost()) {
+      try {
+        if (enabled) localStorage.setItem(TW_ADMIN_MODE_STORAGE_KEY, "true");
+        else localStorage.removeItem(TW_ADMIN_MODE_STORAGE_KEY);
+      } catch {
+        /* private mode */
+      }
       if (enabled) void signInWithGoogleEditor();
       else void signOutGoogleEditor();
+      applyTwAdminModeUi();
       return;
     }
     const on = Boolean(enabled);
@@ -13896,6 +13918,32 @@
   /** Short line for wardrobe_items upsert failures (add / edit / duplicate). */
   const CLOUD_WRITE_REQUIRED_MESSAGE =
     "Cloud save is required. Supabase is not connected yet — configure js/tw-supabase-config.js (URL + anon key) and retry.";
+  const TW_EDITOR_WRITE_REQUIRED_MESSAGE =
+    "Sign in with an authorized Google editor account before changing the cloud wardrobe.";
+
+  async function requireTwEditorCloudWriteAccess() {
+    if (isTwLocalDevHost()) return true;
+    if (!isTwEditorUser()) {
+      showToast(TW_EDITOR_WRITE_REQUIRED_MESSAGE);
+      if (isSupabaseReady()) void signInWithGoogleEditor();
+      return false;
+    }
+    if (!isSupabaseReady() || typeof supabaseClient?.rpc !== "function") {
+      showToast(CLOUD_WRITE_REQUIRED_MESSAGE);
+      return false;
+    }
+    const { data, error } = await supabaseClient.rpc("tw_is_wardrobe_editor");
+    if (error) {
+      console.warn("Editor write permission check failed:", error);
+      showToast(formatSupabaseUserMessage(error) || TW_EDITOR_WRITE_REQUIRED_MESSAGE);
+      return false;
+    }
+    if (data !== true) {
+      showToast(TW_EDITOR_WRITE_REQUIRED_MESSAGE);
+      return false;
+    }
+    return true;
+  }
 
   function messageForCloudUploadFailure(context, err) {
     const detail = formatSupabaseUserMessage(err);
@@ -13963,8 +14011,8 @@
   }
 
   /**
-   * Remove a wardrobe piece via Supabase only: unlink outfit refs, delete referenced Storage objects, DELETE
-   * the `wardrobe_items` row. If Supabase is not ready, refuses (no offline delete).
+   * Remove a wardrobe piece via Supabase only: verify editor access, unlink outfit refs, DELETE
+   * the `wardrobe_items` row, then clean up referenced Storage objects. If Supabase is not ready, refuses (no offline delete).
    * The id is always saved to `collection_hidden_ids` so `syncMissingRowsToSupabase` never re-upserts seed/file rows with the same id
    * (critical when the catalogue comes only from Supabase). With seed-merge catalogue, hidden ids still suppress resurgence after reload.
    */
@@ -13976,6 +14024,7 @@
       showToast(CLOUD_WRITE_REQUIRED_MESSAGE);
       return;
     }
+    if (!(await requireTwEditorCloudWriteAccess())) return;
 
     const isCustom = sid.startsWith("custom-");
 
@@ -13994,13 +14043,17 @@
         toastCloudDeleteFailure("unlink", e1);
         return;
       }
-      try {
-        await deleteWardrobeItemImagesFromCloud(item);
-      } catch (eImg) {
-        console.warn("Image cleanup before delete (continuing):", eImg);
-      }
-      const { error } = await supabaseClient.from(WARDROBE_TABLE).delete().eq("id", sid);
+      const { data: deletedRows, error } = await supabaseClient
+        .from(WARDROBE_TABLE)
+        .delete()
+        .eq("id", sid)
+        .select("id");
       if (error) throw error;
+      if (!Array.isArray(deletedRows) || deletedRows.length !== 1) {
+        const blocked = new Error("No wardrobe row was deleted. Sign in as an editor and retry.");
+        /** @type {any} */ (blocked).code = "WARDROBE_DELETE_BLOCKED";
+        throw blocked;
+      }
 
       wardrobeBase = wardrobeBase.filter((row) => String(row?.id ?? "") !== sid);
 
@@ -14022,6 +14075,11 @@
       const hidden = loadCollectionHiddenIds();
       hidden.add(sid);
       await saveCollectionHiddenIds(hidden);
+      try {
+        await deleteWardrobeItemImagesFromCloud(item);
+      } catch (eImg) {
+        console.warn("Image cleanup after delete (continuing):", eImg);
+      }
     } catch (e) {
       cloudBackedCustomItems = prevCloud;
       try {
@@ -14093,6 +14151,10 @@
     if (!isSupabaseReady()) {
       showAddItemFormMsg(CLOUD_WRITE_REQUIRED_MESSAGE, true);
       showToast(CLOUD_WRITE_REQUIRED_MESSAGE);
+      return;
+    }
+    if (!(await requireTwEditorCloudWriteAccess())) {
+      showAddItemFormMsg(TW_EDITOR_WRITE_REQUIRED_MESSAGE, true);
       return;
     }
 
@@ -16380,6 +16442,10 @@
       showToast(CLOUD_WRITE_REQUIRED_MESSAGE);
       return;
     }
+    if (!(await requireTwEditorCloudWriteAccess())) {
+      setMsg(TW_EDITOR_WRITE_REQUIRED_MESSAGE, true);
+      return;
+    }
 
     setMsg("Saving…", false);
 
@@ -18310,6 +18376,7 @@
               cancelLabel: "取消",
             });
             if (!ok) return;
+            if (!(await requireTwEditorCloudWriteAccess())) return;
             if (dupBtnEl) dupBtnEl.disabled = true;
             try {
               showToast("Copying photos…");

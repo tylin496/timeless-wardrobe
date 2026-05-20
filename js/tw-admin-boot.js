@@ -6,11 +6,8 @@
   try {
     var h = location.hostname;
     var localDev = h === "localhost" || h === "127.0.0.1" || h === "[::1]";
-    admin =
-      localDev ||
-      /(?:^|[?&])admin=true(?:&|$)/.test(location.search) ||
-      localStorage.getItem("adminMode") === "true";
-    if (admin && /(?:^|[?&])admin=true(?:&|$)/.test(location.search)) {
+    admin = localDev;
+    if (localDev && /(?:^|[?&])admin=true(?:&|$)/.test(location.search)) {
       localStorage.setItem("adminMode", "true");
     }
   } catch (e) {
