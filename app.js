@@ -1990,51 +1990,27 @@
     return Boolean(route.hiddenEdit && route.id);
   }
 
-  function syncTwEditorAuthUi() {
-    if (!isTwLocalDevHost()) return;
-    const wrap = document.getElementById("tw-editor-auth");
-    if (!wrap) return;
-    const signInBtn = wrap.querySelector("[data-tw-editor-sign-in]");
-    const signedIn = wrap.querySelector("[data-tw-editor-signed-in]");
-    const emailEl = wrap.querySelector("[data-tw-editor-email]");
-    const signOutBtn = wrap.querySelector("[data-tw-editor-sign-out]");
-    const on = isTwEditorUser();
-    const denied = Boolean(twEditorSession?.denied);
-    if (signInBtn instanceof HTMLElement) signInBtn.hidden = on || denied;
-    if (signedIn instanceof HTMLElement) signedIn.hidden = !on;
-    if (emailEl) emailEl.textContent = on ? twEditorSession.email : "";
-    if (signOutBtn instanceof HTMLElement) signOutBtn.hidden = !on && !denied;
-    wrap.hidden = false;
+  /** Header never shows sign-in chrome — OAuth only via hidden `/edit` or `?editor=1` on production. */
+  function removeTwEditorAuthUi() {
+    document.getElementById("tw-editor-auth")?.remove();
   }
 
-  function ensureTwEditorAuthUi() {
-    if (!isTwLocalDevHost()) return;
-    if (document.getElementById("tw-editor-auth")) {
-      syncTwEditorAuthUi();
-      return;
+  /**
+   * OAuth must return to a stable origin. Preview `*.vercel.app` deployment URLs expire → DEPLOYMENT_NOT_FOUND.
+   * @returns {string}
+   */
+  function twOAuthRedirectUrl() {
+    const configured = String(globalThis.APP_CONFIG?.SITE_ORIGIN ?? "").trim().replace(/\/$/, "");
+    const origin = isTwLocalDevHost()
+      ? globalThis.location.origin
+      : configured || "https://timeless-wardrobe.vercel.app";
+    try {
+      const path = globalThis.location.pathname || "/";
+      const search = globalThis.location.search || "";
+      return new URL(`${path}${search}`, `${origin}/`).href;
+    } catch {
+      return `${origin}/`;
     }
-    const tools = document.querySelector(".site-header__tools");
-    if (!tools) return;
-    const wrap = document.createElement("div");
-    wrap.id = "tw-editor-auth";
-    wrap.className = "tw-editor-auth";
-    wrap.hidden = isTwLocalDevHost();
-    wrap.innerHTML =
-      '<button type="button" class="tw-editor-auth__btn" data-tw-editor-sign-in hidden>Sign in</button>' +
-      '<span class="tw-editor-auth__signed-in" data-tw-editor-signed-in hidden>' +
-      '<span class="tw-editor-auth__email" data-tw-editor-email></span>' +
-      '<button type="button" class="tw-editor-auth__btn tw-editor-auth__btn--ghost" data-tw-editor-sign-out>Sign out</button>' +
-      "</span>";
-    const menuBtn = document.getElementById("site-header-menu-btn");
-    if (menuBtn) tools.insertBefore(wrap, menuBtn);
-    else tools.appendChild(wrap);
-    wrap.querySelector("[data-tw-editor-sign-in]")?.addEventListener("click", () => {
-      void signInWithGoogleEditor();
-    });
-    wrap.querySelector("[data-tw-editor-sign-out]")?.addEventListener("click", () => {
-      void signOutGoogleEditor();
-    });
-    syncTwEditorAuthUi();
   }
 
   async function signInWithGoogleEditor({ itemIdForEditAfter } = {}) {
@@ -2043,7 +2019,7 @@
       return;
     }
     if (itemIdForEditAfter) twPendingItemEditId = String(itemIdForEditAfter).trim();
-    const redirectTo = globalThis.location.href;
+    const redirectTo = twOAuthRedirectUrl();
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo },
@@ -2068,7 +2044,7 @@
   async function initTwEditorAuth() {
     if (!supabaseClient?.auth) {
       twEditorSession = null;
-      syncTwEditorAuthUi();
+      removeTwEditorAuthUi();
       return;
     }
     const { data, error } = await supabaseClient.auth.getSession();
@@ -2080,7 +2056,7 @@
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       twEditorSession = resolveTwEditorSession(session);
       applyTwAdminModeUi();
-      syncTwEditorAuthUi();
+      removeTwEditorAuthUi();
       if (!isTwEditorUser()) {
         if (twEditorSession?.denied) {
           showToast("This Google account cannot edit this wardrobe.");
@@ -2099,8 +2075,7 @@
         showToast("Signed in — you can edit now.");
       }
     });
-    syncTwEditorAuthUi();
-    if (isTwLocalDevHost()) ensureTwEditorAuthUi();
+    removeTwEditorAuthUi();
     if (
       !isTwLocalDevHost() &&
       isTwEditorGateActive() &&
@@ -2130,7 +2105,7 @@
       if (on) el.removeAttribute("hidden");
       else el.setAttribute("hidden", "");
     });
-    syncTwEditorAuthUi();
+    removeTwEditorAuthUi();
     if (!on) {
       const addDlg = document.getElementById("add-item-dialog");
       if (addDlg?.open) {
@@ -2189,7 +2164,7 @@
       }
     }
     applyTwAdminModeUi();
-    ensureTwEditorAuthUi();
+    removeTwEditorAuthUi();
     if (document.body.dataset.twAdminShortcutWired === "1") return;
     document.body.dataset.twAdminShortcutWired = "1";
     document.addEventListener("keydown", (e) => {

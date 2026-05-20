@@ -56,22 +56,24 @@ The migration enables RLS with **prototype** policies:
 ## 6. Google Sign-In (editors only)
 
 1. Supabase Dashboard → **Authentication → Providers** → enable **Google** (OAuth client from Google Cloud Console).
-2. Add redirect URLs: `http://127.0.0.1:8787/**`, `http://localhost:8787/**`, and your production origin (e.g. `https://timeless-wardrobe.vercel.app/**`).
-3. Run `supabase/migrations/20260520120000_wardrobe_editor_auth.sql` in the SQL editor.
-4. Insert your Gmail into `wardrobe_editors`:
+2. **URL Configuration → Site URL:** `https://timeless-wardrobe.vercel.app` (not a preview `*-git-*.vercel.app` link).
+3. **Redirect URLs:** `http://127.0.0.1:8787/**`, `http://localhost:8787/**`, `https://timeless-wardrobe.vercel.app/**`.
+4. In `js/tw-supabase-config.js`, set `SITE_ORIGIN` to the same production URL (OAuth return base).
+5. Run `supabase/migrations/20260520120000_wardrobe_editor_auth.sql` in the SQL editor.
+6. Insert your Gmail into `wardrobe_editors`:
 
    ```sql
    insert into public.wardrobe_editors (email) values ('you@gmail.com');
    ```
 
-5. Set the same address in `js/tw-supabase-config.js` → `EDITOR_ALLOWED_EMAILS`.
+7. Set the same address in `js/tw-supabase-config.js` → `EDITOR_ALLOWED_EMAILS`.
 
 **Hidden entry (no sign-in button on the public site):**
 
 - Edit one piece: `item.html?id=<piece-id>/edit` (example: `item.html?id=glen-check-tweed-jacket/edit`) — opens Google sign-in, then the edit form.
 - Collection tools: `collection.html?editor=1` — sign-in, then add-piece / admin chrome.
 
-Local dev (`127.0.0.1`) still skips sign-in and may show a small header sign-in control for testing.
+Local dev (`127.0.0.1`) still skips sign-in; no sign-in control appears in the header on any environment.
 
 ## 7. Later (Vercel / build)
 

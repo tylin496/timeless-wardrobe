@@ -17,7 +17,6 @@
   "rewrites": [
     { "source": "/collection/item.html", "destination": "/item.html" },
     { "source": "/collection/item", "destination": "/item.html" },
-    { "source": "/item/:id/edit", "destination": "/item.html?id=:id/edit" },
     { "source": "/collection", "destination": "/collection.html" },
     { "source": "/collection/:division", "destination": "/collection.html" },
     { "source": "/item/:id/edit", "destination": "/item.html?id=:id/edit" },
