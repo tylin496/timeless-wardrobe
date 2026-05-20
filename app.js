@@ -2549,6 +2549,45 @@
     }
   }
 
+  function hasTwAuthCallbackPayload() {
+    try {
+      const url = new URL(globalThis.location.href);
+      const qp = url.searchParams;
+      const hash = String(url.hash ?? "");
+      return (
+        qp.has("code") ||
+        qp.has("state") ||
+        qp.has("error") ||
+        qp.has("error_description") ||
+        hash.includes("access_token=") ||
+        hash.includes("refresh_token=")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function waitForTwLoginSessionResolution(attempt = 0) {
+    if (!isTwLoginPage()) return;
+    if (isTwEditorUser()) {
+      updateLoginPageStatus("Signed in. Redirecting…");
+      applyTwAdminModeUi();
+      completeTwLoginPageRedirect();
+      return;
+    }
+    if (twEditorSession?.denied) {
+      updateLoginPageStatus("This Google account cannot edit this wardrobe.", { showRetry: true });
+      twLoginOAuthKickoff = false;
+      return;
+    }
+    if (attempt >= 40) {
+      updateLoginPageStatus("Sign-in timed out. Please try again.", { showRetry: true });
+      twLoginOAuthKickoff = false;
+      return;
+    }
+    globalThis.setTimeout(() => waitForTwLoginSessionResolution(attempt + 1), 120);
+  }
+
   function completeTwLoginPageRedirect() {
     if (!isTwLoginPage()) return;
     try {
@@ -2577,6 +2616,13 @@
     }
     if (twEditorSession?.denied) {
       updateLoginPageStatus("This Google account cannot edit this wardrobe.", { showRetry: true });
+      return;
+    }
+    if (hasTwAuthCallbackPayload()) {
+      // OAuth callback is back on /login; wait for session hydration instead of re-opening Google.
+      updateLoginPageStatus("Signed in. Redirecting…");
+      twLoginOAuthKickoff = true;
+      waitForTwLoginSessionResolution();
       return;
     }
     if (twLoginOAuthKickoff) return;
@@ -8574,6 +8620,19 @@
   }
 
   /**
+   * Collection Highlights tweak: keep Balmacaan on a stable hero frame.
+   * @param {object} item
+   * @returns {string}
+   */
+  function pickHighlightsPreferredGallerySrc(item) {
+    const itemId = String(item?.id ?? "").trim();
+    const galleryPool = homeEditorialGalleryPool(item);
+    if (!galleryPool.length) return "";
+    if (itemId === "balmacaan-coat") return galleryPool[0] || "";
+    return "";
+  }
+
+  /**
    * Whole section uses one mode — never mix cutout covers with lifestyle gallery in the same row.
    * @param {object[]} items
    */
@@ -8623,9 +8682,14 @@
 
       if (mode === "gallery") {
         const galleryPool = homeEditorialGalleryPool(item);
-        const available = galleryPool.filter((u) => !usedUrls.has(u));
-        const pickFrom = available.length ? available : galleryPool;
-        displaySrc = pickWeightedHomeEditorialGalleryUrl(pickFrom, cover) || cover;
+        const preferred = pickHighlightsPreferredGallerySrc(item);
+        if (preferred) {
+          displaySrc = preferred;
+        } else {
+          const available = galleryPool.filter((u) => !usedUrls.has(u));
+          const pickFrom = available.length ? available : galleryPool;
+          displaySrc = pickWeightedHomeEditorialGalleryUrl(pickFrom, cover) || cover;
+        }
         displayKind = "gallery";
       }
 
