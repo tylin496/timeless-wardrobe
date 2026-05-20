@@ -21380,7 +21380,32 @@
     return new Promise((r) => setTimeout(r, ms));
   }
 
+  const TW_INTRO_LOADER_SESSION_KEY = "tw-intro-loader-v1";
   let twPageLoaderShellInstalled = false;
+
+  function shouldShowTwIntroPageLoader() {
+    try {
+      return sessionStorage.getItem(TW_INTRO_LOADER_SESSION_KEY) !== "1";
+    } catch {
+      return true;
+    }
+  }
+
+  function markTwIntroPageLoaderShown() {
+    try {
+      sessionStorage.setItem(TW_INTRO_LOADER_SESSION_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearTwPageLoaderBodyState() {
+    document.body.classList.remove(
+      "tw-page-loader-active",
+      "tw-page-loader-main-pending",
+      "tw-page-loader-main-reveal"
+    );
+  }
 
   function installTwPageLoaderShell() {
     if (twPageLoaderShellInstalled || !document.body) return;
@@ -21440,7 +21465,12 @@
     initTwAdminMode();
     installPageThemeLifecycle();
     ensureHomeHeroPreloadLink();
-    installTwPageLoaderShell();
+    const showIntroLoader = shouldShowTwIntroPageLoader();
+    if (showIntroLoader) {
+      installTwPageLoaderShell();
+    } else {
+      clearTwPageLoaderBodyState();
+    }
     const twLoaderPageStarted = performance.now();
     try {
     let deferredSeedSyncSnapshot = /** @type {object[] | null} */ (null);
@@ -21688,7 +21718,12 @@
       devAsset?.refreshDomImages?.();
     }
     } finally {
-      await completeTwInitialPageLoader(twLoaderPageStarted);
+      if (showIntroLoader) {
+        await completeTwInitialPageLoader(twLoaderPageStarted);
+        markTwIntroPageLoaderShown();
+      } else {
+        clearTwPageLoaderBodyState();
+      }
     }
   }
 
