@@ -2082,7 +2082,7 @@
       if (!heroImg || !heroHost) return;
       const projected = itemProjectionForOutfitSlot(item, { itemId: String(item.id), colourKey: String(colourKey) });
       const heroRender =
-        heroHost.classList.contains("item-detail__media") ? ITEM_DETAIL_GALLERY_RENDER : COLLECTION_GRID_CARD_RENDER;
+        heroHost.classList.contains("item-detail__media") ? ITEM_DETAIL_COVER_RENDER : COLLECTION_GRID_CARD_RENDER;
       wireCoverImageWithFallbacks(heroImg, projected, {
         host: heroHost,
         coverRenderWidth: heroRender.width,
@@ -2091,6 +2091,8 @@
         coverRenderResize: heroRender.resize,
         onResolved(url) {
           heroImg.dataset.coverSrc = url;
+          const raw = String(projected?.image ?? "").trim();
+          if (raw) applyWardrobeMediaDisplayKind(heroImg, projected, raw);
           const galleryRoot = heroHost.closest(".item-detail__gallery");
           if (galleryRoot) {
             const ti = galleryRoot.querySelector(".item-detail__gallery-thumb.is-active img");
@@ -10100,11 +10102,26 @@
     return [...out];
   }
 
+  function haystackWordTokens(hay) {
+    return String(hay ?? "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  }
+
   function searchTokenMatchesHaystackNorm(hay, token) {
     const t = normalizeSearch(token);
     if (!t) return true;
+    const words = haystackWordTokens(hay);
+    if (!words.length) return false;
+
     for (const frag of searchTokenInflectionFragments(t)) {
-      if (frag && hay.includes(frag)) return true;
+      if (!frag) continue;
+      for (const w of words) {
+        if (w === frag) return true;
+        /* Prefix on a word (e.g. blaz → blazer, gold → golden), not substring inside another word. */
+        if (frag.length >= 3 && w.startsWith(frag)) return true;
+      }
     }
     return searchTokenFuzzyMatchesHaystackNorm(hay, t);
   }
@@ -11987,6 +12004,59 @@
     return s;
   }
 
+  function normalizeWardrobeImageUrlKey(url) {
+    return String(url ?? "").trim().split("?")[0];
+  }
+
+  /**
+   * Cover = isolated product art (PNG / packshot). Gallery = on-body or lifestyle frames.
+   * @param {string} rawUrl
+   * @param {object} item
+   * @returns {"cover" | "gallery"}
+   */
+  function wardrobeFrameDisplayKind(rawUrl, item) {
+    const key = normalizeWardrobeImageUrlKey(rawUrl);
+    if (!key) return "cover";
+    const galleryKeys = new Set();
+    for (const u of itemGalleryList(item)) {
+      const k = normalizeWardrobeImageUrlKey(u);
+      if (k) galleryKeys.add(k);
+    }
+    const vars = getItemColourVariants(item);
+    if (vars) {
+      for (const v of vars) {
+        for (const u of v.gallery || []) {
+          const k = normalizeWardrobeImageUrlKey(u);
+          if (k) galleryKeys.add(k);
+        }
+      }
+    }
+    if (galleryKeys.has(key)) return "gallery";
+    return "cover";
+  }
+
+  /** Toggle cutout-cover vs full-bleed gallery styling on PLP / PDP media. */
+  function applyWardrobeMediaDisplayKind(img, item, rawUrl) {
+    if (!(img instanceof HTMLImageElement)) return;
+    const kind = wardrobeFrameDisplayKind(rawUrl, item);
+    const cutout = kind === "cover";
+    img.classList.toggle("card__media-img--cutout-cover", cutout);
+    img.classList.toggle("card__media-img--gallery-photo", !cutout);
+    const host = img.closest(".card__media, .item-detail__gallery-stage, .ed-lp__pcard-media");
+    if (host instanceof HTMLElement) {
+      host.classList.toggle("card__media--cutout-cover", cutout);
+      host.classList.toggle("card__media--gallery-photo", !cutout);
+    }
+  }
+
+  function wardrobeRenderFrameForKind(rawUrl, item, kind) {
+    const raw = String(rawUrl ?? "").trim();
+    if (!raw) return "";
+    const frame =
+      kind === "gallery" ? COLLECTION_GRID_GALLERY_RENDER : COLLECTION_GRID_CARD_RENDER;
+    return wardrobeImageForFrame(raw, item, frame) || withWardrobeImageCacheBust(raw, item);
+  }
+
   /** Extra images only (not the main `image` URL). */
   function itemGalleryList(item) {
     const raw = item?.gallery;
@@ -12113,11 +12183,26 @@
     resize: "contain",
   });
 
-  const ITEM_DETAIL_GALLERY_RENDER = Object.freeze({
+  /** Lifestyle / on-body gallery frames — fill the card (not shrunk like cutout covers). */
+  const COLLECTION_GRID_GALLERY_RENDER = Object.freeze({
+    width: 1200,
+    height: 1600,
+    quality: 88,
+    resize: "cover",
+  });
+
+  const ITEM_DETAIL_COVER_RENDER = Object.freeze({
     width: 1800,
     height: 2400,
     quality: 90,
     resize: "contain",
+  });
+
+  const ITEM_DETAIL_GALLERY_RENDER = Object.freeze({
+    width: 1800,
+    height: 2400,
+    quality: 90,
+    resize: "cover",
   });
 
   /**
@@ -12383,12 +12468,13 @@
       return;
     }
 
-    const frameSpec = ITEM_DETAIL_GALLERY_RENDER;
-    const heroFrameSrc = (url) => {
+    const heroFrameSrc = (url, frameIndex) => {
       const s = String(url ?? "").trim();
       if (!s) return "";
       if (s.startsWith("blob:") || s.startsWith("data:")) return s;
-      return wardrobeImageForFrame(s, item, frameSpec) || withWardrobeImageCacheBust(s, item);
+      const kind = frameIndex === 0 ? "cover" : wardrobeFrameDisplayKind(s, item);
+      const frame = kind === "gallery" ? ITEM_DETAIL_GALLERY_RENDER : ITEM_DETAIL_COVER_RENDER;
+      return wardrobeImageForFrame(s, item, frame) || withWardrobeImageCacheBust(s, item);
     };
 
     let currentIndex = 0;
@@ -12418,12 +12504,14 @@
       heroImgEl.style.removeProperty("--hero-zoom-x");
       heroImgEl.style.removeProperty("--hero-zoom-y");
       heroImgEl.style.removeProperty("--hero-zoom-scale");
-      const url = heroFrameSrc(frames[currentIndex].url);
+      const raw = String(frames[currentIndex].url ?? "").trim();
+      const url = heroFrameSrc(raw, currentIndex);
       if (url) {
         heroImgEl.src = url;
         if (currentIndex === 0) heroImgEl.dataset.coverSrc = url;
-        heroImgEl.dataset.frameRaw = String(frames[currentIndex].url ?? "").trim();
+        heroImgEl.dataset.frameRaw = raw;
       }
+      if (raw) applyWardrobeMediaDisplayKind(heroImgEl, item, raw);
       heroImgEl.alt =
         currentIndex === 0
           ? imageAltForItem(item)
@@ -15625,21 +15713,34 @@
     return document.body.classList.contains("collection-page") && !!document.getElementById("grid");
   }
 
+  /**
+   * Collection card frames: cover candidates first, then gallery-only extras.
+   * @returns {{ url: string, raw: string, kind: "cover" | "gallery" }[]}
+   */
+  function collectionCardGalleryFrameEntries(item) {
+    if (!item || typeof item !== "object") return [];
+    /** @type {{ url: string, raw: string, kind: "cover" | "gallery" }[]} */
+    const out = [];
+    const seenRaw = new Set();
+    const push = (raw, kind) => {
+      const r = String(raw ?? "").trim();
+      if (!r || !isDisplayableCloudImageUrl(r)) return;
+      const rk = normalizeWardrobeImageUrlKey(r);
+      if (!rk || seenRaw.has(rk)) return;
+      seenRaw.add(rk);
+      const k = kind === "gallery" ? "gallery" : wardrobeFrameDisplayKind(r, item);
+      const url = wardrobeRenderFrameForKind(r, item, k);
+      if (!url) return;
+      out.push({ url, raw: r, kind: k });
+    };
+    for (const raw of buildCoverCandidates(item)) push(raw, wardrobeFrameDisplayKind(raw, item));
+    for (const raw of itemGalleryList(item)) push(raw, "gallery");
+    return out;
+  }
+
   /** Rendered frame URLs for collection card gallery nav (cover first, then extras). */
   function collectionCardGalleryFrames(item) {
-    if (!item || typeof item !== "object") return [];
-    const out = [];
-    const seen = new Set();
-    for (const raw of buildCoverCandidates(item)) {
-      const url =
-        wardrobeImageForFrame(raw, item, COLLECTION_GRID_CARD_RENDER) ||
-        withWardrobeImageCacheBust(raw, item);
-      const key = String(url).split("?")[0];
-      if (!url || seen.has(key)) continue;
-      seen.add(key);
-      out.push(url);
-    }
-    return out;
+    return collectionCardGalleryFrameEntries(item).map((e) => e.url);
   }
 
   /**
@@ -15671,40 +15772,48 @@
       next.innerHTML = '<span class="card__gallery-nav__glyph" aria-hidden="true"></span>';
     }
 
-    function frameList() {
-      return collectionCardGalleryFrames(resolveItem());
+    function frameEntries() {
+      return collectionCardGalleryFrameEntries(resolveItem());
     }
 
     function syncNav() {
-      const frames = frameList();
-      const on = frames.length > 1;
+      const entries = frameEntries();
+      const on = entries.length > 1;
       if (prev) prev.hidden = !on;
       if (next) next.hidden = !on;
       media.classList.toggle("card__media--gallery-nav", on);
       media.classList.toggle("card__media--gallery-swipe", on && coarsePointer);
       if (!on) {
         media.dataset.galleryFrameIndex = "0";
+        const item = resolveItem();
+        const raw = buildCoverCandidates(item)[0] ?? String(item?.image ?? "").trim();
+        if (raw) applyWardrobeMediaDisplayKind(img, item, raw);
         return;
       }
-      const max = frames.length - 1;
+      const max = entries.length - 1;
       let idx = Number(media.dataset.galleryFrameIndex ?? 0);
       if (!Number.isFinite(idx)) idx = 0;
       idx = Math.max(0, Math.min(max, Math.floor(idx)));
       media.dataset.galleryFrameIndex = String(idx);
-      const url = frames[idx];
-      if (url) img.src = url;
-      const cover = String(img.dataset.coverSrc ?? frames[0] ?? "").trim();
+      const entry = entries[idx];
+      const item = resolveItem();
+      if (entry?.url) img.src = entry.url;
+      if (entry?.raw) applyWardrobeMediaDisplayKind(img, item, entry.raw);
+      const cover = String(img.dataset.coverSrc ?? entries[0]?.url ?? "").trim();
       if (cover) img.dataset.coverSrc = cover;
     }
 
     function step(delta) {
-      const frames = frameList();
-      if (frames.length < 2) return;
+      const entries = frameEntries();
+      if (entries.length < 2) return;
       let idx = Number(media.dataset.galleryFrameIndex ?? 0);
       if (!Number.isFinite(idx)) idx = 0;
-      idx = ((idx + delta) % frames.length + frames.length) % frames.length;
+      idx = ((idx + delta) % entries.length + entries.length) % entries.length;
       media.dataset.galleryFrameIndex = String(idx);
-      img.src = frames[idx];
+      const entry = entries[idx];
+      const item = resolveItem();
+      if (entry?.url) img.src = entry.url;
+      if (entry?.raw) applyWardrobeMediaDisplayKind(img, item, entry.raw);
     }
 
     if (prev && next) {
@@ -15990,6 +16099,8 @@
       coverRenderResize: COLLECTION_GRID_CARD_RENDER.resize,
       onResolved(url) {
         img.dataset.coverSrc = url;
+        const raw = buildCoverCandidates(cardCoverItem)[0] ?? String(cardCoverItem?.image ?? "").trim();
+        if (raw) applyWardrobeMediaDisplayKind(img, cardCoverItem, raw);
         const ti = media.querySelector(".card__gallery-strip .card__gallery-thumb.is-active img");
         if (ti) ti.src = url;
         media.dispatchEvent(new CustomEvent("tw-collection-cover-change", { bubbles: true }));
@@ -18429,11 +18540,13 @@
     img.draggable = false;
     wireCoverImageWithFallbacks(img, itemForMedia, {
       host: media,
-      coverRenderWidth: ITEM_DETAIL_GALLERY_RENDER.width,
-      coverRenderHeight: ITEM_DETAIL_GALLERY_RENDER.height,
-      coverRenderQuality: ITEM_DETAIL_GALLERY_RENDER.quality,
-      coverRenderResize: ITEM_DETAIL_GALLERY_RENDER.resize,
+      coverRenderWidth: ITEM_DETAIL_COVER_RENDER.width,
+      coverRenderHeight: ITEM_DETAIL_COVER_RENDER.height,
+      coverRenderQuality: ITEM_DETAIL_COVER_RENDER.quality,
+      coverRenderResize: ITEM_DETAIL_COVER_RENDER.resize,
       onResolved(url) {
+        const raw = buildCoverCandidates(itemForMedia)[0] ?? String(itemForMedia?.image ?? "").trim();
+        if (raw) applyWardrobeMediaDisplayKind(img, itemForMedia, raw);
         if (galleryWrap) {
           const ti = galleryWrap.querySelector(".item-detail__gallery-thumb.is-active img");
           if (ti) ti.src = url;

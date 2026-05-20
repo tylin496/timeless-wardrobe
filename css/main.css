@@ -10432,6 +10432,30 @@ body.collection-page #grid.grid--compact .card__gallery-nav {
   filter: var(--collection-cutout-shadow);
 }
 
+/* Cutout covers (PNG) — smaller in frame; gallery lifestyle shots stay full bleed. */
+#grid .card__media-img--cutout-cover {
+  width: auto;
+  max-width: min(76%, 100%);
+  max-height: 88%;
+  object-fit: contain;
+  object-position: top center;
+  filter: var(--collection-cutout-shadow);
+}
+
+#grid .card__media-img--gallery-photo {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: none;
+}
+
+#grid .card__media--gallery-photo {
+  justify-content: center;
+  align-items: center;
+}
+
 .card__media--opens-detail {
   cursor: pointer;
 }
@@ -11758,6 +11782,27 @@ body.item-page:has(.item-detail__root--edit) {
 .item-detail__root--page .item-detail__gallery-stage .card__media-img {
   display: block;
   position: static;
+}
+
+.item-detail__root--page .item-detail__gallery-stage .card__media-img--cutout-cover {
+  width: auto;
+  max-width: min(72%, 100%);
+  max-height: 92%;
+  object-fit: contain;
+  object-position: center center;
+}
+
+.item-detail__root--page .item-detail__gallery-stage .card__media-img--gallery-photo {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
+.item-detail__root--page .item-detail__gallery-stage.card__media--gallery-photo {
+  align-items: center;
+  justify-content: center;
 }
 
 .item-detail__root--page .item-detail__media .card__hover-bar--solo,
