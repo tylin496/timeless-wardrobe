@@ -293,6 +293,25 @@ body.theme-catalogue .desktop-mega-menu .site-header__submenu-link {
   color: var(--submenu-link-ink) !important;
 }
 
+@media (min-width: 901px) {
+  body.theme-catalogue .desktop-mega-menu .site-header__submenu-link {
+    --submenu-link-ink: rgba(22, 50, 41, 0.58) !important;
+    --submenu-link-ink-active: var(--ink) !important;
+    color: var(--submenu-link-ink) !important;
+  }
+
+  body.theme-catalogue .desktop-mega-menu .site-header__submenu-link:not(.is-active):not([aria-current="true"]):not(:hover):not(:focus-visible) {
+    color: rgba(22, 50, 41, 0.58) !important;
+  }
+
+  body.theme-catalogue .desktop-mega-menu .site-header__submenu-link:hover,
+  body.theme-catalogue .desktop-mega-menu .site-header__submenu-link:focus-visible,
+  body.theme-catalogue .desktop-mega-menu .site-header__submenu-link.is-active,
+  body.theme-catalogue .desktop-mega-menu .site-header__submenu-link[aria-current="true"] {
+    color: rgb(22, 50, 41) !important;
+  }
+}
+
 body.theme-catalogue .site-header__submenu-link:hover,
 body.theme-catalogue .site-header__submenu-link:focus-visible,
 body.theme-catalogue .site-header__submenu-link.is-active,

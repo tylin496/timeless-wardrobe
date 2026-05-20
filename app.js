@@ -10407,6 +10407,25 @@
     return [...out];
   }
 
+  /**
+   * Generic compound-word fallback:
+   * - supports suffix compounds (raincoat <- coat, sunglasses <- glasses)
+   * - supports bounded infix compounds (doublebreasted <- breast) without matching tiny fragments
+   */
+  function compoundWordMatchesFragment(word, fragment) {
+    const w = normalizeSearch(word);
+    const f = normalizeSearch(fragment);
+    if (!w || !f) return false;
+    if (w === f) return true;
+    if (f.length < 4) return false;
+    if (w.length <= f.length) return false;
+    if (w.endsWith(f)) return true;
+    const idx = w.indexOf(f);
+    if (idx <= 0) return false;
+    const extra = w.length - f.length;
+    return extra <= 6;
+  }
+
   function haystackWordTokens(hay) {
     return String(hay ?? "")
       .toLowerCase()
@@ -10419,13 +10438,14 @@
     if (!t) return true;
     const words = haystackWordTokens(hay);
     if (!words.length) return false;
-
-    for (const frag of searchTokenInflectionFragments(t)) {
+    const candidateFrags = new Set(searchTokenInflectionFragments(t));
+    for (const frag of candidateFrags) {
       if (!frag) continue;
       for (const w of words) {
         if (w === frag) return true;
         /* Prefix on a word (e.g. blaz → blazer, gold → golden), not substring inside another word. */
         if (frag.length >= 3 && w.startsWith(frag)) return true;
+        if (compoundWordMatchesFragment(w, frag)) return true;
       }
     }
     return searchTokenFuzzyMatchesHaystackNorm(hay, t);
