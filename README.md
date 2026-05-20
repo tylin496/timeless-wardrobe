@@ -6,7 +6,7 @@ Static collection UI for a personal wardrobe: filters, outfit builder, saved loo
 
 Serve the folder (any static server), open `index.html`. By default data comes from `data/wardrobe.js` and saved outfits from `localStorage`.
 
-Production: [tylin496.github.io/timeless-wardrobe](https://tylin496.github.io/timeless-wardrobe/) (GitHub Pages). Optional Vercel build: `npm run build` → `dist/`.
+Production (Vercel): [timless-wardrobe.vercel.app](https://timless-wardrobe.vercel.app/) — project name is `timless-wardrobe` (not `timeless-wardrobe.vercel.app`). Also on [GitHub Pages](https://tylin496.github.io/timeless-wardrobe/). Build: `npm run build` → `dist/`.
 
 ## Supabase (optional)
 

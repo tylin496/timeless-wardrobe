@@ -1995,18 +1995,21 @@
     document.getElementById("tw-editor-auth")?.remove();
   }
 
-  /** Production deploy root (GitHub Pages project site). */
-  const TW_GITHUB_PAGES_BASE = "https://tylin496.github.io/timeless-wardrobe";
+  /** Vercel production (project name is `timless-wardrobe`, not timeless-wardrobe). */
+  const TW_VERCEL_PRODUCTION_ORIGIN = "https://timless-wardrobe.vercel.app";
 
   function twSiteBaseUrl() {
     const configured = String(globalThis.APP_CONFIG?.SITE_ORIGIN ?? "").trim().replace(/\/$/, "");
     if (configured) return configured;
     if (isTwLocalDevHost()) return globalThis.location.origin;
-    return TW_GITHUB_PAGES_BASE;
+    if (globalThis.location.hostname.endsWith(".vercel.app")) {
+      return globalThis.location.origin;
+    }
+    return TW_VERCEL_PRODUCTION_ORIGIN;
   }
 
   /**
-   * OAuth must return to a URL that actually exists. `timeless-wardrobe.vercel.app` may 404 (deployment gone).
+   * OAuth must return to the live deployment. `timeless-wardrobe.vercel.app` is not wired (404).
    * @returns {string}
    */
   function twOAuthRedirectUrl() {
@@ -2021,13 +2024,9 @@
       }
     }
     const base = twSiteBaseUrl();
-    let path = globalThis.location.pathname || "/item.html";
+    const path = globalThis.location.pathname || "/item.html";
     const search = globalThis.location.search || "";
-    if (path.startsWith("/timeless-wardrobe")) {
-      path = path.slice("/timeless-wardrobe".length) || "/";
-    }
-    if (!path.startsWith("/")) path = `/${path}`;
-    return `${base}${path}${search}`;
+    return `${base}${path.startsWith("/") ? path : `/${path}`}${search}`;
   }
 
   async function signInWithGoogleEditor({ itemIdForEditAfter } = {}) {

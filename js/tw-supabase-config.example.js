@@ -10,6 +10,6 @@ globalThis.__TW_SUPABASE_ANON_KEY__ = "YOUR_ANON_PUBLIC_KEY";
 window.APP_CONFIG = {
   SUPABASE_URL: globalThis.__TW_SUPABASE_URL__,
   SUPABASE_ANON_KEY: globalThis.__TW_SUPABASE_ANON_KEY__,
-  SITE_ORIGIN: "https://timeless-wardrobe.vercel.app",
+  SITE_ORIGIN: "https://timless-wardrobe.vercel.app",
   EDITOR_ALLOWED_EMAILS: ["you@gmail.com"],
 };
