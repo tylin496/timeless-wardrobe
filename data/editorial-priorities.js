@@ -2,8 +2,9 @@
  * Editorial archive priorities — worldview sort + homepage curation.
  * Per-piece overrides; new items can also set on the row or in `metadata`:
  *   featured_rank — 2 hero, 1 archive core, 0 normal
- *   canonical_score — higher = more iconic within the archive
- *   colour_group — rhythm hint (navy_dark, earth, light, green, …)
+ *   canonical_score — higher = more iconic within the archive (1–100 scale)
+ *   manual_sort_rank — lower = earlier inside the same season + category group
+ *   colour_group — soft rhythm hint (navy_dark, earth, light, green, …)
  */
 const WARDROBE_EDITORIAL_PRIORITIES = {
   "sage-beaufort-waxed-jacket": { featured_rank: 2, canonical_score: 100 },
@@ -56,24 +57,34 @@ const WARDROBE_EDITORIAL_PRIORITIES = {
   "ferret": { featured_rank: 0, canonical_score: 53 },
   "achilles-low": { featured_rank: 0, canonical_score: 52 },
   "cordovan-l-zip-wallet-regular-price": { featured_rank: 0, canonical_score: 51 },
-  "signet-ring": { featured_rank: 0, canonical_score: 50 },
+  "signet-ring": { featured_rank: 2, canonical_score: 55, colour_group: "gold" },
   "ruby-gypsy-ring": { featured_rank: 0, canonical_score: 49 },
   "curb-bracelet": { featured_rank: 0, canonical_score: 48 },
   "rolo-chain": { featured_rank: 0, canonical_score: 47 },
   "sapphire-ring": { featured_rank: 0, canonical_score: 46 },
   "sapphire-three-stone-ring": { featured_rank: 0, canonical_score: 45 },
-  "wedding-bands": { featured_rank: 0, canonical_score: 44 },
-  "ligne-2": { featured_rank: 0, canonical_score: 43 },
+  "wedding-bands": { featured_rank: 0, canonical_score: 44, colour_group: "gold" },
+  "ligne-2": {
+    featured_rank: 1,
+    canonical_score: 52,
+    manual_sort_rank: 2,
+    colour_group: "gold",
+  },
   "kingsman-0847-sunglasses": { featured_rank: 0, canonical_score: 42 },
   "original-wayfarer-sunglasses": { featured_rank: 0, canonical_score: 41 },
   "smoke-olive-acetate-optical": { featured_rank: 0, canonical_score: 40 },
   "boston-metal-frames": { featured_rank: 0, canonical_score: 39 },
   "panama-hat": { featured_rank: 0, canonical_score: 38 },
-  "tank-solo": { featured_rank: 2, canonical_score: 37 },
+  "tank-solo": {
+    featured_rank: 2,
+    canonical_score: 58,
+    manual_sort_rank: 1,
+    colour_group: "gold",
+  },
   "black-bay-58": { featured_rank: 2, canonical_score: 36 },
   "prx-quartz": { featured_rank: 0, canonical_score: 35 },
   "dw-5600": { featured_rank: 0, canonical_score: 34 },
   "new-york": { featured_rank: 0, canonical_score: 33 },
-  "grand-soir": { featured_rank: 0, canonical_score: 32 },
+  "grand-soir": { featured_rank: 0, canonical_score: 32, manual_sort_rank: 99 },
   "american-flag-hat": { featured_rank: 0, canonical_score: 31 },
 };

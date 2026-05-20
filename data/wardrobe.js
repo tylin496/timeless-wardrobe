@@ -1,7 +1,7 @@
 /**
  * Timeless Wardrobe — frozen catalogue seed (offline fallback + dev).
  *
- * Frozen from Supabase wardrobe_items on 2026-05-19T16:13:59.642Z.
+ * Frozen from Supabase wardrobe_items on 2026-05-20T15:22:55.687Z.
  * Regenerate: npm run db:freeze-catalogue
  *
  * Collection thesis is described in the site header. Each row uses `category` (and optional
@@ -90,7 +90,7 @@ const WARDROBE_ITEMS = [
     "name": "Curb Bracelet",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "weight": "18ct yellow gold, 5.2 mm",
     "size": "20.5 cm （8.07inches）",
     "purchaseDate": "2024-10-26",
@@ -113,7 +113,7 @@ const WARDROBE_ITEMS = [
     "name": "Rolo Chain",
     "season": "All-season",
     "colour": "18ct yellow gold, 2.5 mm",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "size": "50 cm",
     "purchaseDate": "2024-08-20",
     "image": "/images/wardrobe/rolo-chain/1778704232768-cover-edit.png",
@@ -135,7 +135,7 @@ const WARDROBE_ITEMS = [
     "name": "Ruby Gypsy Ring",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "fabric": "18K",
     "weight": "18ct yellow gold with Diamonds, 6.8 mm face, 3 mm shank",
     "size": "HK 22",
@@ -144,7 +144,7 @@ const WARDROBE_ITEMS = [
     "gallery": [
       "/images/wardrobe/ruby-gypsy-ring/main/gallery/01.jpg"
     ],
-    "notes": "Size: HK 22 (2024-10-10; adjusted to 22.5–23 on 2026-04-07)\nWeight: 8.20 g (total, including stones)     Gold price: 604 CNY/g (base 450, +47% vs 2020)\nRuby: 3 × 4 mm (~0.2 ct)\nDiamonds: 2.3 mm × 2 (total ~0.1 ct)\nMaking: 154 CNY/g\nTotal: 5,057 CNY ≈ 22,600 TWD (2024)\nDate: 4 October 2024\n\nEngraving\nInscription: Ad Meliora . 2024\n￼\n\nReference: A gold ring inset with a single turquoise, inscribed Rumpenheim, 1843",
+    "notes": "Size: HK 22 (2024-10-10; adjusted to 22.5–23 on 2026-04-07)\nWeight: 8.20 g (total, including stones)   Gold price: 604 CNY/g (base 450, +47% vs 2020)\nRuby: 3 × 4 mm (~0.2 ct)\nDiamonds: 2.3 mm × 2 (total ~0.1 ct)\nMaking: 154 CNY/g\nTotal: 5,057 CNY ≈ 22,600 TWD (2024)\nDate: 4 October 2024\n\nEngraving\nInscription: Ad Meliora . 2024\n￼\n\nReference: A gold ring inset with a single turquoise, inscribed Rumpenheim, 1843",
     "metadata": {
       "price": 22600,
       "basicColour": "gold",
@@ -161,7 +161,7 @@ const WARDROBE_ITEMS = [
     "name": "Signet Ring",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "weight": "18ct yellow gold, 12 × 14 mm",
     "size": "HK 14",
     "purchaseDate": "2020-11-01",
@@ -171,7 +171,7 @@ const WARDROBE_ITEMS = [
       "/images/wardrobe/signet-ring/main/gallery/01.png",
       "/images/wardrobe/signet-ring/main/gallery/02.jpg"
     ],
-    "notes": "Size: HK 14 (2020-11-20; confirmed 2026-04-07)\nWeight: 9.6 g (actual)     Gold price: 411 CNY/g (base: 385 CNY/g)\nMaking: 78 CNY/g\nTotal: 4,698 CNY ≈ 20,000 TWD (2020)\nDate: 1 November 2020\n\nEngraving: Victorian interlaced monogram (TYL)",
+    "notes": "Size: HK 14 (2020-11-20; confirmed 2026-04-07)\nWeight: 9.6 g (actual)   Gold price: 411 CNY/g (base: 385 CNY/g)\nMaking: 78 CNY/g\nTotal: 4,698 CNY ≈ 20,000 TWD (2020)\nDate: 1 November 2020\n\nEngraving: Victorian interlaced monogram (TYL)",
     "metadata": {
       "price": 20000,
       "priceCurrency": "TWD"
@@ -192,7 +192,7 @@ const WARDROBE_ITEMS = [
     "purchaseDate": "2025-02-01",
     "image": "/images/wardrobe/golden-fleece-navy-blazer/1778693552701-cover-edit.png",
     "gallery": [
-      "/images/wardrobe/golden-fleece-navy-blazer/main/gallery/01.jpg"
+      "/images/wardrobe/golden-fleece-navy-blazer/main/gallery/01.png"
     ],
     "metadata": {
       "price": 55,
@@ -256,7 +256,7 @@ const WARDROBE_ITEMS = [
     "name": "Tank Solo",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "D6C082",
     "weight": "W5200004",
     "size": "Large Model",
     "purchaseDate": "2024-11-03",
@@ -345,7 +345,7 @@ const WARDROBE_ITEMS = [
   {
     "id": "kingsman-0847-sunglasses",
     "category": "Eyewear",
-    "brand": "Cutler and Gross",
+    "brand": "Cutler And Gross",
     "name": "Kingsman 0847 Sunglasses",
     "season": "All-season",
     "colour": "Black, Brown Lenses",
@@ -389,7 +389,7 @@ const WARDROBE_ITEMS = [
     "name": "Wedding Bands",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "fabric": "Pt950 1.8 mm (bride) / 18ct YG 2 mm size 13 (groom)",
     "image": "/images/wardrobe/wedding-bands/main/cover.png",
     "notes": "Inscription: spouse name · date (e.g. Edward · 29 Mai). Worn at base when stacked. Reference: bands of Prince Edward Duke of Kent (1767–1820) and Princess Victoria Duchess of Kent (1786–1861).",
@@ -400,6 +400,7 @@ const WARDROBE_ITEMS = [
 
   {
     "id": "dw-5600",
+    "pillar": "Collections",
     "category": "Beater",
     "brand": "G-Shock",
     "name": "DW-5600",
@@ -600,7 +601,7 @@ const WARDROBE_ITEMS = [
     "name": "Grand Soir",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "weight": "Labdanum, benzoin, vanilla, amber",
     "size": "70 ml",
     "purchaseDate": "2025-08-01",
@@ -721,7 +722,7 @@ const WARDROBE_ITEMS = [
     "name": "New York",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#BFA665",
     "weight": "Bergamot, black pepper, oak moss.",
     "size": "100 ml",
     "purchaseDate": "2025-08-02",
@@ -865,7 +866,7 @@ const WARDROBE_ITEMS = [
     "name": "Ligne-2",
     "season": "All-season",
     "colour": "Gold",
-    "colourCode": "#DCC98A",
+    "colourCode": "#fef4bb",
     "purchaseDate": "2026-05-19",
     "image": "/images/wardrobe/ligne-2/main/cover.png",
     "gallery": [
@@ -947,7 +948,7 @@ const WARDROBE_ITEMS = [
     "name": "PRX Quartz",
     "season": "All-season",
     "colour": "Gold PVD",
-    "colourCode": "#DCC98A",
+    "colourCode": "#D6C082",
     "weight": "T137.210.33.021.00",
     "size": "35 mm",
     "purchaseDate": "2024-08-08",
@@ -1291,7 +1292,7 @@ const WARDROBE_ITEMS = [
       "basicColour": "gold",
       "priceCurrency": "JPY",
       "secondaryColour": "Gold",
-      "secondaryColourCode": "#DCC98A",
+      "secondaryColourCode": "#D6C082"
     }
   },
 
@@ -1466,7 +1467,7 @@ const WARDROBE_ITEMS = [
     "colourCode": "#5F5F62",
     "size": "XL",
     "purchaseDate": "2023-11-20",
-    "image": "/images/wardrobe/pleated-trousers/variants/grey/cover.png",
+    "image": "/images/wardrobe/uniqlo-tuck-trousers/1778707777462-variant-grey-cover.png",
     "notes": "Fabric details\nBody: 62% Polyester - Recycled Fiber, 29% Viscose, 5% Polyester, 4% Elastane/ Pocket Lining: 65% Polyester, 35% Cotton\nWashing instructions\nMachine wash up to 40 degrees, gentle cycle, Dry Clean, Not suitable for tumble-drying.",
     "colourVariants": [
       {

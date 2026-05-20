@@ -1,6 +1,6 @@
 {
   "_schema": "timeless-wardrobe-catalogue-lock-v1",
-  "frozenAt": "2026-05-19T16:10:59.523Z",
+  "frozenAt": "2026-05-20T15:22:55.687Z",
   "count": 70,
   "ids": [
     "achilles-low",
@@ -73,5 +73,6 @@
     "wedding-bands",
     "wide-leg-jeans",
     "wide-straight-trousers"
-  ]
+  ],
+  "source": "local:images/wardrobe + wardrobe.js"
 }

@@ -4773,27 +4773,23 @@
     }, ms);
   }
 
-  /** Plain numbered list for editors: `1. Brand Name #hex Size` */
+  /** Plain numbered list for editors: `1. Brand Name Category Season #hex Size Weight spec` */
   function wardrobePlainListLineParts(item) {
     if (!item || typeof item !== "object") return [];
     return [
       String(item.brand ?? "").trim(),
       displayNameWithoutLeadingColour(item),
+      String(item.category ?? "").trim(),
+      String(item.season ?? "").trim(),
       itemColourCode(item),
       String(item.size ?? "").trim(),
+      String(item.weight ?? "").trim(),
     ].filter(Boolean);
   }
 
-  function compareWardrobePlainListItems(a, b) {
-    const tax = compareByTaxonomy(a, b);
-    if (tax !== 0) return tax;
-    const ka = `${String(a?.brand ?? "")}\0${displayNameWithoutLeadingColour(a)}\0${String(a?.id ?? "")}`;
-    const kb = `${String(b?.brand ?? "")}\0${displayNameWithoutLeadingColour(b)}\0${String(b?.id ?? "")}`;
-    return ka.localeCompare(kb, undefined, { sensitivity: "base" });
-  }
-
+  /** Same filtered + sorted rows as the collection grid (`renderGrid`). */
   function getWardrobeItemsForPlainListCopy() {
-    return getAllWardrobeItems().sort(compareWardrobePlainListItems);
+    return getCollectionSortedDataset();
   }
 
   function buildWardrobePlainNumberedList(list) {
@@ -5103,8 +5099,8 @@
   }
 
   /**
-   * Editorial archive taxonomy — worldview order (not ecommerce category tabs).
-   * Outerwear → tailoring → knitwear → shirts → trousers → bags → footwear → jewellery → accessories → watches → fragrance.
+   * Editorial archive taxonomy — seasonal wardrobe hierarchy (not ecommerce tabs).
+   * Outerwear → tailoring → knitwear → shirts → bottoms → bags → footwear → jewellery → eyewear → hats → watches → fragrance.
    */
   const EDITORIAL_ARCHIVE_CATEGORY_RANK = {
     Outerwear: 0,
@@ -5126,21 +5122,34 @@
     Ring: 8,
     Accessories: 9,
     "Small accessories": 9,
-    Eyewear: 9,
-    Sunglasses: 9,
-    Glasses: 9,
-    Hats: 9,
-    Dress: 10,
-    Everyday: 10,
-    Dive: 10,
-    Beater: 10,
-    "Dress watch": 10,
-    "Dive watch": 10,
-    Watches: 10,
-    Fragrance: 11,
-    Day: 11,
-    Daywear: 11,
-    Evening: 11,
+    Eyewear: 10,
+    Sunglasses: 10,
+    Glasses: 10,
+    Hats: 11,
+    Dress: 12,
+    Dive: 12,
+    Beater: 12,
+    "Dress watch": 12,
+    "Dive watch": 12,
+    Watches: 12,
+    Everyday: 12,
+    Fragrance: 13,
+    Day: 13,
+    Daywear: 13,
+    Evening: 13,
+  };
+
+  /** Soft tie-breaker palette order (does not override season / category). */
+  const EDITORIAL_COLOUR_GROUP_RANK = {
+    navy_dark: 0,
+    earth: 1,
+    green: 2,
+    neutral: 3,
+    grey: 4,
+    light: 5,
+    blue: 6,
+    gold: 7,
+    red: 8,
   };
 
   const EDITORIAL_RHYTHM_GROUPS = new Set(["navy_dark", "earth", "grey", "green"]);
@@ -5170,6 +5179,46 @@
     const raw = row?.canonical_score ?? meta?.canonical_score ?? globalMap?.canonical_score;
     const n = Number(raw);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Lower = earlier within the same season + category group. */
+  function itemManualSortRank(item) {
+    const { globalMap, meta, item: row } = editorialPrioritySource(item);
+    const raw = row?.manual_sort_rank ?? meta?.manual_sort_rank ?? globalMap?.manual_sort_rank;
+    if (raw == null || raw === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function compareEditorialManualSort(a, b) {
+    const ma = itemManualSortRank(a);
+    const mb = itemManualSortRank(b);
+    if (ma != null && mb != null) return ma - mb;
+    if (ma != null) return -1;
+    if (mb != null) return 1;
+    return 0;
+  }
+
+  function editorialColourGroupRank(item) {
+    const g = itemColourGroup(item);
+    return Object.prototype.hasOwnProperty.call(EDITORIAL_COLOUR_GROUP_RANK, g)
+      ? EDITORIAL_COLOUR_GROUP_RANK[g]
+      : 50;
+  }
+
+  /** Fallback only — older pieces first so new additions do not jump to the top. */
+  function editorialCreatedAtSortMs(item) {
+    const raw = String(
+      item?.createdAt ?? item?.created_at ?? item?.purchaseDate ?? item?.purchase_date ?? ""
+    ).trim();
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? ms : Number.MAX_SAFE_INTEGER;
+  }
+
+  function compareEditorialBrandName(a, b) {
+    const ka = `${String(a?.brand ?? "")}\0${displayNameWithoutLeadingColour(a)}\0${String(a?.id ?? "")}`;
+    const kb = `${String(b?.brand ?? "")}\0${displayNameWithoutLeadingColour(b)}\0${String(b?.id ?? "")}`;
+    return ka.localeCompare(kb, undefined, { sensitivity: "base" });
   }
 
   /** @param {object} item */
@@ -5211,33 +5260,50 @@
     return recordCategoryRank(item);
   }
 
-  /** A/W → all-season → S/S for archive cohesion. */
+  /** A/W → All-season → S/S — seasonal wardrobe chapters, not mixed ecommerce rows. */
   function editorialSeasonRank(item) {
     const tags = normalizedItemSeasonTags(item);
-    if (tags.includes("AW")) return 0;
-    if (tags.includes("SS")) return 2;
+    const aw = tags.includes("AW");
+    const ss = tags.includes("SS");
+    if (aw && ss) return 1;
+    if (aw) return 0;
+    if (ss) return 2;
     return 1;
   }
 
+  function editorialArchiveSortTierKey(item) {
+    return [
+      editorialSeasonRank(item),
+      itemFeaturedRank(item),
+      editorialRecordCategoryRank(item),
+      browseSlotRank(item),
+    ].join("\x1e");
+  }
+
   /**
-   * Default collection order — identity-first personal archive (not newest-first).
+   * Default collection order — curated personal archive (not newest-first).
+   * season → featured_rank (heroes) → category → manual_sort_rank → canonical_score → colour → created_at
    * @param {object} a
    * @param {object} b
    */
   function compareEditorialArchiveItems(a, b) {
+    const sea = editorialSeasonRank(a) - editorialSeasonRank(b);
+    if (sea !== 0) return sea;
     const fr = itemFeaturedRank(b) - itemFeaturedRank(a);
     if (fr !== 0) return fr;
     const cat = editorialRecordCategoryRank(a) - editorialRecordCategoryRank(b);
     if (cat !== 0) return cat;
     const slot = browseSlotRank(a) - browseSlotRank(b);
     if (slot !== 0) return slot;
-    const sea = editorialSeasonRank(a) - editorialSeasonRank(b);
-    if (sea !== 0) return sea;
+    const manual = compareEditorialManualSort(a, b);
+    if (manual !== 0) return manual;
     const cs = itemCanonicalScore(b) - itemCanonicalScore(a);
     if (cs !== 0) return cs;
-    const ka = `${String(a?.brand ?? "")}\0${displayNameWithoutLeadingColour(a)}\0${String(a?.id ?? "")}`;
-    const kb = `${String(b?.brand ?? "")}\0${displayNameWithoutLeadingColour(b)}\0${String(b?.id ?? "")}`;
-    return ka.localeCompare(kb, undefined, { sensitivity: "base" });
+    const cg = editorialColourGroupRank(a) - editorialColourGroupRank(b);
+    if (cg !== 0) return cg;
+    const created = editorialCreatedAtSortMs(a) - editorialCreatedAtSortMs(b);
+    if (created !== 0) return created;
+    return compareEditorialBrandName(a, b);
   }
 
   /**
@@ -5249,12 +5315,14 @@
     if (out.length < 3) return out;
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 1; i < out.length; i++) {
+        const tier = editorialArchiveSortTierKey(out[i]);
+        if (tier !== editorialArchiveSortTierKey(out[i - 1])) continue;
         const g0 = itemColourGroup(out[i - 1]);
         const g1 = itemColourGroup(out[i]);
         if (!EDITORIAL_RHYTHM_GROUPS.has(g0) || g0 !== g1) continue;
         for (let j = i + 1; j < Math.min(out.length, i + 6); j++) {
+          if (editorialArchiveSortTierKey(out[j]) !== tier) continue;
           if (itemColourGroup(out[j]) === g0) continue;
-          if (itemFeaturedRank(out[i]) !== itemFeaturedRank(out[j])) continue;
           const tmp = out[i];
           out[i] = out[j];
           out[j] = tmp;
