@@ -1,7 +1,7 @@
 /**
  * Timeless Wardrobe — frozen catalogue seed (offline fallback + dev).
  *
- * Frozen from Supabase wardrobe_items on 2026-05-20T15:28:28.783Z.
+ * Frozen from Supabase wardrobe_items on 2026-05-20T17:11:43.394Z.
  * Regenerate: npm run db:freeze-catalogue
  *
  * Collection thesis is described in the site header. Each row uses `category` (and optional
@@ -332,9 +332,9 @@ const WARDROBE_ITEMS = [
     "purchaseDate": "2020-10-26",
     "image": "/images/wardrobe/pembroke/1778698000508-cover-edit.png",
     "gallery": [
-      "/images/wardrobe/pembroke/main/gallery/01.jpg"
+      "/images/wardrobe/pembroke/main/cover.jpg"
     ],
-    "notes": "Type: Full brogue country derby, wing-tip with full punching. Sole: Dainite rubber. Last: 325. Date: 27 Oct 2020.",
+    "notes": "Type: Full brogue country derby, wing-tip with full punching\nSole: Dainite rubber\nLast: 325",
     "metadata": {
       "price": 201.75,
       "basicColour": "brown",
@@ -392,6 +392,10 @@ const WARDROBE_ITEMS = [
     "colourCode": "#D6C082",
     "fabric": "Pt950 1.8 mm (bride) / 18ct YG 2 mm size 13 (groom)",
     "image": "/images/wardrobe/wedding-bands/main/cover.png",
+    "gallery": [
+      "/images/wardrobe/wedding-bands/main/gallery/01.png",
+      "/images/wardrobe/wedding-bands/main/cover.png"
+    ],
     "notes": "Inscription: spouse name · date (e.g. Edward · 29 Mai). Worn at base when stacked. Reference: bands of Prince Edward Duke of Kent (1767–1820) and Princess Victoria Duchess of Kent (1786–1861).",
     "metadata": {
       "basicColour": "gold"
