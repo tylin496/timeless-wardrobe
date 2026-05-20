@@ -8331,8 +8331,8 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   font-family: var(--font-sans);
   font-size: 0.68rem;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-transform: none;
   text-align: center;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -8583,7 +8583,7 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   line-height: 1.5;
 }
 
-/* Board: overlapping cards; Clear all aligns to the strip/card baseline (bottom-right). */
+/* Board: overlapping cards; Clear All aligns to the strip/card baseline (bottom-right). */
 .styling-board-drawer .styling-board__current {
   display: flex;
   flex-direction: column;
@@ -8602,19 +8602,32 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   flex-wrap: nowrap;
   align-items: flex-end;
   justify-content: flex-start;
-  gap: 0.65rem 1.25rem;
+  gap: 0.65rem 0.4rem;
   width: 100%;
   max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.styling-board-drawer .styling-board__board-stack::-webkit-scrollbar {
+  display: none;
 }
 
 .styling-board-drawer .styling-board__board-stack > #outfit-strip {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   align-self: flex-end;
   min-width: 0;
-  width: auto;
-  max-width: 100%;
+  width: max-content;
+  max-width: none;
   box-sizing: border-box;
+  overflow-x: visible;
+  overflow-y: visible;
+  padding-right: 0.15rem;
+  scroll-snap-type: none;
 }
 
 .styling-board-drawer .styling-board__board-stack > #outfit-clear {
@@ -8623,6 +8636,7 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   flex: 0 0 auto;
   align-self: flex-end;
   margin: 0 0 0.15rem;
+  scroll-snap-align: end;
   padding: 0.15rem 0;
   min-height: 0;
   line-height: 1.2;
@@ -8673,24 +8687,73 @@ body.collection-ui--filter-drawer .site-header__search-wrap {
   background: var(--sb-surface);
   border: 1px solid var(--sb-line-strong);
   border-radius: 3px;
-  padding: 0.6rem 0.7rem;
+  padding: 0.5rem 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
 
 .styling-board-drawer .field--inline input[type="text"]::placeholder,
 .styling-board-drawer .styling-board__notes::placeholder {
   color: color-mix(in srgb, var(--sb-ink-muted) 72%, transparent);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .styling-board__notes {
   width: 100%;
-  min-height: 3.4rem;
+  min-height: 3.25rem;
   resize: vertical;
-  font: inherit;
-  line-height: 1.45;
 }
 
-.styling-board-drawer .styling-board__save .field {  @apply mb-3.5;
+/* Name + notes: shared label baseline, matched control height (not flex-end stagger). */
+.styling-board-drawer #styling-board-save-form.outfit-actions {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.44fr) minmax(0, 0.56fr);
+  column-gap: 0.85rem;
+  row-gap: 0;
+  align-items: start;
+  flex-wrap: nowrap;
+}
 
+.styling-board-drawer #styling-board-save-form .field {
+  margin-bottom: 0 !important;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.styling-board-drawer #styling-board-save-form .field--inline {
+  flex: none;
+}
+
+.styling-board-drawer #styling-board-save-form .field__label {
+  min-height: 2.35em;
+  display: flex;
+  align-items: flex-end;
+  margin: 0;
+  padding: 0;
+}
+
+.styling-board-drawer #styling-board-save-form .field--inline input[type="text"],
+.styling-board-drawer #styling-board-save-form .styling-board__notes {
+  width: 100%;
+  min-height: 3.25rem;
+  box-sizing: border-box;
+}
+
+.styling-board-drawer #styling-board-save-form .field--inline input[type="text"] {
+  height: 3.25rem;
+}
+
+@media (max-width: 520px) {
+  .styling-board-drawer #styling-board-save-form.outfit-actions {
+    grid-template-columns: 1fr;
+    row-gap: 0.85rem;
+  }
+
+  .styling-board-drawer #styling-board-save-form .field__label {
+    min-height: 0;
+  }
 }
 
 .styling-board__save-actions {
@@ -12651,14 +12714,17 @@ body.item-page:has(.item-detail__root--edit) {
   width: 100%;
 }
 
-/* Upload crop dialog — wardrobe 3×4 frame; ~80vh tall so crop area + actions fit comfortably */
+/* Upload crop dialog — wardrobe 3×4 frame; dialog = 80% viewport; viewport fills the rest after chrome */
 .item-photo-crop-dialog {
+  --item-photo-crop-dialog-h: 80vh;
   --item-photo-crop-dialog-h: 80dvh;
   max-width: min(56rem, 96vw);
   width: min(56rem, 96vw);
+  height: var(--item-photo-crop-dialog-h);
   max-height: var(--item-photo-crop-dialog-h);
   margin: auto;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 dialog.item-photo-crop-dialog[open] {
@@ -12670,12 +12736,10 @@ dialog.item-photo-crop-dialog[open] {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  height: min(var(--item-photo-crop-dialog-h), 100%);
-  max-height: var(--item-photo-crop-dialog-h);
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -12698,12 +12762,12 @@ dialog.item-photo-crop-dialog[open] {
 .item-photo-crop__viewport {
   position: relative;
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: min(14rem, 38dvh);
-  max-height: min(calc(var(--item-photo-crop-dialog-h) - 11.5rem), 52dvh);
+  min-height: 0;
+  max-height: none;
   overflow: hidden;
   touch-action: none;
   cursor: grab;

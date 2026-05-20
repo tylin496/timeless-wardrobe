@@ -7887,7 +7887,7 @@
   /** @type {{ id: string, name: string, slots: { itemId: string, colourKey?: string }[], createdAt: string }[]} */
   let savedOutfits = [];
 
-  /** When set, the next "Save outfit" updates this saved row instead of creating a new one. */
+  /** When set, the next "Save Outfit" updates this saved row instead of creating a new one. */
   let editingSavedOutfitId = null;
 
   let toastTimer = null;
@@ -8899,16 +8899,6 @@
   }
 
   /**
-   * Max edit distance for typo-tolerant token match (Latin tokens only).
-   * @param {number} len
-   */
-  function searchTokenMaxEditDistance(len) {
-    if (len < 4) return 0;
-    if (len < 6) return 1;
-    return 2;
-  }
-
-  /**
    * @param {string} a
    * @param {string} b
    * @param {number} maxDist
@@ -8944,23 +8934,14 @@
   function searchTokenFuzzyMatchesHaystackNorm(hay, token) {
     const t = normalizeSearch(token);
     if (!t || t.length < 4 || !/^[a-z0-9]+$/.test(t)) return false;
-    const maxDist = searchTokenMaxEditDistance(t.length);
-    if (!maxDist) return false;
 
     const words = hay.split(/[^a-z0-9]+/);
     for (const w of words) {
-      if (!w || w.length < t.length - maxDist || w.length > t.length + maxDist) continue;
-      if (stringsWithinEditDistance(t, w, maxDist)) return true;
-    }
-
-    const minLen = Math.max(4, t.length - maxDist);
-    const maxLen = t.length + maxDist;
-    for (let len = minLen; len <= maxLen; len++) {
-      if (len > hay.length) break;
-      for (let i = 0; i + len <= hay.length; i++) {
-        const slice = hay.slice(i, i + len);
-        if (!/^[a-z0-9]+$/.test(slice)) continue;
-        if (stringsWithinEditDistance(t, slice, maxDist)) return true;
+      if (!w) continue;
+      if (w.length === t.length) {
+        if (stringsWithinEditDistance(t, w, 2)) return true;
+      } else if (Math.abs(w.length - t.length) === 1) {
+        if (stringsWithinEditDistance(t, w, 1)) return true;
       }
     }
     return false;
@@ -9766,7 +9747,7 @@
     if (clearBtn) {
       clearBtn.hidden = !(enabled && n > 0);
       if (!clearBtn.hidden) {
-        clearBtn.setAttribute("aria-label", "Clear all filters");
+        clearBtn.setAttribute("aria-label", "Clear All filters");
         if (typeof onClearAll === "function") {
           clearBtn.onclick = (e) => {
             e.preventDefault();
@@ -9815,8 +9796,8 @@
         const clearAll = document.createElement("button");
         clearAll.type = "button";
         clearAll.className = "items-toolbar__active-chips-clear";
-        clearAll.textContent = "Clear all";
-        clearAll.setAttribute("aria-label", "Clear all active filters");
+        clearAll.textContent = "Clear All";
+        clearAll.setAttribute("aria-label", "Clear All active filters");
         clearAll.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -10984,16 +10965,16 @@
   }
 
   const COLLECTION_GRID_CARD_RENDER = Object.freeze({
-    width: 600,
-    height: 800,
-    quality: 82,
+    width: 1200,
+    height: 1600,
+    quality: 88,
     resize: "contain",
   });
 
   const ITEM_DETAIL_GALLERY_RENDER = Object.freeze({
-    width: 900,
-    height: 1200,
-    quality: 86,
+    width: 1800,
+    height: 2400,
+    quality: 90,
     resize: "contain",
   });
 
@@ -11907,7 +11888,7 @@
     const btn = els.outfitSave || document.getElementById("outfit-save");
     if (!btn) return;
     const n = currentOutfitSlots.length;
-    const base = editingSavedOutfitId ? "Update outfit" : "Save outfit";
+    const base = editingSavedOutfitId ? "Update Outfit" : "Save Outfit";
     btn.textContent = n > 0 ? `${base} (${n})` : base;
     btn.title = editingSavedOutfitId
       ? "Save changes to the outfit you opened with Edit."
@@ -12049,7 +12030,7 @@
       if (prevIdx < 0) {
         editingSavedOutfitId = null;
         syncOutfitSaveButtonLabel();
-        showToast("That saved outfit is no longer here — use Save outfit to create a new one.");
+        showToast("That saved outfit is no longer here — use Save Outfit to create a new one.");
         return;
       }
       const prev = savedOutfits[prevIdx];
@@ -12301,10 +12282,17 @@
   /** Main edit: 1 cover + up to 12 gallery slots. */
   const ITEM_EDIT_PHOTO_MAX = 13;
   const ITEM_PHOTO_CROP_ASPECT = 3 / 4;
-  /** Wardrobe 3×4 upload frame — raise here if exports feel too soft on retina. */
-  const ITEM_PHOTO_CROP_EXPORT_WIDTH = 1800;
-  const ITEM_PHOTO_CROP_EXPORT_HEIGHT = 2400;
-  const ITEM_PHOTO_JPEG_EXPORT_QUALITY = 0.94;
+  /** Wardrobe 3×4 upload frame — stored master; display uses separate smaller transforms. */
+  const ITEM_PHOTO_CROP_EXPORT_WIDTH = 2400;
+  const ITEM_PHOTO_CROP_EXPORT_HEIGHT = 3200;
+  const ITEM_PHOTO_JPEG_EXPORT_QUALITY = 0.96;
+
+  /** @param {CanvasRenderingContext2D | null} ctx */
+  function applyHighQualityCanvasExport(ctx) {
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+  }
 
   /** @type {HTMLDialogElement | null} */
   let itemPhotoCropDialogEl = null;
@@ -12458,6 +12446,7 @@
           reject(new Error("canvas"));
           return;
         }
+        applyHighQualityCanvasExport(ctx);
         if (preferPng) ctx.clearRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0);
         const mime = preferPng ? "image/png" : "image/jpeg";
@@ -12503,6 +12492,7 @@
     canvas.height = ITEM_PHOTO_CROP_EXPORT_HEIGHT;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("canvas");
+    applyHighQualityCanvasExport(ctx);
     if (preferPng) ctx.clearRect(0, 0, canvas.width, canvas.height);
     else {
       ctx.fillStyle = "#f6f4ef";
@@ -12898,6 +12888,7 @@
         canvas.height = ITEM_PHOTO_CROP_EXPORT_HEIGHT;
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("canvas");
+        applyHighQualityCanvasExport(ctx);
         const preferPng = imageSourceLooksAlphaCapable(file);
         if (preferPng) ctx.clearRect(0, 0, canvas.width, canvas.height);
         else {
@@ -13728,8 +13719,8 @@
       /* fall through to canvas */
     }
 
-    let maxSide = 3200;
-    let quality = 0.9;
+    let maxSide = 4000;
+    let quality = 0.94;
     let preferJpeg = Boolean(extra.preferJpeg);
     /** @type {string} */
     let last = "";
