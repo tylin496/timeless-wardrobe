@@ -5866,8 +5866,9 @@
    * Hybrid gallery: union seed (local) + cloud by storage path — same slot shows local once;
    * cloud-only paths stay as https until backed up.
    */
-  function mergeHybridCatalogueGallery(seed, cloudRow) {
+  function mergeHybridCatalogueGallery(seed, cloudRow, opts = {}) {
     const itemId = String(seed?.id ?? cloudRow?.id ?? "").trim();
+    const preferCloudOrder = Boolean(opts && opts.preferCloudOrder);
     const coverKeys = new Set(
       [seed?.image, cloudRow?.image].map((u) => wardrobeMediaPathKey(u)).filter(Boolean)
     );
@@ -5896,11 +5897,39 @@
       else if (!prevLocal && isLocal) urlByPath.set(key, u);
     };
 
-    for (const u of fileBackedLocalGalleryUrls(seed)) consider(u, true);
-    for (const u of itemGalleryList(seed)) consider(u, true);
-    for (const u of itemGalleryList(cloudRow)) consider(u, false);
+    if (preferCloudOrder) {
+      for (const u of itemGalleryList(cloudRow)) consider(u, false);
+      for (const u of fileBackedLocalGalleryUrls(seed)) consider(u, true);
+      for (const u of itemGalleryList(seed)) consider(u, true);
+    } else {
+      for (const u of fileBackedLocalGalleryUrls(seed)) consider(u, true);
+      for (const u of itemGalleryList(seed)) consider(u, true);
+      for (const u of itemGalleryList(cloudRow)) consider(u, false);
+    }
 
     return orderedKeys.map((k) => urlByPath.get(k)).filter(Boolean);
+  }
+
+  /** Gallery order diff (same paths in different sequence should count as user media edit). */
+  function cloudGalleryOrderDiffersFromSeed(cloudRow, seed) {
+    const coverKeys = new Set(
+      [seed?.image, cloudRow?.image].map((u) => wardrobeMediaPathKey(u)).filter(Boolean)
+    );
+    const toKeyList = (row) =>
+      itemGalleryList(row)
+        .map((u) => wardrobeMediaPathKey(u))
+        .filter((k) => k && !coverKeys.has(k));
+    const seedKeys = toKeyList(seed);
+    const cloudKeys = toKeyList(cloudRow);
+    if (!seedKeys.length && !cloudKeys.length) return false;
+    const seedSet = new Set(seedKeys);
+    const cloudSet = new Set(cloudKeys);
+    const sameMembers =
+      seedSet.size === cloudSet.size &&
+      [...seedSet].every((k) => cloudSet.has(k)) &&
+      [...cloudSet].every((k) => seedSet.has(k));
+    if (!sameMembers) return false;
+    return seedKeys.join("|") !== cloudKeys.join("|");
   }
 
   /** True when URL is a frozen on-disk catalogue file for this item id. */
@@ -6037,10 +6066,10 @@
   function inMemoryRowHasFreshMediaSave(incoming, seed) {
     if (!incoming || !seed) return false;
     if (wardrobeMediaUrlSignature(incoming) === wardrobeMediaUrlSignature(seed)) return false;
-    if (
-      cloudMediaLooksLikeStaleSeedMirror(incoming, seed) &&
-      !cloudMediaReuploadedAtSamePath(incoming, seed)
-    ) {
+    const staleMirror = cloudMediaLooksLikeStaleSeedMirror(incoming, seed);
+    const samePathReupload = cloudMediaReuploadedAtSamePath(incoming, seed);
+    const galleryOrderChanged = cloudGalleryOrderDiffersFromSeed(incoming, seed);
+    if (staleMirror && !samePathReupload && !galleryOrderChanged) {
       return false;
     }
     const n = /** @type {any} */ (incoming).__displayNonce;
@@ -6077,14 +6106,18 @@
     const seed = catalogueSeedRow(itemId) || localRow;
     const staleMirror = cloudMediaLooksLikeStaleSeedMirror(cloudRow, seed);
     const samePathReupload = cloudMediaReuploadedAtSamePath(cloudRow, seed);
+    const galleryOrderChanged = cloudGalleryOrderDiffersFromSeed(cloudRow, seed);
     const useCloudMedia =
-      supabaseMediaAheadOfCatalogueSeed(itemId, cloudRow) && (!staleMirror || samePathReupload);
+      supabaseMediaAheadOfCatalogueSeed(itemId, cloudRow) &&
+      (!staleMirror || samePathReupload || galleryOrderChanged);
     const seedImage = String(seed.image ?? "").trim();
     const cloudImage = String(cloudRow.image ?? "").trim();
     const localGallery = fileBackedLocalGalleryUrls(seed);
 
     if (inMemoryRowHasFreshMediaSave(cloudRow, seed)) {
-      const hybridGallery = mergeHybridCatalogueGallery(seed, cloudRow);
+      const hybridGallery = mergeHybridCatalogueGallery(seed, cloudRow, {
+        preferCloudOrder: galleryOrderChanged,
+      });
       const merged = normalizeItemDerivedFields({
         ...seed,
         ...localRow,
@@ -6119,7 +6152,9 @@
       if (cloudTs) merged.updatedAt = cloudTs;
     }
 
-    const hybridGallery = mergeHybridCatalogueGallery(seed, cloudRow);
+    const hybridGallery = mergeHybridCatalogueGallery(seed, cloudRow, {
+      preferCloudOrder: galleryOrderChanged,
+    });
     if (hybridGallery.length) {
       merged.gallery = normalizeGalleryFromDb(hybridGallery);
     } else if (localGallery.length && (staleMirror || !useCloudMedia)) {
@@ -6147,17 +6182,20 @@
     const id = String(row?.id ?? "").trim();
     const merged = { ...row, ...patch, id };
     if (!isLocalCatalogueItemId(id)) return merged;
+    const mediaEditedAt = Number(/** @type {any} */ (patch).__mediaEditedAt);
+    const allowRemoteMediaOverride = Number.isFinite(mediaEditedAt) && mediaEditedAt > 0;
     const localImage = String(row.image ?? "").trim();
     const patchImage = String(patch.image ?? "").trim();
     if (
       isFileBackedLocalWardrobeUrl(row, localImage) &&
       patchImage &&
-      /^https?:\/\//i.test(patchImage.split("?")[0])
+      /^https?:\/\//i.test(patchImage.split("?")[0]) &&
+      !allowRemoteMediaOverride
     ) {
       merged.image = localImage;
     }
     const localGallery = fileBackedLocalGalleryUrls(row);
-    if (localGallery.length) {
+    if (localGallery.length && !allowRemoteMediaOverride) {
       const patchGallery = Array.isArray(patch.gallery) ? patch.gallery : [];
       const patchRemote = patchGallery.some((u) => /^https?:\/\//i.test(String(u ?? "").split("?")[0]));
       if (patchRemote) {
@@ -13601,10 +13639,15 @@
       };
 
       if (supabaseClient && useCloudOutfits) {
-        const api = await import("./js/supabase-client.js");
-        const res = await api.updateOutfitWithItems(supabaseClient, record);
-        if (!res.ok) {
-          showToast(toastForOutfitCloudFkFailure(res.error));
+        try {
+          const api = await import("./js/supabase-client.js");
+          const res = await api.updateOutfitWithItems(supabaseClient, record);
+          if (!res.ok) {
+            showToast(toastForOutfitCloudFkFailure(res.error));
+            return;
+          }
+        } catch (e) {
+          showToast(toastForOutfitCloudFkFailure(formatSupabaseUserMessage(e)));
           return;
         }
       }
@@ -13632,10 +13675,15 @@
     };
 
     if (supabaseClient && useCloudOutfits) {
-      const api = await import("./js/supabase-client.js");
-      const res = await api.insertOutfitWithItems(supabaseClient, record);
-      if (!res.ok) {
-        showToast(toastForOutfitCloudFkFailure(res.error));
+      try {
+        const api = await import("./js/supabase-client.js");
+        const res = await api.insertOutfitWithItems(supabaseClient, record);
+        if (!res.ok) {
+          showToast(toastForOutfitCloudFkFailure(res.error));
+          return;
+        }
+      } catch (e) {
+        showToast(toastForOutfitCloudFkFailure(formatSupabaseUserMessage(e)));
         return;
       }
     }
@@ -18491,9 +18539,9 @@
               const allOv = loadCollectionOverrides();
               const patchOv = { ...patch };
               delete patchOv.metadata;
-              delete patchOv.image;
-              delete patchOv.gallery;
-              delete patchOv.colourVariants;
+              // Persist media patch for local-catalogue rows: this is the most recent editor intent
+              // and must win over stale seed/cloud merges until next explicit edit/backup.
+              patchOv.__mediaEditedAt = Date.now();
               allOv[id] = patchOv;
               await saveCollectionOverrides(allOv);
             } catch (ovErr) {
@@ -18524,6 +18572,7 @@
             const allOv = loadCollectionOverrides();
             const patchOv = { ...patch };
             delete patchOv.metadata;
+            delete patchOv.__mediaEditedAt;
             allOv[id] = patchOv;
             await saveCollectionOverrides(allOv);
           } catch (ovErr) {

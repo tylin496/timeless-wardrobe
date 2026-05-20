@@ -288,9 +288,9 @@ body.theme-catalogue .site-header__submenu-link {
 }
 
 body.theme-catalogue .desktop-mega-menu .site-header__submenu-link {
-  --submenu-link-ink: var(--ink-muted);
+  --submenu-link-ink: rgba(22, 50, 41, 0.58);
   --submenu-link-ink-active: var(--ink);
-  color: var(--submenu-link-ink);
+  color: var(--submenu-link-ink) !important;
 }
 
 body.theme-catalogue .site-header__submenu-link:hover,
@@ -301,7 +301,7 @@ body.theme-catalogue .desktop-mega-menu .site-header__submenu-link:hover,
 body.theme-catalogue .desktop-mega-menu .site-header__submenu-link:focus-visible,
 body.theme-catalogue .desktop-mega-menu .site-header__submenu-link.is-active,
 body.theme-catalogue .desktop-mega-menu .site-header__submenu-link[aria-current="true"] {
-  color: var(--submenu-link-ink-active);
+  color: var(--submenu-link-ink-active) !important;
   text-decoration-line: underline;
   text-decoration-color: currentColor;
 }
