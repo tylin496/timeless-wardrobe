@@ -8002,8 +8002,9 @@
     if (surface.dataset.twHeroSwipeWired === "1") return;
     surface.dataset.twHeroSwipeWired = "1";
 
-    const SWIPE_MIN_PX = 48;
-    const LOCK_MIN_PX = 10;
+    const isCoarsePointer = globalThis.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    const SWIPE_MIN_PX = isCoarsePointer ? 28 : 48;
+    const LOCK_MIN_PX = isCoarsePointer ? 6 : 10;
     let startX = 0;
     let startY = 0;
     let tracking = false;
@@ -8047,7 +8048,8 @@
         const dy = e.clientY - startY;
         if (!dragging) {
           if (Math.abs(dx) < LOCK_MIN_PX && Math.abs(dy) < LOCK_MIN_PX) return;
-          if (Math.abs(dy) > Math.abs(dx)) {
+          // Mobile: allow slight diagonal swipes; only cancel when clearly vertical.
+          if (Math.abs(dy) > Math.abs(dx) * 1.18) {
             reset();
             return;
           }
@@ -8076,7 +8078,7 @@
         /* ignore */
       }
       if (!wasDragging || Math.abs(dx) < SWIPE_MIN_PX) return;
-      if (Math.abs(dy) > 80 && Math.abs(dy) > Math.abs(dx)) return;
+      if (Math.abs(dy) > 96 && Math.abs(dy) > Math.abs(dx) * 1.2) return;
       onSwipe(dx < 0 ? 1 : -1);
       if (wasDragging) {
         const blockClick = (/** @type {MouseEvent} */ ev) => {
@@ -22521,17 +22523,19 @@
     }
 
     /**
-     * Mobile bottom-sheet swipe-to-close (down or right).
+     * Mobile sheet swipe-to-close by configured axis.
      * Keeps existing close animation flow (`onClose`) and only adds gesture detection + light drag feedback.
      * @param {HTMLElement | null | undefined} sheet
      * @param {() => void} onClose
-     * @param {{ handleSelector?: string, shouldHandle?: () => boolean }} [opts]
+     * @param {{ handleSelector?: string, shouldHandle?: () => boolean, axis?: "down" | "right" | "down-or-right" }} [opts]
      */
     function wireMobileSheetSwipeDismiss(sheet, onClose, opts = {}) {
       if (!(sheet instanceof HTMLElement) || sheet.dataset.mobileSwipeDismissWired === "1") return;
       sheet.dataset.mobileSwipeDismissWired = "1";
       const handleSelector = String(opts.handleSelector ?? "").trim();
       const shouldHandle = typeof opts.shouldHandle === "function" ? opts.shouldHandle : () => true;
+      const axis =
+        opts.axis === "down" || opts.axis === "right" ? opts.axis : "down-or-right";
       let active = false;
       let dragging = false;
       let startX = 0;
@@ -22566,14 +22570,25 @@
           const touch = e.touches[0];
           const dx = touch.clientX - startX;
           const dy = touch.clientY - startY;
-          const shiftX = dx > 0 ? Math.min(76, dx * 0.34) : 0;
-          const shiftY = dy > 0 ? Math.min(132, dy * 0.44) : 0;
+          const shiftX = (axis === "right" || axis === "down-or-right") && dx > 0 ? Math.min(76, dx * 0.34) : 0;
+          const shiftY = (axis === "down" || axis === "down-or-right") && dy > 0 ? Math.min(132, dy * 0.44) : 0;
           if (shiftX > 1 || shiftY > 1) {
             dragging = true;
             sheet.style.transition = "none";
             sheet.style.transform = `translate3d(${shiftX}px, ${shiftY}px, 0)`;
           }
-          if ((dy > 8 && dy > Math.abs(dx)) || (dx > 8 && dx > Math.abs(dy))) {
+          const verticalIntent = dy > 8 && dy > Math.abs(dx);
+          const horizontalIntent = dx > 8 && dx > Math.abs(dy);
+          if (axis === "right" && verticalIntent) {
+            // Sidebar swipe-dismiss is strictly horizontal: block vertical drag/scroll during gesture.
+            e.preventDefault();
+            return;
+          }
+          if (
+            (axis === "down" && verticalIntent) ||
+            (axis === "right" && horizontalIntent) ||
+            (axis === "down-or-right" && (verticalIntent || horizontalIntent))
+          ) {
             e.preventDefault();
           }
         },
@@ -22588,8 +22603,9 @@
           const touch = e.changedTouches?.[0];
           const dx = touch ? touch.clientX - startX : 0;
           const dy = touch ? touch.clientY - startY : 0;
-          const closeByDown = dy > 72 && dy > Math.abs(dx) * 1.12;
-          const closeByRight = dx > 84 && dx > Math.abs(dy) * 1.04;
+          const closeByDown = (axis === "down" || axis === "down-or-right") && dy > 72 && dy > Math.abs(dx) * 1.12;
+          const closeByRight =
+            (axis === "right" || axis === "down-or-right") && dx > 84 && dx > Math.abs(dy) * 1.04;
           resetDragVisual();
           if (closeByDown || closeByRight) {
             onClose();
@@ -23549,6 +23565,7 @@
     wireMobileSheetSwipeDismiss(stylingBoardSheet, () => closeStylingBoardDrawer(), {
       handleSelector: ".styling-board-drawer__header",
       shouldHandle: () => isHeaderCompactLayout() && stylingBoardDrawerOpen,
+      axis: "down",
     });
 
     const mobileSearchSheet = /** @type {HTMLElement | null} */ (
@@ -23557,12 +23574,14 @@
     wireMobileSheetSwipeDismiss(mobileSearchSheet, () => closeHeaderSearch(), {
       handleSelector: ".site-header__search-head, .site-header__search-top",
       shouldHandle: () => isHeaderCompactLayout() && isHeaderSearchWrapOpen(),
+      axis: "down",
     });
     wireMobileSheetSwipeDismiss(mobileShell, () => closeMobileCategoryPanel(), {
       shouldHandle: () =>
         isHeaderCompactLayout() &&
         document.body.classList.contains("collection-ui--mobile-nav-open") &&
         !mobileShell?.classList.contains("is-closing"),
+      axis: "right",
     });
     if (document.body.dataset.twStylingBoardEscapeWired !== "1") {
       document.body.dataset.twStylingBoardEscapeWired = "1";

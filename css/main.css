@@ -5261,12 +5261,12 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
       calc(1.2rem * var(--tw-search-v)),
       calc(env(safe-area-inset-bottom, 0px) + 1rem * var(--tw-search-v))
     );
-    overflow-x: visible;
+    overflow-x: hidden;
   }
 
   .site-header__search-wrap.site-header__search-wrap--visible .site-header__search-megamenu-inner,
   .site-header__search-wrap.site-header__search-wrap--visible .desktop-search-flyout-inner {
-    overflow-x: visible;
+    overflow-x: hidden;
   }
 
   .site-header__search-surface {
@@ -5277,7 +5277,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     max-width: none;
     width: 100%;
     padding: 0;
-    overflow-x: visible;
+    overflow-x: hidden;
   }
 
   /* Mobile search: RL field full content width (aligns with dropdown-main); close on the right. */
@@ -5297,14 +5297,14 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     height: var(--tw-mobile-search-row-height, var(--site-header-mobile-tool-size, 2.35rem));
     max-height: var(--tw-mobile-search-row-height, var(--site-header-mobile-tool-size, 2.35rem));
     padding-left: var(--chrome-content-inset-left);
-    padding-right: var(--chrome-content-inset-right);
+    padding-right: env(safe-area-inset-right, 0px);
     box-sizing: border-box;
   }
 
   .site-header__search-top .site-header__search-close {
     position: absolute;
     top: 50%;
-    right: var(--chrome-content-inset-right);
+    right: env(safe-area-inset-right, 0px);
     z-index: 2;
     width: var(--site-header-mobile-tool-size, 2.35rem);
     height: var(--site-header-mobile-tool-size, 2.35rem);
@@ -5422,7 +5422,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
   }
 
   .site-header__search-wrap .site-header__search-browse {
-    overflow-x: visible;
+    overflow-x: hidden;
     overflow-y: visible;
   }
 
@@ -5434,7 +5434,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     padding-left: 0;
     padding-right: 0;
     max-height: none;
-    overflow-x: visible;
+    overflow-x: hidden;
     overflow-y: visible;
   }
 
@@ -5450,7 +5450,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
   .site-header__search-dropdown-aside--recent {
     margin-bottom: 0;
     padding-left: var(--chrome-content-inset-left);
-    padding-right: var(--chrome-content-inset-right);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   .site-header__search-dropdown-body {
@@ -5462,11 +5462,12 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
   /* Popular Categories: left inset matches trending pills; bleed to right viewport edge. */
   .site-header__search-wrap .site-header__search-dropdown-main {
     padding-left: var(--chrome-content-inset-left);
-    width: calc(100% + var(--chrome-content-inset-right) + env(safe-area-inset-right, 0px));
+    width: 100%;
     max-width: none;
-    margin-right: calc(-1 * (var(--chrome-content-inset-right) + env(safe-area-inset-right, 0px)));
+    margin-right: 0;
     padding-right: env(safe-area-inset-right, 0px);
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: visible;
     box-sizing: border-box;
   }
 
@@ -5506,9 +5507,9 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     overflow-y: hidden;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
+    scroll-snap-type: none;
     scroll-padding-inline-start: 0;
-    scroll-padding-inline-end: env(safe-area-inset-right, 0px);
+    scroll-padding-inline-end: 0;
     scrollbar-width: none;
     touch-action: pan-x;
     cursor: grab;
@@ -5533,7 +5534,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     flex: 0 0 min(45.5vw, 11.65rem);
     width: auto;
     min-width: 0;
-    scroll-snap-align: start;
+    scroll-snap-align: none;
   }
 
   .site-header__search-wrap .site-header__search-category-card__copy {
@@ -5566,7 +5567,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
   .site-header__search-trending-aside-nav {
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
     gap: 8px;
@@ -5576,10 +5577,10 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     margin: 0;
     margin-right: 0;
     padding-right: 0;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
+    scroll-snap-type: none;
     scrollbar-width: none;
   }
 
@@ -5640,7 +5641,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
   .site-header__search-recent-nav {
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
     gap: 8px;
@@ -5648,10 +5649,10 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     max-width: none;
     padding: 0;
     margin: 0;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
+    scroll-snap-type: none;
     scrollbar-width: none;
   }
 
@@ -5743,6 +5744,7 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     transition:
       transform var(--tw-mobile-nav-duration) var(--tw-mobile-nav-ease),
       visibility 0s linear var(--tw-mobile-nav-duration);
+    touch-action: pan-x;
   }
 
   .site-mobile-shell.is-open,
@@ -18505,7 +18507,7 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 
   .ed-lp__hero {
     --hero-img-position: center 38%;
-    --hero-content-bottom: clamp(4.75rem, 12vh, 6.25rem);
+    --hero-content-bottom: clamp(3.9rem, 10.2vh, 5.25rem);
     --hero-dots-bottom: clamp(0.85rem, 3vh, 1.35rem);
   }
 
