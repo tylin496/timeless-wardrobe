@@ -483,15 +483,25 @@
               <section class="item-edit-section" aria-labelledby="add-item-section-details">
                 <h3 id="add-item-section-details" class="item-edit-section__heading">Details</h3>
                 <div class="item-detail__form-grid item-edit-section__grid">
-              <label class="field">
-                <span class="field__label">Brand</span>
-                <input id="add-item-brand" name="brand" type="text" maxlength="120" required autocomplete="off" />
-              </label>
-              <label class="field">
-                <span class="field__label">Name</span>
-                <input id="add-item-name" name="name" type="text" maxlength="200" required autocomplete="off" />
-              </label>
-              <div class="item-edit-select-row field--span2">
+              <div class="item-edit-pair-row item-edit-select-row item-edit-pair-row--brand-name field--span2">
+                <label class="field item-edit-select-row__cell">
+                  <span class="field__label">Brand</span>
+                  <input id="add-item-brand" name="brand" type="text" maxlength="120" required autocomplete="off" />
+                </label>
+                <label class="field item-edit-select-row__cell">
+                  <span class="field__label">Name</span>
+                  <input id="add-item-name" name="name" type="text" maxlength="200" required autocomplete="off" />
+                </label>
+              </div>
+              <div class="item-edit-triple-row item-edit-select-row field--span2">
+                <label class="field item-edit-select-row__cell">
+                  <span class="field__label">Season (optional)</span>
+                  <select id="add-item-season" name="season">
+                    <option value="All-season" selected>All seasons</option>
+                    <option value="A/W">A/W</option>
+                    <option value="S/S">S/S</option>
+                  </select>
+                </label>
                 <label class="field item-edit-select-row__cell">
                   <span class="field__label">Section</span>
                   <select id="add-item-category" name="browseSlot" required></select>
@@ -509,7 +519,7 @@
               </section>
 
               <section class="item-edit-section" aria-labelledby="add-item-section-colour">
-                <h3 id="add-item-section-colour" class="item-edit-section__heading">Colour &amp; season</h3>
+                <h3 id="add-item-section-colour" class="item-edit-section__heading">Colour</h3>
                 <div class="item-detail__form-grid item-edit-section__grid">
                   <div class="field--span2 item-edit-single-colour-block" id="add-item-colour-block">
                     <label class="field">
@@ -548,45 +558,39 @@
                       </label>
                     </div>
                   </div>
-                  <label class="field">
-                    <span class="field__label">Season (optional)</span>
-                    <select id="add-item-season" name="season">
-                      <option value="All-season" selected>All seasons</option>
-                      <option value="A/W">A/W</option>
-                      <option value="S/S">S/S</option>
-                    </select>
-                  </label>
                 </div>
               </section>
 
               <section class="item-edit-section" aria-labelledby="add-item-section-material">
                 <h3 id="add-item-section-material" class="item-edit-section__heading">Material &amp; fit</h3>
                 <div class="item-detail__form-grid item-edit-section__grid">
-                  <label class="field">
-                    <span class="field__label">Material (optional)</span>
-                    <input id="add-item-fabric" name="fabric" type="text" maxlength="80" autocomplete="off" />
-                  </label>
-                  <label class="field">
-                    <span class="field__label">Specs / weight (optional)</span>
-                    <input id="add-item-weight" name="weight" type="text" maxlength="80" autocomplete="off" />
-                  </label>
-                  <label class="field">
-                    <span class="field__label">Size (optional)</span>
-                    <input id="add-item-size" name="size" type="text" maxlength="120" autocomplete="off" />
-                  </label>
+                  <div class="item-edit-triple-row item-edit-spec-strip field--span2">
+                    <label class="field">
+                      <span class="field__label">Material (optional)</span>
+                      <input id="add-item-fabric" name="fabric" type="text" maxlength="80" autocomplete="off" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Specs / weight (optional)</span>
+                      <input id="add-item-weight" name="weight" type="text" maxlength="80" autocomplete="off" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Size (optional)</span>
+                      <input id="add-item-size" name="size" type="text" maxlength="120" autocomplete="off" />
+                    </label>
+                  </div>
                 </div>
               </section>
 
               <section class="item-edit-section" aria-labelledby="add-item-section-acquisition">
                 <h3 id="add-item-section-acquisition" class="item-edit-section__heading">Acquisition</h3>
                 <div class="item-detail__form-grid item-edit-section__grid">
-                  <label class="field">
-                    <span class="field__label">Purchase date (optional)</span>
-                    <input id="add-item-purchase-date" name="purchaseDate" type="date" />
-                  </label>
-                  <label class="field">
-                    <span class="field__label">Price (optional)</span>
-                    <span class="item-edit-price-row add-item-price-row">
+                  <div class="item-edit-triple-row item-edit-acquisition-strip field--span2">
+                    <label class="field">
+                      <span class="field__label">Purchase date (optional)</span>
+                      <input id="add-item-purchase-date" name="purchaseDate" type="date" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Price (optional)</span>
                       <input
                         id="add-item-price"
                         name="price"
@@ -595,9 +599,12 @@
                         placeholder="e.g. 199 or 19,900"
                         autocomplete="off"
                       />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Currency</span>
                       <select id="add-item-price-currency" name="priceCurrency" aria-label="Price currency"></select>
-                    </span>
-                  </label>
+                    </label>
+                  </div>
                 </div>
               </section>
 
@@ -605,20 +612,21 @@
                 <h3 id="add-item-section-notes" class="item-edit-section__heading">Notes</h3>
                 <div class="item-detail__form-grid item-edit-section__grid">
                   <label class="field field--block item-edit-section__block-field">
-                    <span class="field__label">Notes (optional)</span>
-                    <textarea id="add-item-notes" name="notes" class="textarea-autosize" rows="2" maxlength="2000"></textarea>
+                    <textarea id="add-item-notes" name="notes" class="textarea-autosize" rows="2" maxlength="2000" aria-label="Notes (optional)" placeholder="Care, fit notes, provenance…"></textarea>
                   </label>
                 </div>
               </section>
 
               <section class="item-edit-section" aria-labelledby="add-item-section-measurements">
-                <h3 id="add-item-section-measurements" class="item-edit-section__heading">Measurements</h3>
+                <div class="item-edit-section__heading-row item-edit-section__heading-row--with-unit">
+                  <h3 id="add-item-section-measurements" class="item-edit-section__heading">Measurements</h3>
+                  <div id="add-item-measurement-unit-host" class="item-edit-section__heading-unit"></div>
+                </div>
                 <div class="item-detail__form-grid item-edit-section__grid">
-                  <label class="field field--block item-edit-measurements-wrap item-edit-section__block-field">
-                    <span class="field__label">Measurements (optional)</span>
+                  <div class="field field--block item-edit-measurements-wrap item-edit-section__block-field" role="group" aria-label="Measurements (optional)">
                     <input type="hidden" id="add-item-measured-dimensions" name="measuredDimensions" value="" />
                     <div id="add-item-measured-dims-block" class="item-edit-measured-dims-host"></div>
-                  </label>
+                  </div>
                 </div>
               </section>
             </div>

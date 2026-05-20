@@ -178,11 +178,20 @@
     ).trim();
   }
 
-  function itemSecondaryBasicColour(item) {
+  function itemSecondaryBasicColourRaw(item) {
     if (!item || typeof item !== "object") return "";
     const meta =
       item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) ? item.metadata : null;
-    return normalizeStoredBasicColourKey(item.secondaryBasicColour ?? meta?.secondaryBasicColour);
+    return String(item.secondaryBasicColour ?? meta?.secondaryBasicColour ?? "").trim();
+  }
+
+  function itemOmitsSecondaryBasicColourClassification(item) {
+    return itemSecondaryBasicColourRaw(item).toLowerCase() === BASIC_COLOUR_CLASSIFICATION_OMIT;
+  }
+
+  function itemSecondaryBasicColour(item) {
+    if (itemOmitsSecondaryBasicColourClassification(item)) return "";
+    return normalizeStoredBasicColourKey(itemSecondaryBasicColourRaw(item));
   }
 
   /** @param {string} raw */
@@ -203,7 +212,7 @@
 
   /** Broad colour families — collection colour chips + optional per-item / per-variant override. */
   const BASIC_COLOUR_FAMILY_KEYS = ["blue", "brown", "red", "white", "black", "beige", "gold", "silver", "green", "grey"];
-  const GOLD_BASIC_COLOUR_HEX = "#cbb47b";
+  const GOLD_BASIC_COLOUR_HEX = "#DCC98A";
 
   /**
    * Stored in `item.basicColour` or `metadata.basicColour`: piece opts out of broad-colour buckets —
@@ -286,8 +295,13 @@
       if (bc) row.basicColour = bc;
       if (secondaryColour) row.secondaryColour = secondaryColour;
       if (secondaryColourCode) row.secondaryColourCode = secondaryColourCode;
-      const secBc = normalizeStoredBasicColourKey(v.secondaryBasicColour);
-      if (secBc) row.secondaryBasicColour = secBc;
+      const secBcRaw = String(v.secondaryBasicColour ?? "").trim();
+      if (secBcRaw.toLowerCase() === BASIC_COLOUR_CLASSIFICATION_OMIT) {
+        row.secondaryBasicColour = BASIC_COLOUR_CLASSIFICATION_OMIT;
+      } else {
+        const secBc = normalizeStoredBasicColourKey(secBcRaw);
+        if (secBc) row.secondaryBasicColour = secBc;
+      }
       out.push(row);
     }
     return out.length ? out : null;
@@ -325,8 +339,12 @@
     const secCode = itemSecondaryColourCode(item);
     if (secName) row.secondaryColour = secName;
     if (secCode) row.secondaryColourCode = secCode;
-    const secBc = itemSecondaryBasicColour(item);
-    if (secBc) row.secondaryBasicColour = secBc;
+    if (itemOmitsSecondaryBasicColourClassification(item)) {
+      row.secondaryBasicColour = BASIC_COLOUR_CLASSIFICATION_OMIT;
+    } else {
+      const secBc = itemSecondaryBasicColour(item);
+      if (secBc) row.secondaryBasicColour = secBc;
+    }
     return [row];
   }
 
@@ -553,6 +571,37 @@
     return String(input.value ?? "").trim();
   }
 
+  const ITEM_EDIT_COLOUR_CODE_DEFAULT_PH = "#hex, SKU…";
+
+  function rememberItemEditColourCodeDefaultPlaceholder(input) {
+    if (!(input instanceof HTMLInputElement)) return;
+    if (!input.dataset.defaultPlaceholder) {
+      input.dataset.defaultPlaceholder =
+        String(input.placeholder ?? "").trim() || ITEM_EDIT_COLOUR_CODE_DEFAULT_PH;
+    }
+  }
+
+  function itemEditColourCodeSuggestedPlaceholder(input) {
+    if (!(input instanceof HTMLInputElement)) return "";
+    const ph = String(input.placeholder ?? "").trim();
+    const defaultPh = String(input.dataset.defaultPlaceholder ?? ITEM_EDIT_COLOUR_CODE_DEFAULT_PH).trim();
+    if (!ph || ph === ITEM_EDIT_COLOUR_CODE_DEFAULT_PH || ph === defaultPh) return "";
+    return ph;
+  }
+
+  /** Value to persist on save — typed code wins; otherwise commit grey hex suggest from colour name. */
+  function itemEditColourCodeCommittedValue(input) {
+    if (!(input instanceof HTMLInputElement)) return "";
+    const typed = itemEditColourCodeSaveValue(input);
+    if (typed) return typed;
+    if (input.dataset.inferred === "1") return itemEditColourCodeSuggestedPlaceholder(input);
+    return "";
+  }
+
+  function itemEditColourCodeValueForPreview(input) {
+    return itemEditColourCodeCommittedValue(input);
+  }
+
   /**
    * Secondary colour fields — save uses committed values (placeholder suggest only on save).
    * @param {HTMLInputElement | null | undefined} nameIn
@@ -561,7 +610,7 @@
   function readItemEditSecondaryColourFieldValues(nameIn, codeIn) {
     return {
       secondaryColour: itemEditColourNameCommittedValue(nameIn),
-      secondaryColourCode: itemEditColourCodeSaveValue(codeIn),
+      secondaryColourCode: itemEditColourCodeCommittedValue(codeIn),
     };
   }
 
@@ -608,6 +657,9 @@
     const colourNameDefaultPh =
       String(opts?.colourNamePlaceholder ?? "").trim() || ITEM_EDIT_COLOUR_NAME_DEFAULT_PH;
 
+    rememberItemEditColourCodeDefaultPlaceholder(input);
+    input.setAttribute("list", ensureFashionColourHexDatalist());
+
     if (colourInput) {
       rememberItemEditDefaultPlaceholder(colourInput, colourNameDefaultPh);
       migrateGhostInferredColourNameToPlaceholder(colourInput, input, colourNameDefaultPh);
@@ -619,15 +671,49 @@
     const syncPreview = () => {
       const secondary =
         syncDualOnPrimary && getSecondarySources ? getSecondarySources() : null;
+      const colourName =
+        colourInput instanceof HTMLInputElement
+          ? itemEditColourNameForInference(colourInput)
+          : "";
       syncItemEditColourCodePreviewEl(
         preview,
         {
-          colourCode: input.value,
-          colour: "",
+          colourCode: itemEditColourCodeValueForPreview(input),
+          colour: colourName,
           label: "",
         },
         secondary
       );
+    };
+
+    /** Suggest #hex from colour name when code field is empty — placeholder, never `.value`. */
+    const syncInferredColourCodePlaceholder = () => {
+      rememberItemEditColourCodeDefaultPlaceholder(input);
+      const defaultPh = input.dataset.defaultPlaceholder || ITEM_EDIT_COLOUR_CODE_DEFAULT_PH;
+      if (input.dataset.userEdited === "1") {
+        delete input.dataset.inferred;
+        return;
+      }
+      if (input.value.trim()) {
+        if (extractSwatchHexFromVariant({ colourCode: input.value })) delete input.dataset.inferred;
+        return;
+      }
+      const nameForLookup = colourInput
+        ? String(colourInput.value ?? "").trim() || itemEditColourNameSuggestedPlaceholder(colourInput)
+        : "";
+      if (!nameForLookup) {
+        input.placeholder = defaultPh;
+        delete input.dataset.inferred;
+        return;
+      }
+      const hex = colourHexFromFashionName(nameForLookup);
+      if (hex) {
+        input.placeholder = hex;
+        input.dataset.inferred = "1";
+      } else {
+        input.placeholder = defaultPh;
+        delete input.dataset.inferred;
+      }
     };
 
     /** Suggest English name from #hex in the code field only — placeholder, never `.value`. */
@@ -669,18 +755,22 @@
 
     input.addEventListener("input", () => {
       if (input.value.trim()) markItemEditColourFieldUserEdited(input);
+      else delete input.dataset.userEdited;
       clearLegacyInferredColourValue();
       syncInferredColourNamePlaceholder();
+      syncInferredColourCodePlaceholder();
       syncPreview();
     });
     colourInput?.addEventListener("input", () => {
       if (colourInput.value.trim()) markItemEditColourFieldUserEdited(colourInput);
       else delete colourInput.dataset.userEdited;
       syncInferredColourNamePlaceholder();
+      syncInferredColourCodePlaceholder();
       syncPreview();
     });
     labelInput?.addEventListener("input", syncPreview);
     syncInferredColourNamePlaceholder();
+    syncInferredColourCodePlaceholder();
     syncPreview();
     mountColourPickerOnPreview(preview, input, colourInput);
     return syncPreview;
@@ -1089,6 +1179,10 @@
       '<circle cx="9" cy="9" r="5.25" stroke="currentColor" stroke-width="1.85"/>' +
       '<path d="M9 6.25v5.5M6.25 9h5.5" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/>' +
       "</svg>",
+    swap:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+      '<path d="M7 7h11M7 7l3-3M7 7l3 3M17 17H6M17 17l-3-3M17 17l-3 3" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>' +
+      "</svg>",
     single:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
       '<rect x="6" y="6" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.75"/>' +
@@ -1389,6 +1483,134 @@
     syncItemEditSecondaryColourBlockShell(block);
   }
 
+  /**
+   * @param {HTMLInputElement} colourNameInput
+   * @param {HTMLInputElement} colourCodeInput
+   * @param {ReturnType<typeof mountItemEditSecondaryColourBlock> | null} [secondaryMount]
+   */
+  function itemEditColourSwapHasContent(colourNameInput, colourCodeInput, secondaryMount) {
+    const secNameIn = secondaryMount?.secNameInput;
+    const secCodeIn = secondaryMount?.secCodeInput;
+    return Boolean(
+      String(colourNameInput?.value ?? "").trim() ||
+        String(colourCodeInput?.value ?? "").trim() ||
+        String(secNameIn?.value ?? "").trim() ||
+        String(secCodeIn?.value ?? "").trim()
+    );
+  }
+
+  /**
+   * Swap primary ↔ secondary colour name, code, and broad colour.
+   * @param {{
+   *   colourNameInput: HTMLInputElement,
+   *   colourCodeInput: HTMLInputElement,
+   *   basicSel?: HTMLSelectElement | null,
+   *   secondaryMount?: ReturnType<typeof mountItemEditSecondaryColourBlock> | null,
+   *   secBasicSel?: HTMLSelectElement | null,
+   *   syncPrimaryColourPreview?: () => void,
+   *   syncBasicAuto?: () => void,
+   *   syncSecondaryBasicVisibility?: () => void,
+   * }} ctx
+   */
+  function swapItemEditPrimarySecondaryColours(ctx) {
+    const { colourNameInput, colourCodeInput, basicSel, secondaryMount, secBasicSel } = ctx;
+    const secNameIn = secondaryMount?.secNameInput;
+    const secCodeIn = secondaryMount?.secCodeInput;
+    const panel = secondaryMount?.panel;
+    const addBtn = secondaryMount?.addBtn;
+    const block = secondaryMount?.block;
+
+    const priName = colourNameInput.value;
+    const priCode = colourCodeInput.value;
+    const priBasic = basicSel instanceof HTMLSelectElement ? basicSel.value : "";
+    const secName = secNameIn instanceof HTMLInputElement ? secNameIn.value : "";
+    const secCode = secCodeIn instanceof HTMLInputElement ? secCodeIn.value : "";
+    const secBasic = secBasicSel instanceof HTMLSelectElement ? secBasicSel.value : "";
+
+    colourNameInput.value = secName;
+    colourCodeInput.value = secCode;
+    if (secNameIn instanceof HTMLInputElement) secNameIn.value = priName;
+    if (secCodeIn instanceof HTMLInputElement) secCodeIn.value = priCode;
+    if (basicSel instanceof HTMLSelectElement) basicSel.value = secBasic;
+    if (secBasicSel instanceof HTMLSelectElement) secBasicSel.value = priBasic;
+
+    const hasSecondaryAfter = Boolean(String(priName).trim() || String(priCode).trim());
+    if (panel instanceof HTMLElement) panel.hidden = !hasSecondaryAfter;
+    if (addBtn instanceof HTMLElement) addBtn.hidden = hasSecondaryAfter;
+    syncItemEditSecondaryColourBlockShell(block);
+
+    colourNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    colourCodeInput.dispatchEvent(new Event("input", { bubbles: true }));
+    secNameIn?.dispatchEvent(new Event("input", { bubbles: true }));
+    secCodeIn?.dispatchEvent(new Event("input", { bubbles: true }));
+    block?.dispatchEvent(new Event("change", { bubbles: true }));
+
+    if (typeof ctx.syncPrimaryColourPreview === "function") ctx.syncPrimaryColourPreview();
+    if (typeof ctx.syncBasicAuto === "function") ctx.syncBasicAuto();
+    if (typeof ctx.syncSecondaryBasicVisibility === "function") ctx.syncSecondaryBasicVisibility();
+  }
+
+  /**
+   * @param {(HTMLElement | null | undefined)[]} targets
+   * @param {{
+   *   colourNameInput: HTMLInputElement,
+   *   colourCodeInput: HTMLInputElement,
+   *   basicSel?: HTMLSelectElement | null,
+   *   secondaryMount?: ReturnType<typeof mountItemEditSecondaryColourBlock> | null,
+   *   secBasicSel?: HTMLSelectElement | null,
+   *   syncPrimaryColourPreview?: () => void,
+   *   syncBasicAuto?: () => void,
+   *   syncSecondaryBasicVisibility?: () => void,
+   * }} ctx
+   */
+  function attachItemEditColourSwapControls(targets, ctx) {
+    /** @type {HTMLButtonElement[]} */
+    const buttons = [];
+    for (const target of targets) {
+      if (!(target instanceof HTMLElement)) continue;
+      const swapBtn = createItemEditIconButton(
+        "item-edit-colour-swap",
+        TW_ITEM_EDIT_ICON.swap,
+        "Swap primary and secondary colour",
+        { title: "Swap primary ↔ secondary" }
+      );
+      if (target.classList.contains("item-edit-colour-code-row__actions")) {
+        itemEditRowActionsPush(target, swapBtn);
+      } else {
+        target.appendChild(swapBtn);
+      }
+      buttons.push(swapBtn);
+    }
+    if (!buttons.length) return null;
+    const syncDisabled = () => {
+      const enabled = itemEditColourSwapHasContent(
+        ctx.colourNameInput,
+        ctx.colourCodeInput,
+        ctx.secondaryMount
+      );
+      for (const btn of buttons) btn.disabled = !enabled;
+    };
+    const onSwap = () => {
+      swapItemEditPrimarySecondaryColours(ctx);
+      syncDisabled();
+    };
+    for (const btn of buttons) btn.addEventListener("click", onSwap);
+    ctx.colourNameInput.addEventListener("input", syncDisabled);
+    ctx.colourCodeInput.addEventListener("input", syncDisabled);
+    ctx.secondaryMount?.secNameInput?.addEventListener("input", syncDisabled);
+    ctx.secondaryMount?.secCodeInput?.addEventListener("input", syncDisabled);
+    syncDisabled();
+    return buttons[0];
+  }
+
+  /**
+   * @param {HTMLElement} actionsEl
+   * @param {Parameters<typeof attachItemEditColourSwapControls>[1]} ctx
+   */
+  function wireItemEditColourSwapButton(actionsEl, ctx) {
+    return attachItemEditColourSwapControls([actionsEl], ctx);
+  }
+
   /** When add lives in the primary code row, hide the empty shell until the panel opens. */
   function syncItemEditSecondaryColourBlockShell(block) {
     if (!(block instanceof HTMLElement)) return;
@@ -1676,6 +1898,77 @@
     if (best && bestDist < 5200) return best;
     const fam = hexRgbToBasicFamily(hex.slice(1));
     return fam ? basicColourLabelEn(fam) : "";
+  }
+
+  function normalizeFashionColourLookupKey(raw) {
+    return String(raw ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  /**
+   * Hex swatch(es) from a fashion colour word (e.g. "black" → #121212).
+   * @param {string} raw
+   * @returns {string[]}
+   */
+  function colourHexCandidatesFromFashionName(raw) {
+    const segment = colourLabelSegmentForAutoBroadColour(raw);
+    if (!segment) return [];
+    const key = normalizeFashionColourLookupKey(segment);
+    if (!key) return [];
+
+    const exact = [];
+    const prefix = [];
+    for (const row of FASHION_COLOUR_FROM_HEX) {
+      const rowKey = normalizeFashionColourLookupKey(row.name);
+      if (rowKey === key) exact.push(row.hex);
+      else if (key.length >= 2 && rowKey.startsWith(key)) prefix.push(row.hex);
+    }
+    if (exact.length) return [...new Set(exact)];
+
+    const fams = basicFamiliesFromColourSegment(key);
+    if (fams.size === 1) {
+      const fam = [...fams][0];
+      const hx = LUXURY_SWATCH_HEX[fam] || BASIC_COLOUR_SWATCH_HEX[fam];
+      if (hx) return [hx];
+    }
+
+    const uniqPrefix = [...new Set(prefix)];
+    return uniqPrefix.length === 1 ? uniqPrefix : uniqPrefix;
+  }
+
+  /** Best hex for a colour label — exact fashion name, then single prefix, then broad family. */
+  function colourHexFromFashionName(raw) {
+    const picks = colourHexCandidatesFromFashionName(raw);
+    return picks[0] || "";
+  }
+
+  /** @type {HTMLDataListElement | null} */
+  let fashionColourHexDatalistEl = null;
+
+  function ensureFashionColourHexDatalist() {
+    if (fashionColourHexDatalistEl) return fashionColourHexDatalistEl.id;
+    const dl = document.createElement("datalist");
+    dl.id = "tw-fashion-colour-hex-list";
+    for (const row of FASHION_COLOUR_FROM_HEX) {
+      const opt = document.createElement("option");
+      opt.value = row.hex;
+      opt.label = row.name;
+      dl.appendChild(opt);
+    }
+    for (const key of BASIC_COLOUR_FAMILY_KEYS) {
+      const hx = LUXURY_SWATCH_HEX[key] || BASIC_COLOUR_SWATCH_HEX[key];
+      if (!hx) continue;
+      if ([...dl.options].some((o) => o.value === hx)) continue;
+      const opt = document.createElement("option");
+      opt.value = hx;
+      opt.label = basicColourLabelEn(key);
+      dl.appendChild(opt);
+    }
+    document.body.appendChild(dl);
+    fashionColourHexDatalistEl = dl;
+    return dl.id;
   }
 
   /** PDP / picker line — prefers stored colour text, then label, then hex inference. */
@@ -3092,7 +3385,9 @@
    */
   function inferSecondaryBasicColourFamilyFromFields(fields) {
     if (!fields || typeof fields !== "object" || !hasSecondaryColourFields(fields)) return "";
-    const pick = normalizeStoredBasicColourKey(fields.secondaryBasicColour);
+    const rawStored = String(fields.secondaryBasicColour ?? "").trim();
+    if (rawStored.toLowerCase() === BASIC_COLOUR_CLASSIFICATION_OMIT) return "";
+    const pick = normalizeStoredBasicColourKey(rawStored);
     if (pick) return pick;
     return inferSinglePrimaryBasicColourFamilyFromFields({
       colour: fields.secondaryColour ?? fields.secondaryColor,
@@ -3149,9 +3444,13 @@
 
     const raw = String(basicSel.value ?? "").trim();
     const isAuto = raw === "";
-    if (!isAuto) return;
+    const isOmit = raw.toLowerCase() === BASIC_COLOUR_CLASSIFICATION_OMIT;
+    if (!isAuto || isOmit) return;
 
-    const key = inferSecondaryBasicColourFamilyFromFields(fields);
+    const key = inferSecondaryBasicColourFamilyFromFields({
+      ...fields,
+      secondaryBasicColour: raw,
+    });
     const label = key ? basicColourLabelEn(key) : "";
     if (autoOpt) autoOpt.textContent = label ? `Auto — ${label}` : autoBase;
   }
@@ -3183,7 +3482,7 @@
     const sel = document.createElement("select");
     sel.className = opts.className || "item-edit-secondary-basic-colour";
     if (opts.id) sel.id = opts.id;
-    fillBasicColourSelectOptions(sel, initialPick, { includeOmit: false });
+    fillBasicColourSelectOptions(sel, initialPick, { includeOmit: true });
     wrap.append(span, sel);
     const sync =
       typeof opts.getFields === "function"
@@ -3479,13 +3778,49 @@
   }
 
   /**
+   * @param {HTMLElement} host
+   * @param {string} unitSelectId
+   * @param {string} [initialUnit]
+   * @returns {HTMLSelectElement | null}
+   */
+  function mountMeasurementUnitSelect(host, unitSelectId, initialUnit = "cm", opts = {}) {
+    const id = String(unitSelectId ?? "").trim();
+    if (!id || !(host instanceof HTMLElement)) return null;
+    host.replaceChildren();
+    const unitLab = document.createElement("label");
+    unitLab.className = "measured-dims-unit-field";
+    const inlineHeading = Boolean(opts.inlineHeading);
+    if (!inlineHeading) {
+      const unitLabSpan = document.createElement("span");
+      unitLabSpan.className = "measured-dims-unit-label";
+      unitLabSpan.textContent = "Unit";
+      unitLab.appendChild(unitLabSpan);
+    }
+    const unitSel = document.createElement("select");
+    unitSel.id = id;
+    unitSel.setAttribute("aria-label", "Measurement unit");
+    const u0 = parseMeasurementUnitInput(initialUnit);
+    for (const u of ["cm", "mm"]) {
+      const o = document.createElement("option");
+      o.value = u;
+      o.textContent = u;
+      if (u === u0) o.selected = true;
+      unitSel.appendChild(o);
+    }
+    unitLab.appendChild(unitSel);
+    host.appendChild(unitLab);
+    return unitSel;
+  }
+
+  /**
    * @param {HTMLElement} container
    * @param {{ label: string, value: string }[]} rowsToShow
-   * @param {{ unitSelectId: string, initialUnit?: string }} opts
+   * @param {{ unitSelectId: string, initialUnit?: string, unitHost?: HTMLElement | null }} opts
    */
   function mountMeasurementRowsEditor(container, rowsToShow, opts) {
     const unitSelectId = String(opts?.unitSelectId ?? "").trim();
     const initialUnit = parseMeasurementUnitInput(opts?.initialUnit ?? "cm");
+    const unitHost = opts?.unitHost instanceof HTMLElement ? opts.unitHost : null;
     container.innerHTML = "";
     const block = document.createElement("div");
     block.className = "measured-dims-block";
@@ -3494,7 +3829,9 @@
     dyn.className = "measured-dims-dynamic";
 
     let unitSel = /** @type {HTMLSelectElement | null} */ (null);
-    if (unitSelectId) {
+    if (unitSelectId && unitHost) {
+      unitSel = mountMeasurementUnitSelect(unitHost, unitSelectId, initialUnit, { inlineHeading: true });
+    } else if (unitSelectId) {
       const unitRow = document.createElement("div");
       unitRow.className = "measured-dims-unit-row";
       const unitLab = document.createElement("label");
@@ -3616,6 +3953,7 @@
     mountMeasurementRowsEditor(el, resolveInitialMeasurementRowsForEditor([], { defaultsForEmpty: true }), {
       unitSelectId: "add-item-measurement-unit",
       initialUnit: "cm",
+      unitHost: document.getElementById("add-item-measurement-unit-host"),
     });
     const hid = document.getElementById("add-item-measured-dimensions");
     if (hid) hid.value = "";
@@ -4009,6 +4347,19 @@
     SLOT_FRAGRANCE,
   ];
 
+  /** Concrete watch record types (edit form, filters, drill chips). */
+  const WATCH_RECORD_TYPE_KEYS = ["Dress", "Everyday", "Dive", "Beater"];
+
+  /** Watch labels that must not appear under Accessories drill / mega menu. */
+  const WATCH_RECORD_TYPE_KEYS_LEAKED = [
+    ...WATCH_RECORD_TYPE_KEYS,
+    "Watches",
+    "Dress watch",
+    "Dive watch",
+    "Sports watch",
+    "潛水錶",
+  ];
+
   /** URL segment per main nav division (`/collection/clothing`, …). */
   const COLLECTION_DIVISION_SLUGS = {
     [SLOT_CLOTHING]: "clothing",
@@ -4142,10 +4493,12 @@
     Necklace: "Jewellery",
     Bracelet: "Jewellery",
     Ring: "Jewellery",
-    Beater: "Beater",
-    "Dress watch": "Dress watch",
-    "Dive watch": "Dive watch",
+    Dress: "Dress",
     Everyday: "Everyday",
+    Dive: "Dive",
+    Beater: "Beater",
+    "Dress watch": "Dress",
+    "Dive watch": "Dive",
     Watches: "Watches",
     Accessories: "Accessories",
     "Small accessories": "Small Accessories",
@@ -4457,11 +4810,10 @@
     const cat = String(item.category ?? "").trim();
     if (
       cat === "Watches" ||
-      cat === "Beater" ||
+      WATCH_RECORD_TYPE_KEYS.includes(cat) ||
       cat === "Dress watch" ||
       cat === "Dive watch" ||
       cat === "潛水錶" ||
-      cat === "Everyday" ||
       cat === "Sports watch"
     ) {
       return SLOT_WATCHES;
@@ -4517,11 +4869,10 @@
     if (rawCat === "Footwear") return SLOT_ACCESSORIES;
     if (rawCat === "Watches") return SLOT_WATCHES;
     if (
-      rawCat === "Beater" ||
+      WATCH_RECORD_TYPE_KEYS.includes(rawCat) ||
       rawCat === "Dress watch" ||
       rawCat === "Dive watch" ||
       rawCat === "潛水錶" ||
-      rawCat === "Everyday" ||
       rawCat === "Sports watch"
     ) {
       return SLOT_WATCHES;
@@ -4623,9 +4974,11 @@
     Bottoms: 6,
     Trousers: 6,
     Footwear: 7,
-    Beater: 54,
-    "Dress watch": 50,
+    Dress: 50,
     Everyday: 51,
+    Dive: 52,
+    Beater: 53,
+    "Dress watch": 50,
     "Dive watch": 52,
     Watches: 55,
     Fragrance: 9,
@@ -4649,7 +5002,7 @@
   /** Record types always listed in add/edit `<select>` for these slots (even with zero items). */
   const KNOWN_RECORD_TYPES_BY_SLOT = {
     [SLOT_ACCESSORIES]: ["Bags", "Footwear", "Jewellery", "Eyewear", "Hats"],
-    [SLOT_WATCHES]: ["Dress watch", "Everyday", "Dive watch", "Beater"],
+    [SLOT_WATCHES]: WATCH_RECORD_TYPE_KEYS,
     [SLOT_FRAGRANCE]: ["Day", "Evening"],
   };
 
@@ -8405,6 +8758,90 @@
     return globalThis.matchMedia?.("(max-width: 900px), (hover: none), (pointer: coarse)")?.matches ?? false;
   }
 
+  /** Desktop PDP / edit preview — in-frame zoom + mouse pan (not full-screen lightbox). */
+  function isItemPageDesktopHoverZoom() {
+    return globalThis.matchMedia?.("(min-width: 880px) and (hover: hover) and (pointer: fine)")?.matches ?? false;
+  }
+
+  /**
+   * Desktop: scale hero inside the 3×4 frame; mouse position pans across the image.
+   * @param {HTMLElement} media
+   * @param {HTMLImageElement} heroImg
+   */
+  function wireItemDetailHeroDesktopZoomPan(media, heroImg) {
+    if (!isItemPageDesktopHoverZoom()) return () => {};
+    if (!(media instanceof HTMLElement) || !(heroImg instanceof HTMLImageElement)) return () => {};
+
+    media.classList.add("item-detail__media--zoomable");
+    heroImg.classList.add("item-detail__hero-img--zoomable");
+
+    const resetZoom = () => {
+      media.classList.remove("item-detail__media--zoomed");
+      heroImg.classList.remove("item-detail__hero-img--zoomed");
+      heroImg.style.removeProperty("--hero-zoom-x");
+      heroImg.style.removeProperty("--hero-zoom-y");
+      heroImg.style.removeProperty("--hero-zoom-scale");
+    };
+
+    const zoomScaleForImage = () => {
+      if (!heroImg.complete || !heroImg.naturalWidth) return 0;
+      const ir = heroImg.getBoundingClientRect();
+      if (!ir.width || !ir.height) return 0;
+      const byW = heroImg.naturalWidth / ir.width;
+      const byH = heroImg.naturalHeight / ir.height;
+      const need = Math.max(byW, byH, 1.35);
+      if (need < 1.12) return 0;
+      return Math.min(2.75, need);
+    };
+
+    const setPanOrigin = (clientX, clientY) => {
+      const r = media.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const x = ((clientX - r.left) / r.width) * 100;
+      const y = ((clientY - r.top) / r.height) * 100;
+      heroImg.style.setProperty("--hero-zoom-x", `${Math.max(0, Math.min(100, x))}%`);
+      heroImg.style.setProperty("--hero-zoom-y", `${Math.max(0, Math.min(100, y))}%`);
+    };
+
+    const activateZoom = (ev) => {
+      const scale = zoomScaleForImage();
+      if (!scale) {
+        resetZoom();
+        return;
+      }
+      heroImg.style.setProperty("--hero-zoom-scale", String(scale));
+      media.classList.add("item-detail__media--zoomed");
+      heroImg.classList.add("item-detail__hero-img--zoomed");
+      setPanOrigin(ev.clientX, ev.clientY);
+    };
+
+    const onEnter = (ev) => activateZoom(ev);
+    const onMove = (ev) => {
+      if (!media.classList.contains("item-detail__media--zoomed")) {
+        activateZoom(ev);
+        return;
+      }
+      setPanOrigin(ev.clientX, ev.clientY);
+    };
+    const onLeave = () => resetZoom();
+    const onLoad = () => resetZoom();
+
+    media.addEventListener("mouseenter", onEnter, { passive: true });
+    media.addEventListener("mousemove", onMove, { passive: true });
+    media.addEventListener("mouseleave", onLeave);
+    heroImg.addEventListener("load", onLoad);
+
+    return () => {
+      media.removeEventListener("mouseenter", onEnter);
+      media.removeEventListener("mousemove", onMove);
+      media.removeEventListener("mouseleave", onLeave);
+      heroImg.removeEventListener("load", onLoad);
+      media.classList.remove("item-detail__media--zoomable", "item-detail__media--zoomed");
+      heroImg.classList.remove("item-detail__hero-img--zoomable", "item-detail__hero-img--zoomed");
+      resetZoom();
+    };
+  }
+
   /** @type {HTMLDialogElement | null} */
   let itemImageZoomDialogEl = null;
 
@@ -8621,7 +9058,9 @@
 
     media.classList.add("item-detail__media--hero-view");
     heroImg.classList.add("item-detail__hero-img--enlarge");
-    heroImg.title = "Click to enlarge";
+    heroImg.title = isItemPageDesktopHoverZoom()
+      ? "Move the mouse to explore detail · click for full screen"
+      : "Click to enlarge";
 
     let touchStartX = 0;
     let touchStartY = 0;
@@ -8931,11 +9370,11 @@
           const sec = inferSecondaryBasicColourFamilyFromFields(v);
           if (sec) fams.add(sec);
         }
-      } else {
+      } else if (!itemOmitsSecondaryBasicColourClassification(item)) {
         const sec = inferSecondaryBasicColourFamilyFromFields({
           secondaryColour: itemSecondaryColour(item),
           secondaryColourCode: itemSecondaryColourCode(item),
-          secondaryBasicColour: itemSecondaryBasicColour(item),
+          secondaryBasicColour: itemSecondaryBasicColourRaw(item),
         });
         if (sec) fams.add(sec);
       }
@@ -10555,6 +10994,9 @@
     const r = String(raw ?? "").trim();
     if (r === "Watches") return "Watches";
     if (r === "Sports watch") return "Everyday";
+    if (r === "Dress watch") return "Dress";
+    if (r === "Dive watch" || r === "潛水錶") return "Dive";
+    if (WATCH_RECORD_TYPE_KEYS.includes(r)) return r;
     return r;
   }
 
@@ -10584,19 +11026,11 @@
       raw = mapJewelleryFutureToConcreteDrillKey(raw);
       if (raw === "Footwear") return "Footwear";
       if (raw === "Small accessories" || raw === "帽子") return "Hats";
-      if (
-        raw === "Watches" ||
-        raw === "Everyday" ||
-        raw === "Beater" ||
-        raw === "Dress watch" ||
-        raw === "Dive watch" ||
-        raw === "潛水錶"
-      ) {
+      if (WATCH_RECORD_TYPE_KEYS_LEAKED.includes(raw)) {
         return "Hats";
       }
     }
     if (slot === SLOT_WATCHES) {
-      if (raw === "潛水錶") raw = "Dive watch";
       raw = mapRemovedWatchRecordTypesToConcrete(raw);
     }
     if (slot === SLOT_FRAGRANCE && raw === "Daywear") raw = "Day";
@@ -10671,7 +11105,7 @@
     if (slot === SLOT_ACCESSORIES) {
       keys = keys.filter((k) => k && !["Jewellery", "Jewellery", "Future"].includes(k));
       keys = keys.filter(
-        (k) => k && !["Everyday", "Watches", "Beater", "Dress watch", "Dive watch"].includes(k)
+        (k) => k && !WATCH_RECORD_TYPE_KEYS_LEAKED.includes(k)
       );
       if (!keys.includes("Jewellery")) keys.push("Jewellery");
       keys = sortRecordTypeKeysForSlot(slot, keys);
@@ -10714,7 +11148,7 @@
     const r = String(raw ?? "").trim();
     if (r === "Daywear") return "Day";
     if (r === "項鏈" || r === "手鏈" || r === "戒指") return "Jewellery";
-    if (r === "潛水錶") return "Watches";
+    if (r === "潛水錶") return "Dive";
     if (r === "Small accessories") return "Hats";
     if (r === "帽子") return "Hats";
     return r;
@@ -10737,7 +11171,7 @@
     if (knownExtra?.length) keys = sortRecordTypeKeysForSlot(slot, [...keys, ...knownExtra]);
     if (slot === SLOT_ACCESSORIES) {
       keys = keys.filter((k) => k && !["Jewellery", "Jewellery", "Future"].includes(k));
-      keys = keys.filter((k) => k && !["Everyday", "Watches", "Beater", "Dress watch", "Dive watch"].includes(k));
+      keys = keys.filter((k) => k && !WATCH_RECORD_TYPE_KEYS_LEAKED.includes(k));
       if (!keys.includes("Jewellery")) keys.push("Jewellery");
       keys = sortRecordTypeKeysForSlot(slot, keys);
     }
@@ -11524,6 +11958,10 @@
   function mountItemDetailPageGallery(galleryEl, thumbsEl, stageEl, heroImgEl, item, opts = {}) {
     if (!galleryEl || !thumbsEl || !stageEl || !heroImgEl) return;
     delete stageEl.dataset.twHeroViewWired;
+    if (typeof stageEl.__twDesktopZoomCleanup === "function") {
+      stageEl.__twDesktopZoomCleanup();
+      stageEl.__twDesktopZoomCleanup = null;
+    }
     stageEl.classList.remove(
       "item-detail__media--mobile-hero",
       "item-detail__media--hero-view",
@@ -11537,6 +11975,7 @@
     );
     heroImgEl.style.removeProperty("--hero-zoom-x");
     heroImgEl.style.removeProperty("--hero-zoom-y");
+    heroImgEl.style.removeProperty("--hero-zoom-scale");
     if (galleryEl.__twThumbRailObs?.disconnect) {
       galleryEl.__twThumbRailObs.disconnect();
       galleryEl.__twThumbRailObs = null;
@@ -11608,6 +12047,7 @@
       heroImgEl.classList.remove("item-detail__hero-img--zoomed");
       heroImgEl.style.removeProperty("--hero-zoom-x");
       heroImgEl.style.removeProperty("--hero-zoom-y");
+      heroImgEl.style.removeProperty("--hero-zoom-scale");
       const url = heroFrameSrc(frames[currentIndex].url);
       if (url) {
         heroImgEl.src = url;
@@ -11696,6 +12136,8 @@
       };
       wireItemPageHeroView(stageEl, heroImgEl, item, stageEl.__twPdpGallery);
     }
+
+    stageEl.__twDesktopZoomCleanup = wireItemDetailHeroDesktopZoomPan(stageEl, heroImgEl);
   }
 
   function remountItemDetailHeroGallery(heroHost, heroImg, item) {
@@ -12557,6 +12999,7 @@
     let addSecColourMount = null;
     /** @type {{ wrap: HTMLElement, sel: HTMLSelectElement, sync: (() => void) | null } | null} */
     let addItemSecBasicMount = null;
+    let syncAddItemBasicAuto = noop;
     const syncAddSecondaryBasicVisibility = () => {
       if (!addItemSecBasicMount) return;
       const hasSec = shouldShowItemEditSecondaryBasicColour(addSecColourMount);
@@ -12600,14 +13043,31 @@
           ),
       });
       addItemBasicPair.appendChild(addItemSecBasicMount.wrap);
-      const syncAddItemBasicAuto = wireItemEditBasicColourAutoDisplay(addItemBasicSel, () => ({
+      syncAddItemBasicAuto = wireItemEditBasicColourAutoDisplay(addItemBasicSel, () => ({
         colour: itemEditColourNameForInference(addItemColourName),
-        colourCode: itemEditColourCodeSaveValue(addItemColourCode),
+        colourCode: itemEditColourCodeCommittedValue(addItemColourCode),
       }));
       addItemColourName?.addEventListener("input", syncAddItemBasicAuto);
       addItemColourCode.addEventListener("input", syncAddItemBasicAuto);
     }
     syncAddSecondaryBasicVisibility();
+
+    if (
+      addItemColourName instanceof HTMLInputElement &&
+      addItemCodeRow instanceof HTMLElement &&
+      addSecColourMount
+    ) {
+      wireItemEditColourSwapButton(itemEditColourCodeActionsEl(addItemCodeRow), {
+        colourNameInput: addItemColourName,
+        colourCodeInput: addItemColourCode,
+        basicSel: addItemBasicSel instanceof HTMLSelectElement ? addItemBasicSel : null,
+        secondaryMount: addSecColourMount,
+        secBasicSel: addItemSecBasicMount?.sel ?? null,
+        syncPrimaryColourPreview: syncAddPrimaryPreview,
+        syncBasicAuto: syncAddItemBasicAuto,
+        syncSecondaryBasicVisibility: syncAddSecondaryBasicVisibility,
+      });
+    }
 
     return { syncAddPrimaryPreview, addSecColourMount, syncAddSecondaryBasicVisibility };
   }
@@ -14427,7 +14887,7 @@
     const season = normalizeStoredItemSeason(document.getElementById("add-item-season")?.value?.trim() || "");
     const category = resolveCategoryForBrowseSlot(browseSlot, recordPick, season, {});
     const colourVal = itemEditColourNameCommittedValue(document.getElementById("add-item-colour"));
-    const colourCodeInput = itemEditColourCodeSaveValue(document.getElementById("add-item-colour-code"));
+    const colourCodeInput = itemEditColourCodeCommittedValue(document.getElementById("add-item-colour-code"));
     const addSecRead = readItemEditSecondaryColourFieldValues(
       document.getElementById("add-item-secondary-colour"),
       document.getElementById("add-item-secondary-colour-code")
@@ -16456,7 +16916,7 @@
     refillBasicColourSelectOptions(basicSel, String(data.basicColour ?? "").trim());
     const syncVariantBasicAuto = wireItemEditBasicColourAutoDisplay(basicSel, () => ({
       colour: itemEditColourNameForInference(colourIn),
-      colourCode: itemEditColourCodeSaveValue(codeIn),
+      colourCode: itemEditColourCodeCommittedValue(codeIn),
       label: String(labelIn.value ?? "").trim(),
     }));
     const variantSecBasicMount = createItemEditSecondaryBasicColourField(String(data.secondaryBasicColour ?? "").trim(), {
@@ -16481,6 +16941,16 @@
     }
     syncVariantSecondaryBasicVisibilityRef.fn = syncVariantSecondaryBasicVisibility;
     syncVariantSecondaryBasicVisibility();
+    wireItemEditColourSwapButton(codeActions, {
+      colourNameInput: colourIn,
+      colourCodeInput: codeIn,
+      basicSel,
+      secondaryMount: variantSecondaryMount,
+      secBasicSel: variantSecBasicMount.sel,
+      syncPrimaryColourPreview,
+      syncBasicAuto: syncVariantBasicAuto,
+      syncSecondaryBasicVisibility: syncVariantSecondaryBasicVisibility,
+    });
     labelIn.addEventListener("input", syncVariantBasicAuto);
     colourIn.addEventListener("input", syncVariantBasicAuto);
     codeIn.addEventListener("input", syncVariantBasicAuto);
@@ -16613,7 +17083,7 @@
       const key = row.querySelector(".item-edit-variant-key")?.value?.trim() || "";
       const label = row.querySelector(".item-edit-variant-label")?.value?.trim() || "";
       const colourTxt = itemEditColourNameCommittedValue(row.querySelector(".item-edit-variant-colour"));
-      const colourCode = itemEditColourCodeSaveValue(row.querySelector(".item-edit-variant-colour-code"));
+      const colourCode = itemEditColourCodeCommittedValue(row.querySelector(".item-edit-variant-colour-code"));
       const secNameIn = row.querySelector(".item-edit-secondary-colour");
       const secCodeIn = row.querySelector(".item-edit-secondary-colour-code");
       const { secondaryColour, secondaryColourCode } = readItemEditSecondaryColourFieldValues(
@@ -16807,7 +17277,7 @@
     const colourCode =
       variantsMode && colourVariantsBuilt?.length
         ? String(colourVariantsBuilt[0].colourCode ?? "").trim()
-        : itemEditColourCodeSaveValue(form.querySelector("#item-edit-colour-code"));
+        : itemEditColourCodeCommittedValue(form.querySelector("#item-edit-colour-code"));
 
     const secNameIn = /** @type {HTMLInputElement | null} */ (form.querySelector("#item-edit-secondary-colour"));
     const secCodeIn = /** @type {HTMLInputElement | null} */ (form.querySelector("#item-edit-secondary-colour-code"));
@@ -17392,6 +17862,15 @@
     const addAnchor = actionsEl.querySelector(
       ".measured-dims-row__add, .item-edit-secondary-colour-add"
     );
+    if (
+      addAnchor &&
+      (btn.classList.contains("item-edit-colour-swap") ||
+        btn.classList.contains("item-edit-secondary-colour-remove") ||
+        btn.classList.contains("item-edit-eyedropper-btn"))
+    ) {
+      actionsEl.insertBefore(btn, addAnchor);
+      return;
+    }
     if (addAnchor) actionsEl.insertBefore(btn, addAnchor);
     else actionsEl.appendChild(btn);
   }
@@ -17425,9 +17904,10 @@
    * @param {string} rightLabel
    * @param {HTMLElement} rightChild
    */
-  function appendItemEditSelectRow(grid, leftLabel, leftChild, rightLabel, rightChild) {
+  function appendItemEditSelectRow(grid, leftLabel, leftChild, rightLabel, rightChild, opts = {}) {
     const row = document.createElement("div");
     row.className = "item-edit-pair-row item-edit-select-row field--span2";
+    if (opts.variant === "brand-name") row.classList.add("item-edit-pair-row--brand-name");
 
     const leftLab = document.createElement("label");
     leftLab.className = "field item-edit-select-row__cell";
@@ -17444,6 +17924,46 @@
     rightLab.append(rightSpan, rightChild);
 
     row.append(leftLab, rightLab);
+    grid.appendChild(row);
+  }
+
+  /**
+   * Three selects on one row (full grid width, equal thirds).
+   * @param {HTMLElement} grid
+   * @param {string} leftLabel
+   * @param {HTMLElement} leftChild
+   * @param {string} midLabel
+   * @param {HTMLElement} midChild
+   * @param {string} rightLabel
+   * @param {HTMLElement} rightChild
+   */
+  function appendItemEditTripleSelectRow(
+    grid,
+    leftLabel,
+    leftChild,
+    midLabel,
+    midChild,
+    rightLabel,
+    rightChild
+  ) {
+    const row = document.createElement("div");
+    row.className = "item-edit-triple-row item-edit-select-row field--span2";
+
+    const makeCell = (labelText, child) => {
+      const lab = document.createElement("label");
+      lab.className = "field item-edit-select-row__cell";
+      const span = document.createElement("span");
+      span.className = "field__label";
+      span.textContent = labelText;
+      lab.append(span, child);
+      return lab;
+    };
+
+    row.append(
+      makeCell(leftLabel, leftChild),
+      makeCell(midLabel, midChild),
+      makeCell(rightLabel, rightChild)
+    );
     grid.appendChild(row);
   }
 
@@ -17670,7 +18190,7 @@
       nameIn.required = true;
       nameIn.maxLength = 200;
       nameIn.value = String(item.name ?? "");
-      appendItemEditSelectRow(identityGrid, "Brand", brandIn, "Name", nameIn);
+      appendItemEditSelectRow(identityGrid, "Brand", brandIn, "Name", nameIn, { variant: "brand-name" });
 
       const seaSel = document.createElement("select");
       seaSel.id = "item-edit-season";
@@ -17688,8 +18208,6 @@
         if (row.value === curPick) o.selected = true;
         seaSel.appendChild(o);
       }
-      appendItemEditField(identityGrid, "Season (optional)", seaSel, { width: "compact" });
-
       const catSel = document.createElement("select");
       catSel.id = "item-edit-browse-slot";
       catSel.required = true;
@@ -17709,7 +18227,15 @@
         'Same labels as the collection "type" strip — controls filtering and default browse order.';
       const currentRecKey = recordCategoryForDrill(item, slotPick);
       fillItemEditRecordTypeSelect(recordTypeSel, slotPick, currentRecKey);
-      appendItemEditSelectRow(identityGrid, "Section", catSel, "Type", recordTypeSel);
+      appendItemEditTripleSelectRow(
+        identityGrid,
+        "Season (optional)",
+        seaSel,
+        "Section",
+        catSel,
+        "Type",
+        recordTypeSel
+      );
 
       const photosFieldWrap = document.createElement("div");
       photosFieldWrap.className = "field field--span2 item-edit-photos-field";
@@ -17826,14 +18352,19 @@
 
       const syncItemBasicAuto = wireItemEditBasicColourAutoDisplay(basicSel, () => ({
         colour: itemEditColourNameForInference(colourNameInput),
-        colourCode: itemEditColourCodeSaveValue(colourCodeInput),
+        colourCode: itemEditColourCodeCommittedValue(colourCodeInput),
       }));
 
       /** @type {{ block: HTMLElement, panel: HTMLElement, addBtn: HTMLElement, removeBtn: HTMLElement, secNameInput: HTMLInputElement, secCodeInput: HTMLInputElement } | null} */
       let secondaryColourMount = null;
 
       const hasInitialSecondary = Boolean(itemSecondaryColour(item) || itemSecondaryColourCode(item));
-      const secBasicMount = createItemEditSecondaryBasicColourField(itemSecondaryBasicColour(item), {
+      const rawInitialSecBasic = itemSecondaryBasicColourRaw(item);
+      const initialSecBasic =
+        rawInitialSecBasic.toLowerCase() === BASIC_COLOUR_CLASSIFICATION_OMIT
+          ? BASIC_COLOUR_CLASSIFICATION_OMIT
+          : itemSecondaryBasicColour(item);
+      const secBasicMount = createItemEditSecondaryBasicColourField(initialSecBasic, {
         id: "item-edit-secondary-basic-colour",
         hidden: !hasInitialSecondary,
         getFields: () =>
@@ -17883,6 +18414,16 @@
       secColourBlock?.addEventListener("change", syncSecondaryBasicVisibility);
       basicPair.append(basicLab, secBasicMount.wrap);
       colourBlock.appendChild(basicPair);
+      wireItemEditColourSwapButton(colourCodeActions, {
+        colourNameInput,
+        colourCodeInput,
+        basicSel,
+        secondaryMount: secondaryColourMount,
+        secBasicSel: secBasicMount.sel,
+        syncPrimaryColourPreview,
+        syncBasicAuto: syncItemBasicAuto,
+        syncSecondaryBasicVisibility,
+      });
       syncSecondaryBasicVisibility();
 
       if (isCustomPiece) {
@@ -18018,9 +18559,7 @@
             refillBasicColourSelectOptions(singleBasic, parseBasicColourSelectValue(firstBasic?.value ?? "") || "");
           }
           if (singleSecBasic) {
-            refillBasicColourSelectOptions(singleSecBasic, parseBasicColourSelectValue(firstSecBasic?.value ?? "") || "", {
-              includeOmit: false,
-            });
+            refillBasicColourSelectOptions(singleSecBasic, parseBasicColourSelectValue(firstSecBasic?.value ?? "") || "");
           }
         }
         variantsWrap.dataset.active = "0";
@@ -18113,21 +18652,18 @@
       sizeIn.maxLength = 120;
       sizeIn.value = String(item.size ?? "");
 
-      addField("Material (optional)", fabIn, materialGrid, { width: "wide" });
-
-      const fitStrip = document.createElement("div");
-      fitStrip.className = "item-edit-pair-row item-edit-spec-strip";
-      appendItemEditField(fitStrip, "Specs / weight (optional)", wtIn, { width: "compact" });
-      appendItemEditField(fitStrip, "Size (optional)", sizeIn, { width: "compact" });
-      materialGrid.appendChild(fitStrip);
+      const matStrip = document.createElement("div");
+      matStrip.className = "item-edit-triple-row item-edit-spec-strip field--span2";
+      appendItemEditField(matStrip, "Material (optional)", fabIn, { width: "compact" });
+      appendItemEditField(matStrip, "Specs / weight (optional)", wtIn, { width: "compact" });
+      appendItemEditField(matStrip, "Size (optional)", sizeIn, { width: "compact" });
+      materialGrid.appendChild(matStrip);
 
       const purchaseIn = document.createElement("input");
       purchaseIn.type = "date";
       purchaseIn.id = "item-edit-purchase-date";
       purchaseIn.value = splitPurchaseDateForForm(String(item.purchaseDate ?? "").trim()).date;
 
-      const priceWrap = document.createElement("div");
-      priceWrap.className = "item-edit-price-row";
       const priceIn = document.createElement("input");
       priceIn.id = "item-edit-price";
       priceIn.placeholder = "e.g. 199 or 19,900";
@@ -18147,13 +18683,12 @@
         if (c === priceCurrencyPick) o.selected = true;
         priceCurSel.appendChild(o);
       }
-      priceWrap.appendChild(priceIn);
-      priceWrap.appendChild(priceCurSel);
 
       const acquisitionStrip = document.createElement("div");
-      acquisitionStrip.className = "item-edit-pair-row item-edit-acquisition-strip";
+      acquisitionStrip.className = "item-edit-triple-row item-edit-acquisition-strip field--span2";
       appendItemEditField(acquisitionStrip, "Purchase date (optional)", purchaseIn, { width: "compact" });
-      appendItemEditField(acquisitionStrip, "Price (optional)", priceWrap, { width: "medium" });
+      appendItemEditField(acquisitionStrip, "Price (optional)", priceIn, { width: "compact" });
+      appendItemEditField(acquisitionStrip, "Currency", priceCurSel, { width: "compact" });
       acquisitionGrid.appendChild(acquisitionStrip);
 
       formScroll.appendChild(identitySec.section);
@@ -18164,37 +18699,41 @@
       const notesSec = createItemEditSection("Notes");
       const notesLab = document.createElement("label");
       notesLab.className = "field field--block item-edit-section__block-field";
-      const notesSpan = document.createElement("span");
-      notesSpan.className = "field__label";
-      notesSpan.textContent = "Notes (optional)";
       const notesTa = document.createElement("textarea");
       notesTa.id = "item-edit-notes";
       notesTa.className = "textarea-autosize";
       notesTa.rows = 2;
       notesTa.maxLength = 2000;
+      notesTa.setAttribute("aria-label", "Notes (optional)");
+      notesTa.placeholder = "Care, fit notes, provenance…";
       notesTa.value = String(item.notes ?? "");
-      notesLab.appendChild(notesSpan);
       notesLab.appendChild(notesTa);
       wireTextareaAutosize(notesTa);
       notesSec.grid.appendChild(notesLab);
       formScroll.appendChild(notesSec.section);
 
       const measSec = createItemEditSection("Measurements");
-      const measWrap = document.createElement("label");
+      const measHeadingRow = document.createElement("div");
+      measHeadingRow.className =
+        "item-edit-section__heading-row item-edit-section__heading-row--with-unit";
+      const measUnitHost = document.createElement("div");
+      measUnitHost.className = "item-edit-section__heading-unit";
+      measSec.section.replaceChild(measHeadingRow, measSec.heading);
+      measHeadingRow.append(measSec.heading, measUnitHost);
+      const measWrap = document.createElement("div");
       measWrap.className = "field field--block item-edit-measurements-wrap item-edit-section__block-field";
-      const measSpan = document.createElement("span");
-      measSpan.className = "field__label";
-      measSpan.textContent = "Measurements (optional)";
       const measBlockHost = document.createElement("div");
       measBlockHost.id = "item-edit-measured-dims-block";
       measBlockHost.className = "item-edit-measured-dims-host";
-      measWrap.appendChild(measSpan);
+      measBlockHost.setAttribute("role", "group");
+      measBlockHost.setAttribute("aria-label", "Measurements (optional)");
       measWrap.appendChild(measBlockHost);
       measSec.grid.appendChild(measWrap);
       formScroll.appendChild(measSec.section);
       mountMeasurementRowsEditor(measBlockHost, getMeasurementRowsForEditor(item), {
         unitSelectId: "item-edit-measurement-unit",
         initialUnit: getMeasurementUnit(item),
+        unitHost: measUnitHost,
       });
 
       const formFooter = document.createElement("div");
@@ -19107,7 +19646,7 @@
     if (slot === SLOT_ACCESSORIES) {
       keys = keys.filter((k) => k && !["Jewellery", "Jewellery", "Future"].includes(k));
       keys = keys.filter(
-        (k) => k && !["Everyday", "Watches", "Beater", "Dress watch", "Dive watch"].includes(k)
+        (k) => k && !WATCH_RECORD_TYPE_KEYS_LEAKED.includes(k)
       );
       if (!keys.includes("Jewellery")) keys.push("Jewellery");
       keys = sortRecordTypeKeysForSlot(slot, keys);
