@@ -2479,18 +2479,8 @@
       tools.appendChild(wrap);
     }
     wrap.replaceChildren();
-    if (isTwLocalDevHost()) return;
-    if (!isSupabaseReady()) return;
-    if (isTwEditorUser()) {
-      const out = document.createElement("button");
-      out.type = "button";
-      out.className = "site-header__editor-auth-btn btn btn--small btn--ghost";
-      out.textContent = "Sign out";
-      out.setAttribute("aria-label", "Sign out editor");
-      out.addEventListener("click", () => void signOutGoogleEditor());
-      wrap.appendChild(out);
-    }
-    /* Signed-out editors use `/login` (no header sign-in control). */
+    wrap.hidden = true;
+    /* Signed-out editors use `/login` (no header sign-in / sign-out control). */
   }
 
   /** Vercel production default origin. */
@@ -5855,6 +5845,64 @@
     return itemGalleryList(item).filter((u) => isFileBackedLocalWardrobeUrl(item, u));
   }
 
+  /** Normalize a wardrobe media URL to a Storage-relative path (local or Supabase). */
+  function wardrobeMediaPathKey(url) {
+    const raw = String(url ?? "").trim().split("?")[0];
+    if (!raw) return "";
+    const fromStorage = storagePathFromWardrobeImageUrl(raw);
+    if (fromStorage) return fromStorage;
+    const m = raw.match(/^\/images\/wardrobe\/(.+)$/i);
+    if (m) {
+      try {
+        return decodeURIComponent(m[1]);
+      } catch {
+        return m[1];
+      }
+    }
+    return "";
+  }
+
+  /**
+   * Hybrid gallery: union seed (local) + cloud by storage path — same slot shows local once;
+   * cloud-only paths stay as https until backed up.
+   */
+  function mergeHybridCatalogueGallery(seed, cloudRow) {
+    const itemId = String(seed?.id ?? cloudRow?.id ?? "").trim();
+    const coverKeys = new Set(
+      [seed?.image, cloudRow?.image].map((u) => wardrobeMediaPathKey(u)).filter(Boolean)
+    );
+    /** @type {string[]} */
+    const orderedKeys = [];
+    /** @type {Map<string, string>} */
+    const urlByPath = new Map();
+
+    const consider = (url, preferLocal) => {
+      const u = String(url ?? "").trim();
+      if (!u) return;
+      const key = wardrobeMediaPathKey(u);
+      if (!key || coverKeys.has(key)) return;
+      const pathOnly = u.split("?")[0];
+      const isLocal =
+        /^\/images\/wardrobe\//i.test(pathOnly) &&
+        (!itemId || primaryCoverUrlBelongsToItem({ id: itemId }, pathOnly));
+      const prev = urlByPath.get(key);
+      if (!prev) {
+        urlByPath.set(key, u);
+        if (!orderedKeys.includes(key)) orderedKeys.push(key);
+        return;
+      }
+      const prevLocal = /^\/images\/wardrobe\//i.test(prev.split("?")[0]);
+      if (preferLocal && isLocal) urlByPath.set(key, u);
+      else if (!prevLocal && isLocal) urlByPath.set(key, u);
+    };
+
+    for (const u of fileBackedLocalGalleryUrls(seed)) consider(u, true);
+    for (const u of itemGalleryList(seed)) consider(u, true);
+    for (const u of itemGalleryList(cloudRow)) consider(u, false);
+
+    return orderedKeys.map((k) => urlByPath.get(k)).filter(Boolean);
+  }
+
   /** True when URL is a frozen on-disk catalogue file for this item id. */
   function isFileBackedLocalWardrobeUrl(item, url) {
     const s = String(url ?? "").trim().split("?")[0];
@@ -5928,6 +5976,80 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  /** Storage-relative paths for cover + gallery (+ variant media) on a row. */
+  function wardrobeMediaStoragePaths(item) {
+    if (!item || typeof item !== "object") return [];
+    /** @type {string[]} */
+    const out = [];
+    const seen = new Set();
+    const add = (u) => {
+      const raw = String(u ?? "").trim().split("?")[0];
+      if (!raw) return;
+      let p = storagePathFromWardrobeImageUrl(raw);
+      if (!p) {
+        const m = raw.match(/^\/images\/wardrobe\/(.+)$/i);
+        if (m) {
+          try {
+            p = decodeURIComponent(m[1]);
+          } catch {
+            p = m[1];
+          }
+        }
+      }
+      if (p && !seen.has(p)) {
+        seen.add(p);
+        out.push(p);
+      }
+    };
+    add(item.image);
+    for (const u of itemGalleryList(item)) add(u);
+    const vars = getItemColourVariants(item);
+    if (vars) {
+      for (const v of vars) {
+        if (!v || typeof v !== "object") continue;
+        add(v.image);
+        add(v.previewImage);
+        if (Array.isArray(v.gallery)) {
+          for (const u of v.gallery) add(u);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Cloud row mirrors seed paths (stale Supabase) — not a fresh in-app upload. */
+  function cloudMediaLooksLikeStaleSeedMirror(cloudRow, seed) {
+    const seedPaths = new Set(wardrobeMediaStoragePaths(seed));
+    const cloudPaths = wardrobeMediaStoragePaths(cloudRow);
+    if (!cloudPaths.length) return true;
+    return cloudPaths.every((p) => seedPaths.has(p));
+  }
+
+  /** Same storage paths as seed, but cloud row is newer (re-upload at identical path). */
+  function cloudMediaReuploadedAtSamePath(cloudRow, seed) {
+    if (!cloudMediaLooksLikeStaleSeedMirror(cloudRow, seed)) return false;
+    const cloudTs = rowMediaTimestamp(cloudRow);
+    const seedTs = rowMediaTimestamp(seed);
+    return cloudTs > 0 && cloudTs > seedTs;
+  }
+
+  /** Pinned save / in-memory row reflects a just-finished photo upload in the editor. */
+  function inMemoryRowHasFreshMediaSave(incoming, seed) {
+    if (!incoming || !seed) return false;
+    if (wardrobeMediaUrlSignature(incoming) === wardrobeMediaUrlSignature(seed)) return false;
+    if (
+      cloudMediaLooksLikeStaleSeedMirror(incoming, seed) &&
+      !cloudMediaReuploadedAtSamePath(incoming, seed)
+    ) {
+      return false;
+    }
+    const n = /** @type {any} */ (incoming).__displayNonce;
+    if (typeof n === "number" && Number.isFinite(n)) return true;
+    const img = String(incoming.image ?? "").trim().split("?")[0];
+    if (/^https?:\/\//i.test(img)) return true;
+    return itemGalleryList(incoming).some((u) => /^https?:\/\//i.test(String(u).split("?")[0]));
+  }
+
   /** Keep cache-bust nonce only when media URLs and `updated_at` are unchanged; re-uploads at the same path need a fresh nonce. */
   function carryForwardMediaNonce(fromRow, toRow, opts = {}) {
     const next = { ...toRow };
@@ -5951,15 +6073,35 @@
   function mergeCloudMediaOntoLocalCatalogueRow(localRow, cloudRow) {
     if (!localRow || typeof localRow !== "object") return localRow;
     if (!cloudRow || typeof cloudRow !== "object") return { ...localRow };
-    const merged = { ...localRow };
-    const itemId = String(localRow.id ?? "").trim();
+    const itemId = String(localRow.id ?? cloudRow.id ?? "").trim();
     const seed = catalogueSeedRow(itemId) || localRow;
-    const useCloudMedia = supabaseMediaAheadOfCatalogueSeed(itemId, cloudRow);
+    const staleMirror = cloudMediaLooksLikeStaleSeedMirror(cloudRow, seed);
+    const samePathReupload = cloudMediaReuploadedAtSamePath(cloudRow, seed);
+    const useCloudMedia =
+      supabaseMediaAheadOfCatalogueSeed(itemId, cloudRow) && (!staleMirror || samePathReupload);
     const seedImage = String(seed.image ?? "").trim();
     const cloudImage = String(cloudRow.image ?? "").trim();
     const localGallery = fileBackedLocalGalleryUrls(seed);
 
-    if (isFileBackedLocalWardrobeUrl(seed, seedImage)) {
+    if (inMemoryRowHasFreshMediaSave(cloudRow, seed)) {
+      const hybridGallery = mergeHybridCatalogueGallery(seed, cloudRow);
+      const merged = normalizeItemDerivedFields({
+        ...seed,
+        ...localRow,
+        ...cloudRow,
+        id: itemId,
+        image: String(cloudRow.image ?? localRow.image ?? seedImage).trim() || seedImage,
+        gallery: hybridGallery.length ? normalizeGalleryFromDb(hybridGallery) : undefined,
+        colourVariants: Array.isArray(cloudRow.colourVariants) && cloudRow.colourVariants.length
+          ? cloudRow.colourVariants
+          : localRow.colourVariants,
+      });
+      return carryForwardMediaNonce(cloudRow, merged, { forceFresh: true });
+    }
+
+    const merged = { ...localRow, ...cloudRow, id: itemId };
+
+    if (isFileBackedLocalWardrobeUrl(seed, seedImage) && (staleMirror || !useCloudMedia)) {
       merged.image = seedImage;
     } else if (useCloudMedia && cloudImage) {
       merged.image = cloudImage;
@@ -5977,8 +6119,10 @@
       if (cloudTs) merged.updatedAt = cloudTs;
     }
 
-    // Never let stale Supabase gallery URLs replace on-disk `/images/wardrobe/…/main/gallery/*`.
-    if (localGallery.length) {
+    const hybridGallery = mergeHybridCatalogueGallery(seed, cloudRow);
+    if (hybridGallery.length) {
+      merged.gallery = normalizeGalleryFromDb(hybridGallery);
+    } else if (localGallery.length && (staleMirror || !useCloudMedia)) {
       merged.gallery = normalizeGalleryFromDb(localGallery);
     } else if (useCloudMedia && Array.isArray(cloudRow.gallery) && cloudRow.gallery.length) {
       merged.gallery = normalizeGalleryFromDb(cloudRow.gallery);
@@ -5987,8 +6131,13 @@
     }
 
     const forceFresh =
-      wardrobeMediaUrlSignature(localRow) !== wardrobeMediaUrlSignature(merged) ||
-      rowMediaTimestamp(cloudRow) > rowMediaTimestamp(localRow);
+      wardrobeMediaUrlSignature(seed) !== wardrobeMediaUrlSignature(merged) ||
+      rowMediaTimestamp(cloudRow) > rowMediaTimestamp(seed);
+    if (itemId === "sapphire-three-stone-ring") {
+      // #region agent log
+      fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H14',location:'app.js:mergeCloudMediaOntoLocalCatalogueRow',message:'hybrid merge decision',data:{itemId,staleMirror,samePathReupload,useCloudMedia,seedImage:String(seedImage||''),cloudImage:String(cloudImage||''),mergedImage:String(merged?.image||''),seedGalleryCount:itemGalleryList(seed).length,cloudGalleryCount:itemGalleryList(cloudRow).length,mergedGalleryCount:itemGalleryList(merged).length,forceFresh},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
     return carryForwardMediaNonce(localRow, merged, { forceFresh });
   }
 
@@ -6011,7 +6160,10 @@
     if (localGallery.length) {
       const patchGallery = Array.isArray(patch.gallery) ? patch.gallery : [];
       const patchRemote = patchGallery.some((u) => /^https?:\/\//i.test(String(u ?? "").split("?")[0]));
-      if (patchRemote) merged.gallery = [...localGallery];
+      if (patchRemote) {
+        const hybridGallery = mergeHybridCatalogueGallery(row, { id, gallery: patchGallery });
+        merged.gallery = hybridGallery.length ? hybridGallery : [...localGallery];
+      }
     }
     return merged;
   }
@@ -14954,6 +15106,7 @@
   async function materializeItemEditPhotoSlots(slots, itemId, setMsg, opts = {}) {
     const variantKey = String(opts.variantKey ?? "").trim();
     const prevCover = String(opts.previousCover ?? "").trim();
+    const debugSapphire = String(itemId ?? "").trim() === "sapphire-three-stone-ring";
     let image = "";
     /** @type {string[]} */
     const gallery = [];
@@ -14981,6 +15134,11 @@
           } else {
             url = await fileToStorageDataUrl(s.file, { preferJpeg: i > 0 });
           }
+          if (debugSapphire) {
+            // #region agent log
+            fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H11',location:'app.js:materializeItemEditPhotoSlots',message:'uploaded photo slot',data:{itemId:String(itemId),slotIndex:i,variantKey,url:String(url||''),nextGalleryIndex},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          }
         } catch (err) {
           console.warn(err);
           const where =
@@ -14992,6 +15150,11 @@
           setMsg(`${messageForCloudUploadFailure(where, err)} — skipped this file.`, true);
           if (i === 0 && opts.keepCoverOnFailure && prevCover) {
             image = prevCover;
+          }
+          if (debugSapphire) {
+            // #region agent log
+            fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H11',location:'app.js:materializeItemEditPhotoSlots',message:'upload failed in slot',data:{itemId:String(itemId),slotIndex:i,variantKey,error:err instanceof Error?err.message:String(err||''),prevCover},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
           }
           continue;
         }
@@ -17214,16 +17377,31 @@
     syncStylingBoardUi();
   }
 
+  function mountOutfitClearAfterStripSlots() {
+    const clearBtn = els.outfitClear || document.getElementById("outfit-clear");
+    const strip = els.outfitStrip;
+    if (!(clearBtn instanceof HTMLElement) || !(strip instanceof HTMLElement)) return;
+    clearBtn.classList.add("outfit-strip__clear");
+    strip.appendChild(clearBtn);
+  }
+
   function renderOutfitStrip() {
     if (!els.outfitStrip) return;
+    const clearBtn = els.outfitClear || document.getElementById("outfit-clear");
     const animateEntrance = outfitStripEntranceOnNextRender;
     outfitStripEntranceOnNextRender = false;
+    if (clearBtn instanceof HTMLElement && clearBtn.parentElement === els.outfitStrip) {
+      clearBtn.remove();
+    }
     els.outfitStrip.innerHTML = "";
     const boardEmpty = currentOutfitSlots.length === 0;
     if (els.outfitEmpty) {
       els.outfitEmpty.hidden = !boardEmpty;
     }
     if (boardEmpty) {
+      if (clearBtn instanceof HTMLElement && els.outfitStrip.parentElement) {
+        els.outfitStrip.parentElement.appendChild(clearBtn);
+      }
       syncOutfitBuilderPanel();
       return;
     }
@@ -17340,6 +17518,7 @@
       slot.appendChild(meta);
       els.outfitStrip.appendChild(slot);
     });
+    mountOutfitClearAfterStripSlots();
     syncOutfitBuilderPanel();
   }
 
@@ -17873,6 +18052,12 @@
     if (!id) return;
     const prev = itemById.get(id);
     if (!prev) return;
+    const debugSapphire = String(id ?? "").trim() === "sapphire-three-stone-ring";
+    if (debugSapphire) {
+      // #region agent log
+      fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H15',location:'app.js:saveItemDetailEdit',message:'saveItemDetailEdit entered',data:{id:String(id),prevImage:String(prev?.image||''),prevGalleryCount:itemGalleryList(prev).length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
     const isCustom = String(id).startsWith("custom-");
     if (!isSupabaseReady()) {
       setMsg(CLOUD_WRITE_REQUIRED_MESSAGE, true);
@@ -17975,6 +18160,11 @@
           });
           image = materialized.image;
           gallery = materialized.gallery;
+          if (debugSapphire) {
+            // #region agent log
+            fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H12',location:'app.js:saveItemDetailEdit',message:'materialized image slots',data:{id:String(id),entryCount,slotsCount:slots.length,hadNewPhotoFiles,materializedImage:String(materialized.image||''),materializedGalleryCount:Array.isArray(materialized.gallery)?materialized.gallery.length:0},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          }
         } else {
           setMsg(
             "Could not read the uploaded photo files. Remove them and upload again, then save.",
@@ -18270,15 +18460,27 @@
         const mergedForCloud = normalizeItemDerivedFields(mergeCollectionPatchIntoFullItem(prev, patch));
         if (mediaTouched) {
           try {
+            if (debugSapphire) {
+              // #region agent log
+              fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H12',location:'app.js:saveItemDetailEdit',message:'before saveWardrobeItemToCloud',data:{id:String(id),updatedImage:String(updated.image||''),updatedGalleryCount:itemGalleryList(updated).length,mediaTouched,hadNewPhotoFiles},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+            }
             const saved = await saveWardrobeItemToCloud(mergedForCloud);
+            if (debugSapphire) {
+              // #region agent log
+              fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'sapphire-image-debug',hypothesisId:'H13',location:'app.js:saveItemDetailEdit',message:'after saveWardrobeItemToCloud',data:{id:String(id),savedImage:String(saved?.image||''),savedGalleryCount:itemGalleryList(saved).length,savedUpdatedAt:String(saved?.updatedAt||saved?.updated_at||'')},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+            }
             const mediaBust = stampWardrobeItemMediaNonce(saved, Date.now());
             const displayAfterSave = normalizeItemDerivedFields({
-              ...(catalogueSeedRow(id) || prev),
+              ...prev,
               ...saved,
               id,
               image: updated.image,
               gallery: updated.gallery,
+              colourVariants: updated.colourVariants,
             });
+            stampWardrobeItemMediaNonce(displayAfterSave, mediaBust);
             upsertWardrobeBaseRowInMemory(displayAfterSave, { skipLocalMediaMerge: true });
             try {
               await deleteSupabaseImagesNoLongerUsed(prev, saved, mergedForCloud);
@@ -18813,12 +19015,7 @@
         const who = document.createElement("span");
         who.className = "item-detail__editor-session-label";
         who.textContent = `Editing as ${twEditorSession.email}`;
-        const signOutBtn = document.createElement("button");
-        signOutBtn.type = "button";
-        signOutBtn.className = "btn btn--ghost item-detail__editor-session-signout";
-        signOutBtn.textContent = "Sign out";
-        signOutBtn.addEventListener("click", () => void signOutGoogleEditor());
-        sessionBar.append(who, signOutBtn);
+        sessionBar.append(who);
         wrap.appendChild(sessionBar);
       }
 
@@ -22312,7 +22509,24 @@
         if (hit) {
           hit.classList.add("is-active");
           hit.setAttribute("aria-current", "true");
+          const cs = getComputedStyle(hit);
+          // #region agent log
+          fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-hover-debug',hypothesisId:'H1',location:'app.js:setMegaMenuActiveSubcategoryLink',message:'active link assigned',data:{key,text:String(hit.textContent||'').trim(),className:hit.className,ariaCurrent:String(hit.getAttribute('aria-current')||''),color:cs.color,ink:getComputedStyle(hit).getPropertyValue('--submenu-link-ink').trim(),inkActive:getComputedStyle(hit).getPropertyValue('--submenu-link-ink-active').trim(),closestDesktopMegaMenu:Boolean(hit.closest('.desktop-mega-menu'))},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-hover-debug',hypothesisId:'H2',location:'app.js:setMegaMenuActiveSubcategoryLink',message:'no active link resolved',data:{key,menuLinkCount:menuLinks.length},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
         }
+        const activeLinks = menuLinks.filter((el) => el.classList.contains("is-active"));
+        const inactiveSample = menuLinks.find((el) => !el.classList.contains("is-active")) ?? null;
+        const inactiveCs = inactiveSample ? getComputedStyle(inactiveSample) : null;
+        const activeSample = activeLinks[0] ?? null;
+        const activeCs = activeSample ? getComputedStyle(activeSample) : null;
+        const rootCs = getComputedStyle(document.documentElement);
+        // #region agent log
+        fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-hover-debug',hypothesisId:'H8',location:'app.js:setMegaMenuActiveSubcategoryLink',message:'submenu color snapshot after assignment',data:{key,menuLinkCount:menuLinks.length,activeCount:activeLinks.length,inactiveText:inactiveSample?String(inactiveSample.textContent||'').trim():'',inactiveColor:inactiveCs?inactiveCs.color:'',inactiveInlineColor:inactiveSample?String(inactiveSample.style.color||''):'',activeText:activeSample?String(activeSample.textContent||'').trim():'',activeColor:activeCs?activeCs.color:'',activeInlineColor:activeSample?String(activeSample.style.color||''):'',rootInk:rootCs.getPropertyValue('--ink').trim(),rootInkMuted:rootCs.getPropertyValue('--ink-muted').trim(),viewportW:typeof window!=='undefined'?window.innerWidth:null,min901:typeof window!=='undefined'?window.matchMedia('(min-width: 901px)').matches:false,min1025:typeof window!=='undefined'?window.matchMedia('(min-width: 1025px)').matches:false,bodyClasses:document.body?.className||''},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       };
 
       const syncMegaMenuPreviewSubcategory = (raw) => {
@@ -22328,7 +22542,18 @@
         a.setAttribute("data-category-jump", slot);
         a.setAttribute("data-subcategory-jump", raw);
         if (!String(raw ?? "").trim()) a.setAttribute("data-subcategory-all", "1");
-        a.addEventListener("pointerenter", () => syncMegaMenuPreviewSubcategory(raw));
+        a.addEventListener("pointerenter", () => {
+          const cs = getComputedStyle(a);
+          const linksEl = document.getElementById("site-header-submenu-links");
+          const previewEl = document.getElementById("site-header-submenu-preview");
+          const aRect = a?.getBoundingClientRect?.();
+          const linksRect = linksEl?.getBoundingClientRect?.();
+          const previewRect = previewEl?.getBoundingClientRect?.();
+          // #region agent log
+          fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-hover-debug',hypothesisId:'H3',location:'app.js:submenuLink.pointerenter',message:'submenu pointerenter before sync',data:{raw,label,text:String(a.textContent||'').trim(),className:a.className,ariaCurrent:String(a.getAttribute('aria-current')||''),color:cs.color,ink:cs.getPropertyValue('--submenu-link-ink').trim(),inkActive:cs.getPropertyValue('--submenu-link-ink-active').trim(),linkTop:aRect?.top??null,linksTop:linksRect?.top??null,previewTop:previewRect?.top??null},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          syncMegaMenuPreviewSubcategory(raw);
+        });
         a.addEventListener("focus", () => syncMegaMenuPreviewSubcategory(raw));
         links.appendChild(a);
       });
@@ -22356,6 +22581,9 @@
       syncCategoryTabUI();
       syncMegaMenuPreviewSubcategory(initialRaw);
       requestAnimationFrame(() => syncMegaMenuPreviewSubcategory(initialRaw));
+      // #region agent log
+      fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-hover-debug',hypothesisId:'H4',location:'app.js:showHeaderSubmenuForCategory',message:'submenu opened and initial synced',data:{slot,initialRaw,submenuClassName:String(wrap.className||''),linksCount:links.querySelectorAll(':scope > .site-header__submenu-link').length,isOpenBodyClass:document.body.classList.contains('collection-ui--header-submenu-open')},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (headerSubmenuDimEl) {
         headerSubmenuDimEl.hidden = false;
         headerSubmenuDimEl.setAttribute("aria-hidden", "false");
@@ -22364,6 +22592,45 @@
         if (document.body.classList.contains("collection-ui--header-submenu-open")) {
           syncHeaderSubmenuBackdropInset();
           syncHeaderMegaMenuNavInset();
+          const linksEl = document.getElementById("site-header-submenu-links");
+          const previewEl = document.getElementById("site-header-submenu-preview");
+          const firstLink = linksEl?.querySelector(":scope > .site-header__submenu-link");
+          const firstPreview = previewEl?.querySelector(":scope > .site-header__submenu-preview-card");
+          const wrapRect = wrap?.getBoundingClientRect?.();
+          const linksRect = linksEl?.getBoundingClientRect?.();
+          const previewRect = previewEl?.getBoundingClientRect?.();
+          const firstLinkRect = firstLink?.getBoundingClientRect?.();
+          const firstPreviewRect = firstPreview?.getBoundingClientRect?.();
+          const linksCs = linksEl ? getComputedStyle(linksEl) : null;
+          const previewCs = previewEl ? getComputedStyle(previewEl) : null;
+          // #region agent log
+          fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-vertical-align-debug',hypothesisId:'H9',location:'app.js:showHeaderSubmenuForCategory.rAF',message:'mega menu vertical snapshot on open',data:{slot,wrapTop:wrapRect?.top??null,linksTop:linksRect?.top??null,previewTop:previewRect?.top??null,firstLinkTop:firstLinkRect?.top??null,firstPreviewTop:firstPreviewRect?.top??null,linksPaddingTop:linksCs?.paddingTop??'',previewPaddingTop:previewCs?.paddingTop??'',previewAlignItems:previewCs?.alignItems??'',previewAlignContent:previewCs?.alignContent??''},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          const cssLink = document.querySelector('link[href*="styles.css"]');
+          let hasDesktopSubmenuRule = false;
+          let hasDesktopInactiveRule = false;
+          let desktopRuleColor = "";
+          let desktopRuleVarInk = "";
+          try {
+            for (const sheet of Array.from(document.styleSheets || [])) {
+              const rules = Array.from(sheet?.cssRules || []);
+              for (const rule of rules) {
+                if (!(rule instanceof CSSStyleRule)) continue;
+                const sel = String(rule.selectorText || "");
+                if (!sel.includes(".desktop-mega-menu .site-header__submenu-link")) continue;
+                hasDesktopSubmenuRule = true;
+                if (sel.includes(":not(.is-active)")) hasDesktopInactiveRule = true;
+                if (!desktopRuleColor) desktopRuleColor = String(rule.style.getPropertyValue("color") || "").trim();
+                if (!desktopRuleVarInk)
+                  desktopRuleVarInk = String(rule.style.getPropertyValue("--submenu-link-ink") || "").trim();
+              }
+            }
+          } catch {
+            /* stylesheet diagnostics best-effort */
+          }
+          // #region agent log
+          fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'mega-menu-css-diagnostics',hypothesisId:'H10',location:'app.js:showHeaderSubmenuForCategory.rAF',message:'mega menu css diagnostics',data:{slot,viewportW:window.innerWidth,min901:window.matchMedia('(min-width: 901px)').matches,min1025:window.matchMedia('(min-width: 1025px)').matches,bodyClasses:document.body.className,stylesHref:cssLink?.getAttribute('href')||'',hasDesktopSubmenuRule,hasDesktopInactiveRule,desktopRuleColor,desktopRuleVarInk},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
         }
       });
     };
@@ -22827,6 +23094,14 @@
     );
 
     const seasonMini = document.getElementById("season-nav-mini");
+    seasonMini?.addEventListener("pointerover", (e) => {
+      const tab = e.target.closest(".site-header__season-mini-tab");
+      if (!(tab instanceof HTMLElement)) return;
+      const cs = getComputedStyle(tab);
+      // #region agent log
+      fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'season-mini-weight-debug',hypothesisId:'H6',location:'app.js:seasonMini.pointerover',message:'season mini pointerover',data:{id:String(tab.id||''),text:String(tab.textContent||'').trim(),className:tab.className,ariaPressed:String(tab.getAttribute('aria-pressed')||''),fontWeight:getComputedStyle(tab).fontWeight,color:cs.color},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    });
     seasonMini?.addEventListener("click", (e) => {
       const tab = e.target.closest(".site-header__season-mini-tab");
       if (!tab) return;
@@ -22837,6 +23112,12 @@
         return;
       }
       setSeasonNavFilter(v);
+      if (tab instanceof HTMLElement) {
+        const cs = getComputedStyle(tab);
+        // #region agent log
+        fetch('http://127.0.0.1:7456/ingest/079dc999-8840-4516-8d4f-8af68aa9201f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'add19b'},body:JSON.stringify({sessionId:'add19b',runId:'season-mini-weight-debug',hypothesisId:'H7',location:'app.js:seasonMini.click',message:'season mini click applied filter',data:{id:String(tab.id||''),text:String(tab.textContent||'').trim(),className:tab.className,ariaPressed:String(tab.getAttribute('aria-pressed')||''),fontWeight:cs.fontWeight,color:cs.color,seasonFilter:v},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
     });
 
     const savedToggleBtn = document.getElementById("site-header-saved-toggle");
@@ -23230,7 +23511,7 @@
   }
 
   /** Merge cloud `wardrobe_items` rows into in-memory catalogue by `id` (seed catalogue + extra cloud rows). */
-  function mergeWardrobeBaseWithFetchedCloudRows(cloudRows) {
+  function mergeWardrobeBaseWithFetchedCloudRows(cloudRows, pinnedById = new Map()) {
     if (!Array.isArray(cloudRows) || !cloudRows.length) return;
     const byId = new Map();
     for (const raw of cloudRows) {
@@ -23243,7 +23524,9 @@
     }
     wardrobeBase = wardrobeBase.map((row) => {
       if (!row || row.id == null) return row;
-      const hit = byId.get(String(row.id));
+      const id = String(row.id);
+      if (pinnedById.has(id)) return row;
+      const hit = byId.get(id);
       if (!hit) return { ...row };
       if (isLocalCatalogueItemId(row.id)) {
         const seed = catalogueSeedRow(row.id) || row;
@@ -23324,15 +23607,19 @@
         });
         const cloudIds = new Set(cloudBackedCustomItems.map((r) => String(r?.id ?? "")));
         for (const [id, pinned] of pinnedById) {
-          if (!cloudIds.has(id)) upsertWardrobeBaseRowInMemory(pinned);
+          if (!cloudIds.has(id)) upsertWardrobeBaseRowInMemory(pinned, { skipLocalMediaMerge: true });
         }
       } else {
         /* Full cloud fetch (incl. hybrid local ids) — media overlay; `cloudBackedCustomItems` stays filtered for dupes. */
-        mergeWardrobeBaseWithFetchedCloudRows(loadedCloud);
-        for (const pinned of pinnedById.values()) upsertWardrobeBaseRowInMemory(pinned);
+        mergeWardrobeBaseWithFetchedCloudRows(loadedCloud, pinnedById);
+        for (const pinned of pinnedById.values()) {
+          upsertWardrobeBaseRowInMemory(pinned, { skipLocalMediaMerge: true });
+        }
       }
     } else {
-      for (const pinned of pinnedById.values()) upsertWardrobeBaseRowInMemory(pinned);
+      for (const pinned of pinnedById.values()) {
+        upsertWardrobeBaseRowInMemory(pinned, { skipLocalMediaMerge: true });
+      }
     }
     for (const pinned of pinnedById.values()) {
       const id = String(pinned.id);
