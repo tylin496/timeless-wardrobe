@@ -19565,9 +19565,9 @@ video.ed-lp__hero-layer-video {
   text-align: left;
   pointer-events: none;
   --hero-body-copy-max: 20rem;
-  --hero-eyebrow-part-gap: 0.95rem;
-  --hero-body-line-gap: 0.06rem;
-  --hero-cta-part-gap: clamp(1.45rem, 3vh, 1.72rem);
+  --hero-eyebrow-part-gap: 0.9rem;
+  --hero-body-line-gap: 0.08rem;
+  --hero-cta-part-gap: clamp(1.5rem, 3vh, 1.85rem);
 }
 
 .ed-lp__hero-inner .ed-lp__hero-cta,
@@ -19616,10 +19616,10 @@ video.ed-lp__hero-layer-video {
 .ed-lp__hero-cta {
   display: flex;
   flex-wrap: nowrap;
-  gap: 0.42rem;
+  gap: 0.4rem;
   align-items: stretch;
-  width: fit-content;
-  max-width: calc(var(--hero-body-copy-max, 20rem) - 0.4rem);
+  width: auto;
+  max-width: calc(var(--hero-body-copy-max, 20rem) - 0.35rem);
   box-sizing: border-box;
 }
 
@@ -19628,9 +19628,9 @@ video.ed-lp__hero-layer-video {
   width: auto;
   min-width: 0;
   min-height: 32px;
-  padding-inline: 0.58rem;
+  padding-inline: 0.55rem;
   font-size: 9px;
-  letter-spacing: 0.065em;
+  letter-spacing: 0.07em;
   white-space: nowrap;
   text-decoration: none;
   box-sizing: border-box;
