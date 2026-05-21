@@ -19565,8 +19565,9 @@ video.ed-lp__hero-layer-video {
   text-align: left;
   pointer-events: none;
   --hero-body-copy-max: 20rem;
-  --hero-part-gap: clamp(0.9rem, 2.2vh, 1.1rem);
+  --hero-eyebrow-part-gap: 0.95rem;
   --hero-body-line-gap: 0.06rem;
+  --hero-cta-part-gap: clamp(1.45rem, 3vh, 1.72rem);
 }
 
 .ed-lp__hero-inner .ed-lp__hero-cta,
@@ -19579,7 +19580,7 @@ video.ed-lp__hero-layer-video {
   display: block;
   width: max-content;
   max-width: none;
-  margin: 0 0 var(--hero-part-gap, 0.975rem);
+  margin: 0 0 var(--hero-eyebrow-part-gap);
   font-family: "DM Sans", system-ui, sans-serif;
   font-size: clamp(0.82rem, 0.66rem + 0.48vw, 1rem);
   font-weight: 700;
@@ -19605,20 +19606,20 @@ video.ed-lp__hero-layer-video {
 }
 
 .ed-lp__hero-title {
-  margin: 0 0 var(--hero-body-line-gap, 0.06rem);
+  margin: 0 0 var(--hero-body-line-gap);
 }
 
 .ed-lp__hero-line {
-  margin: 0 0 var(--hero-part-gap, clamp(0.9rem, 2.2vh, 1.1rem));
+  margin: 0 0 var(--hero-cta-part-gap);
 }
 
 .ed-lp__hero-cta {
   display: flex;
   flex-wrap: nowrap;
-  gap: 0.55rem;
+  gap: 0.42rem;
   align-items: stretch;
-  width: auto;
-  max-width: none;
+  width: fit-content;
+  max-width: calc(var(--hero-body-copy-max, 20rem) - 0.4rem);
   box-sizing: border-box;
 }
 
@@ -19626,10 +19627,10 @@ video.ed-lp__hero-layer-video {
   flex: 0 1 auto;
   width: auto;
   min-width: 0;
-  min-height: 38px;
-  padding-block: 0;
+  min-height: 32px;
+  padding-inline: 0.58rem;
   font-size: 9px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.065em;
   white-space: nowrap;
   text-decoration: none;
   box-sizing: border-box;
@@ -20881,15 +20882,16 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 
   .ed-lp__hero-inner {
     --hero-body-copy-max: min(19rem, 90%);
-    --hero-part-gap: clamp(0.9rem, 2.8vh, 1.1rem);
+    --hero-eyebrow-part-gap: clamp(0.9rem, 2.8vh, 1.1rem);
     --hero-body-line-gap: 0.06rem;
+    --hero-cta-part-gap: clamp(1.2rem, 3.15vh, 1.5rem);
   }
 
   .ed-lp__hero-eyebrow {
     display: block;
     width: max-content;
     max-width: none;
-    margin: 0 auto var(--hero-part-gap);
+    margin: 0 auto var(--hero-eyebrow-part-gap);
     white-space: nowrap;
     font-family: "DM Sans", system-ui, sans-serif;
     font-size: clamp(0.8rem, 2.85vw, 1.02rem);
@@ -20915,7 +20917,7 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 
   .ed-lp__hero-line {
     display: block;
-    margin: 0 auto var(--hero-part-gap);
+    margin: 0 auto var(--hero-cta-part-gap);
     max-width: var(--hero-body-copy-max, min(19rem, 90%));
     font-family: "Cormorant Garamond", Georgia, serif;
     font-size: clamp(0.8rem, 2.35vw, 0.94rem);
