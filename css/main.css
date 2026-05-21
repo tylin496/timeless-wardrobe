@@ -1512,11 +1512,6 @@ body.theme-catalogue .site-header.site-header--overlay {
   transition: opacity 0.22s var(--ease-out);
 }
 
-.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]) .styling-board-glyph__cell,
-.site-header__saved-btn:is(:hover, :focus-visible, [aria-expanded="true"]) .styling-board-glyph__cell {
-  opacity: 1;
-}
-
 .site-header__styling-board-label {
   font-family: var(--font-sans);
   font-size: 0.66rem;
@@ -1547,13 +1542,124 @@ body.theme-catalogue .site-header.site-header--overlay {
   opacity: var(--tw-header-badge-opacity, 1);
   transition:
     background-color 0.34s var(--ease-luxe),
-    color 0.34s var(--ease-luxe),
-    opacity 0.34s var(--ease-luxe);
+    color 0.22s var(--ease-out),
+    opacity 0.22s var(--ease-out),
+    box-shadow 0.22s var(--ease-out);
 }
 
-.site-header--overlay:not(:hover):not(:focus-within) .site-header__styling-board-count {
+/* Outfits count — overlay states track tool glyph (0.72 → 1); active tool only. */
+.site-header--overlay
+  .site-header__styling-board-btn:not(:hover):not(:focus-visible):not([aria-expanded="true"])
+  .site-header__styling-board-count,
+.site-header--overlay:hover:not(:has(.site-header__styling-board-btn:hover)):not(
+    :has(.site-header__styling-board-btn:focus-visible)
+  )
+  .site-header__styling-board-btn:not([aria-expanded="true"])
+  .site-header__styling-board-count {
   background-color: transparent;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tw-header-fg) 100%, transparent);
+  color: var(--tw-header-fg);
+  -webkit-text-fill-color: currentColor;
+  opacity: var(--site-header-tool-glyph-opacity, 0.72);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tw-header-fg) 72%, transparent);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.site-header--overlay:has(.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]))
+  .site-header__styling-board-btn
+  .site-header__styling-board-count {
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--tw-header-fg);
+}
+
+body.home-page
+  .site-header--overlay:has(.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]))
+  .site-header__styling-board-btn
+  .site-header__styling-board-count {
+  background-color: var(--tw-header-fg);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  box-shadow: none;
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: padding-box, text;
+  mask-clip: padding-box, text;
+  -webkit-mask-origin: padding-box, content-box;
+  mask-origin: padding-box, content-box;
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+body.home-page
+  .site-header--overlay:is(:hover, :focus-within):has(
+    .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"])
+  )
+  .site-header__styling-board-btn
+  .site-header__styling-board-count {
+  -webkit-mask-image: none;
+  mask-image: none;
+  color: var(--tw-header-badge-fg, var(--tw-header-surface));
+  -webkit-text-fill-color: currentColor;
+  background-color: var(--tw-header-badge-bg, var(--tw-header-fg));
+  box-shadow: none;
+  opacity: 1;
+}
+
+.site-header__styling-board-label-wrap {
+  display: contents;
+}
+
+.site-header__styling-board-btn {
+  position: relative;
+  overflow: visible;
+}
+
+.site-header__styling-board-btn .site-header__styling-board-count {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.88rem;
+  height: 0.88rem;
+  padding: 0 0.14rem;
+  font-size: 0.5rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Desktop: icon-corner badge (left), same OTA chrome as mobile. */
+@media (min-width: 901px) {
+  .site-header__styling-board-btn {
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .site-header__styling-board-icon {
+    align-self: center;
+    flex: 0 0 auto;
+  }
+
+  .site-header__styling-board-label {
+    line-height: 1;
+  }
+
+  .site-header__styling-board-btn .site-header__styling-board-count {
+    top: 0.1rem;
+    left: 0.12rem;
+    right: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .site-header__styling-board-btn {
+    gap: 0;
+  }
+
+  .site-header__styling-board-btn .site-header__styling-board-count {
+    top: 0.14rem;
+    right: 0.12rem;
+    left: auto;
+  }
 }
 
 .site-header__styling-board-count[hidden] {
@@ -1596,6 +1702,29 @@ body.theme-catalogue .site-header.site-header--overlay {
   .site-header__saved-btn {
     width: 2.35rem;
     padding: 0;
+  }
+
+  /* Tools — no circular hover/open chrome; icon stroke only (parity with desktop). */
+  .site-header__search-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header__menu-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header__saved-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header--overlay .site-header__search-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header--overlay .site-header__menu-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header--overlay .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header--overlay .site-header__saved-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-header:hover .site-header__search-btn:hover,
+  .site-header:hover .site-header__menu-btn:hover,
+  .site-header:focus-within .site-header__search-btn:hover,
+  .site-header:focus-within .site-header__menu-btn:hover,
+  .site-mobile-shell__tool.site-header__search-btn:is(:hover, :focus-visible, [aria-expanded="true"]),
+  .site-mobile-shell__tool.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]) {
+    background: transparent;
+  }
+
+  .site-header__search-btn:is(:hover, :focus-visible, [aria-expanded="true"]) .site-header__tool-glyph,
+  .site-header__menu-btn:is(:hover, :focus-visible, [aria-expanded="true"]) .site-header__tool-glyph {
+    stroke-opacity: 1;
   }
 }
 
@@ -4331,6 +4460,45 @@ body.collection-ui--search-results-plp .items-toolbar__filter-sort-btn {
     gap: 0.4rem;
   }
 
+  /* Search + Outfits — hover: no circular tool chrome; Search underline, Outfits semibold only. */
+  .site-header__search-btn:hover,
+  .site-header__search-btn:focus-visible,
+  .site-header__search-btn[aria-expanded="true"],
+  .site-header--overlay .site-header__search-btn:hover,
+  .site-header--overlay .site-header__search-btn:focus-visible,
+  .site-header--overlay .site-header__search-btn[aria-expanded="true"],
+  .site-header:hover .site-header__search-btn:hover,
+  .site-header:focus-within .site-header__search-btn:hover,
+  .site-header--overlay:hover .site-header__search-btn:hover,
+  .site-header--overlay:focus-within .site-header__search-btn:hover,
+  .site-header__styling-board-btn:hover,
+  .site-header__styling-board-btn:focus-visible,
+  .site-header__styling-board-btn[aria-expanded="true"],
+  .site-header--overlay .site-header__styling-board-btn:hover,
+  .site-header--overlay .site-header__styling-board-btn:focus-visible,
+  .site-header--overlay .site-header__styling-board-btn[aria-expanded="true"],
+  .site-header:hover .site-header__styling-board-btn:hover,
+  .site-header:focus-within .site-header__styling-board-btn:hover,
+  .site-header--overlay:hover .site-header__styling-board-btn:hover,
+  .site-header--overlay:focus-within .site-header__styling-board-btn:hover {
+    background: transparent;
+    border-radius: 0;
+    color: inherit;
+  }
+
+  .site-header__search-btn:is(:hover, :focus-visible, [aria-expanded="true"]) .site-header__tool-glyph {
+    stroke-opacity: 1;
+    stroke-width: 1.65;
+  }
+
+  .site-header__styling-board-btn:hover .site-header__styling-board-label,
+  .site-header__styling-board-btn:focus-visible .site-header__styling-board-label,
+  .site-header__styling-board-btn[aria-expanded="true"] .site-header__styling-board-label {
+    font-weight: 600;
+    text-decoration-line: none;
+    color: inherit;
+  }
+
   .site-header__submenu {
   @apply ml-[calc(50%-50vw)] mr-[calc(50%-50vw)] mt-0 mb-0;
     position: absolute;
@@ -5490,17 +5658,6 @@ body.collection-ui--header-submenu-open .site-header__search-wrap:not(.is-open):
     position: relative;
     gap: 0;
     overflow: visible;
-  }
-
-  .site-header__styling-board-btn .site-header__styling-board-count {
-    position: absolute;
-    top: 0.12rem;
-    right: 0.1rem;
-    min-width: 0.95rem;
-    height: 0.95rem;
-    padding: 0 0.18rem;
-    font-size: 0.54rem;
-    pointer-events: none;
   }
 
   .site-header__menu-btn {
@@ -19407,6 +19564,7 @@ video.ed-lp__hero-layer-video {
   box-sizing: border-box;
   text-align: left;
   pointer-events: none;
+  --hero-body-copy-max: 20rem;
 }
 
 .ed-lp__hero-inner .ed-lp__hero-cta,
@@ -19414,49 +19572,60 @@ video.ed-lp__hero-layer-video {
   pointer-events: auto;
 }
 
+/* Desktop hero — Eyebrow | body (2 lines) | CTA — three parts (mobile overrides at 767px). */
 .ed-lp__hero-eyebrow {
-  margin: 0 0 0.5rem;
+  display: block;
+  width: max-content;
+  max-width: none;
+  margin: 0 0 0.975rem;
   font-family: "DM Sans", system-ui, sans-serif;
-  font-size: 11px;
+  font-size: clamp(0.82rem, 0.66rem + 0.48vw, 1rem);
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.42em;
+  line-height: 1.12;
   text-transform: uppercase;
+  white-space: nowrap;
   color: #ffffff;
   opacity: 1;
 }
 
-/* Desktop hero copy — large display title + italic line (mobile overrides in max-width: 767px). */
-.ed-lp__hero-title {
-  margin: 0 0 0.32rem;
+.ed-lp__hero-title,
+.ed-lp__hero-line {
+  max-width: var(--hero-body-copy-max, 20rem);
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(2.42rem, 1.76rem + 3.7vw, 3.75rem);
-  font-weight: 500;
-  line-height: 0.97;
-  letter-spacing: -0.02em;
+  font-size: clamp(0.92rem, 0.8rem + 0.38vw, 1.06rem);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.26;
+  letter-spacing: 0.015em;
   color: #ffffff;
   opacity: 1;
+}
+
+.ed-lp__hero-title {
+  margin: 0 0 0.05rem;
 }
 
 .ed-lp__hero-line {
-  margin: 0 0 clamp(1.15rem, 2.2vh, 1.35rem);
-  font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(1rem, 0.88rem + 0.45vw, 1.2rem);
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-  opacity: 1;
+  margin: 0 0 clamp(1.575rem, 3.15vh, 1.92rem);
 }
 
 .ed-lp__hero-cta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.65rem;
+  align-items: stretch;
+  width: 100%;
+  max-width: var(--hero-body-copy-max, 20rem);
+  box-sizing: border-box;
 }
 
 .ed-lp__hero-cta .ed-lp__btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 0.65rem;
   text-decoration: none;
+  box-sizing: border-box;
 }
 
 /* Hero-adjacent S/S · A/W duo — full-bleed lifestyle stills (Ralph Lauren–style split). */
@@ -20704,25 +20873,31 @@ body.home-page #main.ed-lp .ed-lp__band--season {
   }
 
   .ed-lp__hero-inner {
-    --hero-copy-stack-gap: clamp(0.85rem, 2.5vh, 1.15rem);
+    --hero-body-copy-max: min(19rem, 90%);
+    --hero-eyebrow-part-gap: clamp(0.9rem, 2.8vh, 1.1rem);
+    --hero-body-line-gap: 0.06rem;
+    --hero-cta-part-gap: clamp(1.2rem, 3.15vh, 1.5rem);
   }
 
   .ed-lp__hero-eyebrow {
     display: block;
-    margin: 0 auto var(--hero-copy-stack-gap);
-    max-width: min(19.5rem, 92%);
-    font-size: 9px;
+    width: max-content;
+    max-width: none;
+    margin: 0 auto var(--hero-eyebrow-part-gap);
+    white-space: nowrap;
+    font-family: "DM Sans", system-ui, sans-serif;
+    font-size: clamp(0.8rem, 2.85vw, 1.02rem);
     font-weight: 700;
-    letter-spacing: 0.22em;
-    line-height: 1.25;
+    letter-spacing: 0.42em;
+    line-height: 1.12;
     text-transform: uppercase;
     color: #ffffff;
     opacity: 1;
   }
 
   .ed-lp__hero-title {
-    margin: 0 auto 0.32rem;
-    max-width: min(19rem, 90%);
+    margin: 0 auto var(--hero-body-line-gap);
+    max-width: var(--hero-body-copy-max, min(19rem, 90%));
     font-family: "Cormorant Garamond", Georgia, serif;
     font-size: clamp(0.84rem, 2.55vw, 0.98rem);
     font-weight: 400;
@@ -20734,8 +20909,8 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 
   .ed-lp__hero-line {
     display: block;
-    margin: 0 auto var(--hero-copy-stack-gap);
-    max-width: min(19rem, 90%);
+    margin: 0 auto var(--hero-cta-part-gap);
+    max-width: var(--hero-body-copy-max, min(19rem, 90%));
     font-family: "Cormorant Garamond", Georgia, serif;
     font-size: clamp(0.8rem, 2.35vw, 0.94rem);
     font-style: normal;
@@ -20749,11 +20924,21 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 
   .ed-lp__hero-cta {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
-    align-items: center;
-    gap: 0.65rem 1.15rem;
+    align-items: stretch;
+    gap: 0.65rem;
     margin-top: 0;
+    width: 100%;
+    max-width: var(--hero-body-copy-max, min(19rem, 90%));
+    margin-inline: auto;
+    box-sizing: border-box;
+  }
+
+  .ed-lp__hero-cta .ed-lp__btn {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .ed-lp__hero-cta .ed-lp__btn--ghost {
@@ -20762,6 +20947,7 @@ body.home-page #main.ed-lp .ed-lp__band--season {
 
   /* RL mobile hero — underlined text link only (no filled button). */
   .ed-lp__hero-cta .ed-lp__btn--solid {
+    flex: 0 1 auto;
     width: auto;
     min-height: 0;
     padding: 0.5rem 0 0.08rem;
