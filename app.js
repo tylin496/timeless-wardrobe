@@ -17681,16 +17681,16 @@
     const track = stage.querySelector(".card__gallery-desktop-track");
     if (!(track instanceof HTMLElement) || track.children.length < 2) return false;
 
-    /* Quick-find compact grid: stacked slides use is-active (not hover-fade opacity layers). */
+    /* Quick-find compact grid: instant is-active swap (opacity crossfade flashes page white). */
     if (isCollectionCompactQuickFindView()) {
       const idx = Number(media.dataset.galleryFrameIndex ?? 0);
       if (preview) {
         const hoverIdx = idx === 0 ? 1 : idx;
-        applyDesktopGalleryFrameIndex(stage, hoverIdx, true);
+        applyDesktopGalleryFrameIndex(stage, hoverIdx, false);
         if (idx === 0) media.dataset.galleryFrameIndex = "1";
       } else {
         media.dataset.galleryFrameIndex = "0";
-        applyDesktopGalleryFrameIndex(stage, 0, true);
+        applyDesktopGalleryFrameIndex(stage, 0, false);
       }
       return true;
     }

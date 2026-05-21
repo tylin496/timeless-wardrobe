@@ -985,7 +985,7 @@ body {
   --tw-header-fg-muted: var(--ink-muted);
   --tw-header-monogram: var(--tw-brand-monogram-green);
   --tw-header-surface: var(--bg-elevated);
-  --tw-header-badge-bg: var(--tw-header-fg);
+  --tw-header-badge-bg: var(--tw-brand-green);
   --tw-header-badge-fg: var(--tw-header-surface);
   --tw-header-badge-opacity: 1;
   background-color: var(--bg-elevated);
@@ -1001,7 +1001,7 @@ body.theme-catalogue .site-header.site-header--overlay {
   --tw-header-fg-muted: var(--ink-muted);
   --tw-header-monogram: var(--tw-brand-monogram-green);
   --tw-header-surface: var(--bg);
-  --tw-header-badge-bg: var(--tw-header-fg);
+  --tw-header-badge-bg: var(--tw-brand-green);
   --tw-header-badge-fg: var(--tw-header-surface);
   --tw-header-badge-opacity: 1;
   background-color: var(--bg);
@@ -1047,7 +1047,7 @@ body.theme-catalogue .site-header.site-header--overlay:focus-within {
   --tw-header-fg-muted: var(--ink-muted);
   --tw-header-monogram: var(--tw-brand-monogram-green);
   --tw-header-surface: var(--bg-elevated);
-  --tw-header-badge-bg: var(--tw-header-fg);
+  --tw-header-badge-bg: var(--tw-brand-green);
   --tw-header-badge-fg: var(--tw-header-surface);
   --tw-header-badge-opacity: 1;
   background-color: var(--bg-elevated);
@@ -1085,7 +1085,7 @@ body.theme-catalogue .site-header.site-header--overlay {
     --tw-header-fg-muted: var(--ink-muted);
     --tw-header-monogram: var(--tw-brand-monogram-green);
     --tw-header-surface: var(--tw-brand-ivory);
-    --tw-header-badge-bg: var(--tw-header-fg);
+    --tw-header-badge-bg: var(--tw-brand-green);
     --tw-header-badge-fg: var(--tw-header-surface);
     --tw-header-badge-opacity: 1;
     background-color: var(--tw-brand-ivory);
@@ -1547,66 +1547,46 @@ body.theme-catalogue .site-header.site-header--overlay {
     box-shadow 0.22s var(--ease-out);
 }
 
-/* Outfits count — overlay states track tool glyph (0.72 → 1); active tool only. */
-.site-header--overlay
-  .site-header__styling-board-btn:not(:hover):not(:focus-visible):not([aria-expanded="true"])
-  .site-header__styling-board-count,
-.site-header--overlay:hover:not(:has(.site-header__styling-board-btn:hover)):not(
-    :has(.site-header__styling-board-btn:focus-visible)
-  )
-  .site-header__styling-board-btn:not([aria-expanded="true"])
-  .site-header__styling-board-count {
-  background-color: transparent;
-  color: var(--tw-header-fg);
-  -webkit-text-fill-color: currentColor;
-  opacity: var(--site-header-tool-glyph-opacity, 0.72);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tw-header-fg) 72%, transparent);
-  -webkit-mask-image: none;
-  mask-image: none;
-}
+/* Outfits count — transparent header (mobile icon badge ring only). */
+@media (max-width: 900px) {
+  .site-header--overlay:not(:hover):not(:focus-within)
+    .site-header__styling-board-btn:not(:hover):not(:focus-visible):not([aria-expanded="true"])
+    .site-header__styling-board-count {
+    background-color: transparent;
+    color: var(--tw-header-fg);
+    -webkit-text-fill-color: currentColor;
+    opacity: var(--site-header-tool-glyph-opacity, 0.72);
+    box-shadow: 0 0 0 1px currentColor;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 
-.site-header--overlay:has(.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]))
-  .site-header__styling-board-btn
-  .site-header__styling-board-count {
-  opacity: 1;
-  box-shadow: 0 0 0 1px var(--tw-header-fg);
-}
-
-body.home-page
   .site-header--overlay:has(.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]))
-  .site-header__styling-board-btn
-  .site-header__styling-board-count {
-  background-color: var(--tw-header-fg);
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  box-shadow: none;
-  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  -webkit-mask-clip: padding-box, text;
-  mask-clip: padding-box, text;
-  -webkit-mask-origin: padding-box, content-box;
-  mask-origin: padding-box, content-box;
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
+    .site-header__styling-board-btn
+    .site-header__styling-board-count {
+    opacity: 1;
+    box-shadow: 0 0 0 1px currentColor;
+  }
 
-body.home-page
-  .site-header--overlay:is(:hover, :focus-within):has(
-    .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"])
-  )
-  .site-header__styling-board-btn
-  .site-header__styling-board-count {
-  -webkit-mask-image: none;
-  mask-image: none;
-  color: var(--tw-header-badge-fg, var(--tw-header-surface));
-  -webkit-text-fill-color: currentColor;
-  background-color: var(--tw-header-badge-bg, var(--tw-header-fg));
-  box-shadow: none;
-  opacity: 1;
+  /* Opaque header (solid or overlay hover) — green icon-corner pill, ivory numeral. */
+  .site-header--solid .site-header__styling-board-btn .site-header__styling-board-count,
+  .site-header--overlay:is(:hover, :focus-within) .site-header__styling-board-btn .site-header__styling-board-count {
+    -webkit-mask-image: none;
+    mask-image: none;
+    background-color: var(--tw-header-badge-bg, var(--tw-brand-green));
+    color: var(--tw-header-badge-fg, var(--tw-header-surface));
+    -webkit-text-fill-color: currentColor;
+    opacity: 1;
+    box-shadow: none;
+  }
 }
 
 .site-header__styling-board-label-wrap {
-  display: contents;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  line-height: 1;
 }
 
 .site-header__styling-board-btn {
@@ -1616,6 +1596,7 @@ body.home-page
 
 .site-header__styling-board-btn .site-header__styling-board-count {
   position: absolute;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1624,10 +1605,11 @@ body.home-page
   padding: 0 0.14rem;
   font-size: 0.5rem;
   font-weight: 600;
+  line-height: 1;
   pointer-events: none;
 }
 
-/* Desktop: icon-corner badge (left), same OTA chrome as mobile. */
+/* Desktop — superscript beside “Outfits” (no icon-corner pill). */
 @media (min-width: 901px) {
   .site-header__styling-board-btn {
     align-items: center;
@@ -1643,14 +1625,79 @@ body.home-page
     line-height: 1;
   }
 
-  .site-header__styling-board-btn .site-header__styling-board-count {
-    top: 0.1rem;
-    left: 0.12rem;
+  .site-header__styling-board-label-wrap .site-header__styling-board-count {
+    top: -0.52em;
+    left: 100%;
     right: auto;
+    margin: 0 0 0 0.42em;
+    min-width: 0;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+    outline: none;
+    font-size: 0.58rem;
+    font-weight: 500;
+    -webkit-mask-image: none;
+    mask-image: none;
+    /* Instant with label — no font-weight/opacity transition (avoids hover lag). */
+    transition: none;
+  }
+
+  .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]) .site-header__styling-board-label,
+  .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"])
+    .site-header__styling-board-label-wrap
+    .site-header__styling-board-count {
+    font-weight: 600;
+  }
+
+  /* Transparent header — plain superscript (no ring), matches tool glyph opacity. */
+  .site-header--overlay:not(:hover):not(:focus-within)
+    .site-header__styling-board-btn:not(:hover):not(:focus-visible):not([aria-expanded="true"])
+    .site-header__styling-board-label-wrap
+    .site-header__styling-board-count {
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    opacity: var(--site-header-tool-glyph-opacity, 0.72);
+    box-shadow: none;
+  }
+
+  .site-header--overlay:has(.site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"]))
+    .site-header__styling-board-label-wrap
+    .site-header__styling-board-count {
+    opacity: 1;
+    box-shadow: none;
+  }
+
+  /* Opaque header — green superscript beside label (no mobile pill). */
+  .site-header--solid .site-header__styling-board-label-wrap .site-header__styling-board-count,
+  .site-header--overlay:is(:hover, :focus-within)
+    .site-header__styling-board-label-wrap
+    .site-header__styling-board-count {
+    color: var(--tw-brand-green);
+    -webkit-text-fill-color: currentColor;
+    opacity: 1;
+    background-color: transparent;
+    box-shadow: none;
+    min-width: 0;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border-radius: 0;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }
 
+/* Mobile — icon-corner badge; transparent header = filled disc + knockout numeral. */
 @media (max-width: 900px) {
+  .site-header__styling-board-label-wrap {
+    display: contents;
+  }
+
   .site-header__styling-board-btn {
     gap: 0;
   }
@@ -1659,6 +1706,34 @@ body.home-page
     top: 0.14rem;
     right: 0.12rem;
     left: auto;
+  }
+
+  body.home-page
+    .site-header--overlay:not(:hover):not(:focus-within)
+    .site-header__styling-board-btn:not(:hover):not(:focus-visible):not([aria-expanded="true"])
+    .site-header__styling-board-count {
+    background-color: var(--tw-header-fg);
+    color: #000;
+    -webkit-text-fill-color: #000;
+    opacity: var(--site-header-tool-glyph-opacity, 0.72);
+    box-shadow: none;
+    -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#000 0 0);
+    mask-image: linear-gradient(#fff 0 0), linear-gradient(#000 0 0);
+    -webkit-mask-clip: padding-box, text;
+    mask-clip: padding-box, text;
+    -webkit-mask-origin: padding-box, content-box;
+    mask-origin: padding-box, content-box;
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  body.home-page
+    .site-header--overlay:not(:hover):not(:focus-within):has(
+      .site-header__styling-board-btn:is(:hover, :focus-visible, [aria-expanded="true"])
+    )
+    .site-header__styling-board-btn
+    .site-header__styling-board-count {
+    opacity: 1;
   }
 }
 
@@ -1671,14 +1746,12 @@ body.home-page
   color: var(--ink);
 }
 
-/* Search + Outfits — same pressed/open tool chrome. */
-.site-header__search-btn[aria-expanded="true"],
+/* Outfits — pressed/open tool chrome (search/menu stay icon-only). */
 .site-header__styling-board-btn[aria-expanded="true"],
 .site-header__saved-btn[aria-expanded="true"] {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
-.site-header--overlay .site-header__search-btn[aria-expanded="true"],
 .site-header--overlay .site-header__styling-board-btn[aria-expanded="true"],
 .site-header--overlay .site-header__saved-btn[aria-expanded="true"] {
   background: rgba(255, 255, 255, 0.16);
@@ -1757,8 +1830,12 @@ body.home-page
 }
 
 .site-header__search-btn:hover,
-.site-header__menu-btn:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+.site-header__search-btn:focus-visible,
+.site-header__search-btn[aria-expanded="true"],
+.site-header__menu-btn:hover,
+.site-header__menu-btn:focus-visible,
+.site-header__menu-btn[aria-expanded="true"] {
+  background: transparent;
 }
 
 .site-header__styling-board-btn:hover,
@@ -1769,9 +1846,16 @@ body.home-page
 }
 
 .site-header--overlay .site-header__search-btn:hover,
+.site-header--overlay .site-header__menu-btn:hover,
+.site-header--overlay .site-header__search-btn:focus-visible,
+.site-header--overlay .site-header__menu-btn:focus-visible,
+.site-header--overlay .site-header__search-btn[aria-expanded="true"],
+.site-header--overlay .site-header__menu-btn[aria-expanded="true"] {
+  background: transparent;
+}
+
 .site-header--overlay .site-header__styling-board-btn:hover,
 .site-header--overlay .site-header__saved-btn:hover,
-.site-header--overlay .site-header__search-btn:focus-visible,
 .site-header--overlay .site-header__styling-board-btn:focus-visible,
 .site-header--overlay .site-header__saved-btn:focus-visible {
   background: rgba(255, 255, 255, 0.12);
@@ -1780,8 +1864,13 @@ body.home-page
 .site-header:hover .site-header__search-btn:hover,
 .site-header:hover .site-header__menu-btn:hover,
 .site-header:focus-within .site-header__search-btn:hover,
-.site-header:focus-within .site-header__menu-btn:hover {
-  background: color-mix(in srgb, var(--ink) 7%, var(--bg-elevated));
+.site-header:focus-within .site-header__menu-btn:hover,
+.site-header--overlay:hover .site-header__search-btn:hover,
+.site-header--overlay:hover .site-header__menu-btn:hover,
+.site-header--overlay:focus-within .site-header__search-btn:hover,
+  .site-header--overlay:focus-within .site-header__menu-btn:hover,
+  .site-header--overlay:focus-within .site-header__menu-btn:focus-visible {
+  background: transparent;
 }
 
 .site-header:hover .site-header__styling-board-btn:hover,
@@ -4217,8 +4306,8 @@ body.collection-ui--search-results-plp .items-toolbar__filter-sort-btn {
     --tw-header-fg-muted: var(--ink-muted);
     --tw-header-monogram: var(--tw-brand-monogram-green);
     --tw-header-surface: color-mix(in srgb, var(--tw-brand-ivory) 88%, transparent);
-    --tw-header-badge-bg: var(--tw-header-fg);
-    --tw-header-badge-fg: var(--tw-header-surface);
+    --tw-header-badge-bg: var(--tw-brand-green);
+    --tw-header-badge-fg: var(--tw-brand-ivory);
     --tw-header-badge-opacity: 1;
     background-color: color-mix(in srgb, var(--tw-brand-ivory) 88%, transparent);
     background-image: none;
@@ -4433,9 +4522,12 @@ body.collection-ui--search-results-plp .items-toolbar__filter-sort-btn {
 
   .site-header__division-hover-zone .site-header__nav-link,
   .site-header__season-mini-tab,
-  .site-header__styling-board-label,
-  .site-header__styling-board-count {
+  .site-header__styling-board-label {
     font-size: 11px;
+  }
+
+  .site-header__styling-board-btn .site-header__styling-board-count {
+    font-size: 0.5rem;
   }
 
   .site-header__search-btn,
@@ -10431,6 +10523,7 @@ body.collection-ui--styling-board .site-header__search-megamenu-inner {
   align-items: center;
   justify-content: center;
   margin: 0;
+  margin-inline-end: 0.35rem;
   padding: 0;
   min-height: 0;
   height: auto;
@@ -19564,10 +19657,10 @@ video.ed-lp__hero-layer-video {
   box-sizing: border-box;
   text-align: left;
   pointer-events: none;
-  --hero-body-copy-max: 20rem;
-  --hero-eyebrow-part-gap: 0.9rem;
-  --hero-body-line-gap: 0.08rem;
-  --hero-cta-part-gap: clamp(1.5rem, 3vh, 1.85rem);
+  --hero-body-copy-max: min(19rem, 90%);
+  --hero-eyebrow-part-gap: clamp(0.9rem, 2.8vh, 1.1rem);
+  --hero-body-line-gap: 0.06rem;
+  --hero-cta-part-gap: clamp(0.9rem, 2.8vh, 1.1rem);
 }
 
 .ed-lp__hero-inner .ed-lp__hero-cta,
@@ -19575,14 +19668,14 @@ video.ed-lp__hero-layer-video {
   pointer-events: auto;
 }
 
-/* Desktop hero — Eyebrow | body (2 lines) | CTA — three parts (mobile overrides at 767px). */
+/* Hero copy — shared typography (desktop left-aligned; centered at ≤767px). */
 .ed-lp__hero-eyebrow {
   display: block;
   width: max-content;
   max-width: none;
   margin: 0 0 var(--hero-eyebrow-part-gap);
   font-family: "DM Sans", system-ui, sans-serif;
-  font-size: clamp(0.82rem, 0.66rem + 0.48vw, 1rem);
+  font-size: clamp(0.8rem, 2.85vw, 1.02rem);
   font-weight: 700;
   letter-spacing: 0.42em;
   line-height: 1.12;
@@ -19592,25 +19685,33 @@ video.ed-lp__hero-layer-video {
   opacity: 1;
 }
 
-.ed-lp__hero-title,
-.ed-lp__hero-line {
-  max-width: var(--hero-body-copy-max, 20rem);
+.ed-lp__hero-title {
+  margin: 0 0 var(--hero-body-line-gap);
+  max-width: var(--hero-body-copy-max, min(19rem, 90%));
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(0.92rem, 0.8rem + 0.38vw, 1.06rem);
+  font-size: clamp(0.84rem, 2.55vw, 0.98rem);
   font-style: normal;
   font-weight: 400;
-  line-height: 1.26;
-  letter-spacing: 0.015em;
+  line-height: 1.28;
+  letter-spacing: 0.04em;
   color: #ffffff;
+  text-shadow: none;
   opacity: 1;
 }
 
-.ed-lp__hero-title {
-  margin: 0 0 var(--hero-body-line-gap);
-}
-
 .ed-lp__hero-line {
+  display: block;
   margin: 0 0 var(--hero-cta-part-gap);
+  max-width: var(--hero-body-copy-max, min(19rem, 90%));
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(0.8rem, 2.35vw, 0.94rem);
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0.045em;
+  line-height: 1.26;
+  text-transform: none;
+  color: #ffffff;
+  opacity: 1;
 }
 
 .ed-lp__hero-cta {
@@ -19634,6 +19735,39 @@ video.ed-lp__hero-layer-video {
   white-space: nowrap;
   text-decoration: none;
   box-sizing: border-box;
+}
+
+/* Desktop hero — eyebrow, body copy, CTA all 110% of shared base (mobile ≤767px unchanged). */
+@media (min-width: 768px) {
+  .ed-lp__hero-inner {
+    --hero-body-copy-max: min(20.9rem, 90%);
+    --hero-eyebrow-part-gap: clamp(0.99rem, 3.08vh, 1.21rem);
+    --hero-body-line-gap: 0.066rem;
+    --hero-cta-part-gap: clamp(0.99rem, 3.08vh, 1.21rem);
+  }
+
+  .ed-lp__hero-eyebrow {
+    font-size: clamp(0.88rem, 3.135vw, 1.122rem);
+  }
+
+  .ed-lp__hero-title {
+    font-size: clamp(0.924rem, 2.805vw, 1.078rem);
+  }
+
+  .ed-lp__hero-line {
+    font-size: clamp(0.88rem, 2.585vw, 1.034rem);
+  }
+
+  .ed-lp__hero-cta {
+    gap: 0.44rem;
+    max-width: calc(var(--hero-body-copy-max, 20.9rem) - 0.385rem);
+  }
+
+  .ed-lp__hero-cta .ed-lp__btn {
+    min-height: 35.2px;
+    padding-inline: 0.605rem;
+    font-size: 9.9px;
+  }
 }
 
 /* Hero-adjacent S/S · A/W duo — full-bleed lifestyle stills (Ralph Lauren–style split). */
@@ -20880,54 +21014,19 @@ body.home-page #main.ed-lp .ed-lp__band--season {
     text-align: center;
   }
 
-  .ed-lp__hero-inner {
-    --hero-body-copy-max: min(19rem, 90%);
-    --hero-eyebrow-part-gap: clamp(0.9rem, 2.8vh, 1.1rem);
-    --hero-body-line-gap: 0.06rem;
-    --hero-cta-part-gap: clamp(1.2rem, 3.15vh, 1.5rem);
-  }
-
   .ed-lp__hero-eyebrow {
-    display: block;
-    width: max-content;
-    max-width: none;
-    margin: 0 auto var(--hero-eyebrow-part-gap);
-    white-space: nowrap;
-    font-family: "DM Sans", system-ui, sans-serif;
-    font-size: clamp(0.8rem, 2.85vw, 1.02rem);
-    font-weight: 700;
-    letter-spacing: 0.42em;
-    line-height: 1.12;
-    text-transform: uppercase;
-    color: #ffffff;
-    opacity: 1;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .ed-lp__hero-title {
-    margin: 0 auto var(--hero-body-line-gap);
-    max-width: var(--hero-body-copy-max, min(19rem, 90%));
-    font-family: "Cormorant Garamond", Georgia, serif;
-    font-size: clamp(0.84rem, 2.55vw, 0.98rem);
-    font-weight: 400;
-    line-height: 1.28;
-    letter-spacing: 0.04em;
-    color: #ffffff;
-    text-shadow: none;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .ed-lp__hero-line {
-    display: block;
-    margin: 0 auto var(--hero-cta-part-gap);
-    max-width: var(--hero-body-copy-max, min(19rem, 90%));
-    font-family: "Cormorant Garamond", Georgia, serif;
-    font-size: clamp(0.8rem, 2.35vw, 0.94rem);
-    font-style: normal;
-    font-weight: 400;
-    letter-spacing: 0.045em;
-    line-height: 1.26;
-    text-transform: none;
-    color: #ffffff;
-    opacity: 1;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .ed-lp__hero-cta {
@@ -21241,11 +21340,14 @@ body.collection-view--compact.collection-page #grid.grid--compact > .card.card--
   box-shadow: none;
 }
 
-/* Quick-find gallery: track owns plates (same as standard grid swipe). */
+/* Quick-find gallery: keep cutout plate visible under stacked frames (no page-white flash). */
 body.collection-view--compact.collection-page #grid.grid--compact > .card.card--quick-find .card__media--gallery-swipe,
 body.collection-view--compact.collection-page #grid.grid--compact > .card.card--quick-find .card__media--has-desktop-gallery {
-  background-color: transparent;
-  background-image: none;
+  background-color: var(--media-cutout-canvas);
+  background-image: var(--collection-grid-media-bg);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
 }
 
 body.collection-view--compact.collection-page
@@ -21559,6 +21661,17 @@ body.collection-view--compact.collection-page #grid.grid--compact > .card.card--
   body.collection-view--compact.collection-page
     #grid.grid--compact
     > .card.card--quick-find
+    .card__gallery-desktop-stage--compact-stack {
+    background-color: var(--media-cutout-canvas);
+    background-image: var(--collection-grid-media-bg);
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+  }
+
+  body.collection-view--compact.collection-page
+    #grid.grid--compact
+    > .card.card--quick-find
     .card__gallery-desktop-stage--compact-stack
     .card__gallery-desktop-slide {
     position: absolute;
@@ -21569,8 +21682,7 @@ body.collection-view--compact.collection-page #grid.grid--compact > .card.card--
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: opacity var(--tw-card-gallery-frame-duration, 0.28s)
-      var(--tw-card-gallery-frame-ease, cubic-bezier(0.44, 0, 0.22, 1));
+    transition: none;
   }
 
   body.collection-view--compact.collection-page
@@ -21630,8 +21742,7 @@ body.collection-view--compact.collection-page
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity var(--tw-card-gallery-frame-duration, 0.28s)
-    var(--tw-card-gallery-frame-ease, cubic-bezier(0.44, 0, 0.22, 1));
+  transition: none;
 }
 
 body.collection-view--compact.collection-page
@@ -21719,8 +21830,11 @@ body.collection-view--compact.collection-page
     #grid.grid--compact
     > .card.card--quick-find
     .card__media--has-desktop-gallery {
-    background-color: transparent !important;
-    background-image: none !important;
+    background-color: var(--media-cutout-canvas) !important;
+    background-image: var(--collection-grid-media-bg) !important;
+    background-size: cover !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
   }
 
   body.collection-view--compact.collection-page #grid.grid--compact > .card.card--quick-find .card__media-img {
