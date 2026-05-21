@@ -69,9 +69,8 @@
         ></div>
       </div>
       <div class="ed-lp__hero-inner">
-        <p class="ed-lp__hero-eyebrow">PERMANENT COLLECTION</p>
-        <h1 id="ed-lp-hero-heading" class="ed-lp__hero-title">Timeless Wardrobe</h1>
-        <p class="ed-lp__hero-sub">A Personal Archive of Classic Menswear</p>
+        <h1 id="ed-lp-hero-heading" class="ed-lp__hero-eyebrow">Permanent Collection</h1>
+        <p class="ed-lp__hero-title">A Personal Archive of Classic Menswear</p>
         <p class="ed-lp__hero-line">English Heritage × Mediterranean Leisure</p>
         <div class="ed-lp__hero-cta">
           <a class="ed-lp__btn ed-lp__btn--solid" href="/collection">Browse now</a>
@@ -166,8 +165,10 @@
                 />
               </svg>
             </span>
-            <span class="site-header__styling-board-label">Outfits</span>
-            <span id="styling-board-count" class="site-header__styling-board-count" hidden></span>
+            <span class="site-header__styling-board-label-wrap">
+              <span class="site-header__styling-board-label">Outfits</span>
+              <span id="styling-board-count" class="site-header__styling-board-count" hidden></span>
+            </span>
           </button>
           <button
             type="button"
@@ -420,6 +421,17 @@
               role="list"
               aria-label="Pieces from each division"
             ></div>
+          </div>
+          <div
+            class="ed-lp__division-rail-progress ed-lp__rail-progress"
+            role="slider"
+            aria-label="Browse by category scroll position"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            hidden
+          >
+            <span class="ed-lp__division-rail-progress-bar ed-lp__rail-progress-bar" aria-hidden="true"></span>
           </div>
         </div>
       </section>
