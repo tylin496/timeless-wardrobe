@@ -38,7 +38,7 @@ begin
         and column_name = old_overrides
     ) then
       execute format(
-        'update public.wardrobe_app_state set collection_overrides = coalesce(collection_overrides, %I, ''{}''::jsonb)',
+        'update public.wardrobe_app_state set collection_overrides = case when collection_overrides is null or collection_overrides = ''{}''::jsonb then coalesce(%I, ''{}''::jsonb) else collection_overrides end',
         old_overrides
       );
     end if;
@@ -70,7 +70,7 @@ begin
         and column_name = old_hidden
     ) then
       execute format(
-        'update public.wardrobe_app_state set collection_hidden_ids = coalesce(collection_hidden_ids, %I, ''[]''::jsonb)',
+        'update public.wardrobe_app_state set collection_hidden_ids = case when collection_hidden_ids is null or collection_hidden_ids = ''[]''::jsonb then coalesce(%I, ''[]''::jsonb) else collection_hidden_ids end',
         old_hidden
       );
     end if;
