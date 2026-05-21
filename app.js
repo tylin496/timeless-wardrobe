@@ -19710,7 +19710,8 @@
       const flatlay = document.createElement("div");
       flatlay.className = "saved-card__flatlay";
       flatlay.setAttribute("aria-hidden", "true");
-      for (const pieceSlot of slots.slice(0, 5)) {
+      const previewSlots = slots.filter((s) => itemById.has(s.itemId)).slice(0, 6);
+      for (const pieceSlot of previewSlots) {
         const piece = itemById.get(pieceSlot.itemId);
         if (!piece) continue;
         const proj = itemProjectionForOutfitSlot(piece, pieceSlot);
@@ -19722,6 +19723,9 @@
         pieceWrap.appendChild(im);
         wireCoverImageWithFallbacks(im, proj, { missingClass: null });
         flatlay.appendChild(pieceWrap);
+      }
+      if (previewSlots.length) {
+        flatlay.setAttribute("data-piece-count", String(previewSlots.length));
       }
 
       const footer = document.createElement("div");
