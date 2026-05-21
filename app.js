@@ -16589,8 +16589,8 @@
   }
 
   /**
-   * Remove a wardrobe piece via Supabase only: unlink outfit refs, delete referenced Storage objects, DELETE
-   * the `wardrobe_items` row. If Supabase is not ready, refuses (no offline delete).
+   * Remove a wardrobe piece via Supabase only: persist hidden-id guard, unlink outfit refs, DELETE
+   * the `wardrobe_items` row, then delete referenced Storage objects. If Supabase is not ready, refuses (no offline delete).
    * The id is always saved to `collection_hidden_ids` so `syncMissingRowsToSupabase` never re-upserts seed/file rows with the same id
    * (critical when the catalogue comes only from Supabase). With seed-merge catalogue, hidden ids still suppress resurgence after reload.
    */
@@ -16609,24 +16609,35 @@
 
     const prevCloud = cloudBackedCustomItems.slice();
     cloudBackedCustomItems = cloudBackedCustomItems.filter((x) => String(x.id) !== sid);
+    const prevHidden = loadCollectionHiddenIds();
+    let hiddenPersisted = false;
+    let rowDeleted = false;
 
     try {
       const item = itemById.get(sid) || items.find((x) => String(x?.id ?? "") === String(sid));
+      const hidden = new Set(prevHidden);
+      hidden.add(sid);
+      await saveCollectionHiddenIds(hidden);
+      hiddenPersisted = true;
 
       try {
         await unlinkCloudOutfitsReferencingWardrobeItem(sid);
       } catch (e1) {
         cloudBackedCustomItems = prevCloud;
+        await saveCollectionHiddenIds(prevHidden).catch((rollbackErr) => {
+          console.warn("hidden id rollback after unlink failure:", rollbackErr);
+        });
         toastCloudDeleteFailure("unlink", e1);
         return;
       }
+      const { error } = await supabaseClient.from(WARDROBE_TABLE).delete().eq("id", sid);
+      if (error) throw error;
+      rowDeleted = true;
       try {
         await deleteWardrobeItemImagesFromCloud(item);
       } catch (eImg) {
-        console.warn("Image cleanup before delete (continuing):", eImg);
+        console.warn("Image cleanup after delete (continuing):", eImg);
       }
-      const { error } = await supabaseClient.from(WARDROBE_TABLE).delete().eq("id", sid);
-      if (error) throw error;
 
       wardrobeBase = wardrobeBase.filter((row) => String(row?.id ?? "") !== sid);
 
@@ -16645,11 +16656,16 @@
         console.warn(e);
       }
 
-      const hidden = loadCollectionHiddenIds();
-      hidden.add(sid);
-      await saveCollectionHiddenIds(hidden);
     } catch (e) {
       cloudBackedCustomItems = prevCloud;
+      if (!rowDeleted) {
+        const restoreHidden = hiddenPersisted || loadCollectionHiddenIds().has(sid);
+        if (restoreHidden) {
+          await saveCollectionHiddenIds(prevHidden).catch((rollbackErr) => {
+            console.warn("hidden id rollback after delete failure:", rollbackErr);
+          });
+        }
+      }
       try {
         if (useCloudOutfits && isSupabaseReady()) {
           const api = await import("./js/supabase-client.js");

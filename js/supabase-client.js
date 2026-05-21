@@ -308,11 +308,86 @@ export async function deleteOutfitById(client, id) {
 }
 
 /**
+ * @param {import('@supabase/supabase-js').SupabaseClient} client
+ * @param {string} id
+ */
+async function snapshotOutfitForRestore(client, id) {
+  let hasNotes = true;
+  let row;
+  let error;
+  ({ data: row, error } = await client
+    .from("outfits")
+    .select("id, name, notes, outfit_items(item_id, sort_order, colour_key)")
+    .eq("id", id)
+    .maybeSingle());
+  if (error && /notes|column/i.test(String(error.message ?? ""))) {
+    hasNotes = false;
+    ({ data: row, error } = await client
+      .from("outfits")
+      .select("id, name, created_at, outfit_items(item_id, sort_order, colour_key)")
+      .eq("id", id)
+      .maybeSingle());
+  }
+  if (error) return { ok: false, error: error.message };
+  if (!row) return { ok: false, error: "Cloud outfit row not found for update." };
+  const itemRows = (Array.isArray(row.outfit_items) ? row.outfit_items : [])
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((link, sort_order) => ({
+      outfit_id: id,
+      item_id: String(link.item_id ?? "").trim(),
+      sort_order,
+      colour_key: String(link.colour_key ?? "").trim() || null,
+    }))
+    .filter((link) => link.item_id);
+  return {
+    ok: true,
+    snapshot: {
+      name: String(row.name ?? ""),
+      notes: hasNotes ? String(row.notes ?? "").trim() || null : null,
+      hasNotes,
+      itemRows,
+    },
+  };
+}
+
+/**
+ * Best-effort compensation for multi-request outfit updates. Supabase REST has no transaction
+ * here, so restore the prior row/items if a later step fails after line-item deletion.
+ * @param {import('@supabase/supabase-js').SupabaseClient} client
+ * @param {string} id
+ * @param {{ name: string, notes: string | null, hasNotes: boolean, itemRows: { outfit_id: string, item_id: string, sort_order: number, colour_key: string | null }[] }} snapshot
+ */
+async function restoreOutfitSnapshot(client, id, snapshot) {
+  const patch = snapshot.hasNotes ? { name: snapshot.name, notes: snapshot.notes } : { name: snapshot.name };
+  const { error: eUp } = await client.from("outfits").update(patch).eq("id", id);
+  if (eUp) return eUp.message;
+  const { error: eDel } = await client.from("outfit_items").delete().eq("outfit_id", id);
+  if (eDel) return eDel.message;
+  if (snapshot.itemRows.length) {
+    const { error: eIns } = await client.from("outfit_items").insert(snapshot.itemRows);
+    if (eIns) return eIns.message;
+  }
+  return "";
+}
+
+/**
  * Replace name and line items for an existing outfit (local id must match cloud row).
  * @param {import('@supabase/supabase-js').SupabaseClient} client
- * @param {{ id: string, name: string, slots: { itemId: string, colourKey?: string; colorKey?: string }[] }} record
+ * @param {{ id: string, name: string, notes?: string, slots: { itemId: string, colourKey?: string; colorKey?: string }[] }} record
  */
 export async function updateOutfitWithItems(client, record) {
+  const before = await snapshotOutfitForRestore(client, record.id);
+  if (!before.ok) return { ok: false, error: before.error };
+  const snapshot = before.snapshot;
+  const failAndRestore = async (message) => {
+    const restoreError = await restoreOutfitSnapshot(client, record.id, snapshot);
+    return {
+      ok: false,
+      error: restoreError ? `${message} Rolled back failed; outfit may need manual repair: ${restoreError}` : message,
+    };
+  };
+
   const { error: eDel } = await client.from("outfit_items").delete().eq("outfit_id", record.id);
   if (eDel) return { ok: false, error: eDel.message };
 
@@ -325,7 +400,7 @@ export async function updateOutfitWithItems(client, record) {
   if (eUp && /notes|column/i.test(String(eUp.message ?? ""))) {
     ({ error: eUp } = await client.from("outfits").update({ name: record.name }).eq("id", record.id));
   }
-  if (eUp) return { ok: false, error: eUp.message };
+  if (eUp) return failAndRestore(eUp.message);
 
   const slots = (Array.isArray(record.slots) ? record.slots : [])
     .map((s) => {
@@ -346,7 +421,7 @@ export async function updateOutfitWithItems(client, record) {
   });
   if (rows.length) {
     const { error: eIns } = await client.from("outfit_items").insert(rows);
-    if (eIns) return { ok: false, error: eIns.message };
+    if (eIns) return failAndRestore(eIns.message);
   }
 
   // Guard against silent RLS no-op writes: verify the persisted row matches this update.
@@ -366,8 +441,8 @@ export async function updateOutfitWithItems(client, record) {
       .eq("id", record.id)
       .maybeSingle());
   }
-  if (verifyErr) return { ok: false, error: verifyErr.message };
-  if (!verifyRow) return { ok: false, error: "Cloud update did not persist (outfit row not returned)." };
+  if (verifyErr) return failAndRestore(verifyErr.message);
+  if (!verifyRow) return failAndRestore("Cloud update did not persist (outfit row not returned).");
 
   const verifySlots = Array.isArray(verifyRow.outfit_items) ? verifyRow.outfit_items : [];
   verifySlots.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
@@ -376,19 +451,13 @@ export async function updateOutfitWithItems(client, record) {
     .map((s) => `${String(s.item_id ?? "").trim()}::${String(s.colour_key ?? "").trim()}`)
     .join("|");
   if (expectedSig !== actualSig) {
-    return {
-      ok: false,
-      error: "Cloud update did not persist line-item edits (possible RLS or stale write).",
-    };
+    return failAndRestore("Cloud update did not persist line-item edits (possible RLS or stale write).");
   }
 
   const nameMatches = String(verifyRow.name ?? "") === String(record.name ?? "");
   const notesMatches = !verifyHasNotes || String(verifyRow.notes ?? "").trim() === String(record.notes ?? "").trim();
   if (!nameMatches || !notesMatches) {
-    return {
-      ok: false,
-      error: "Cloud update did not persist outfit name/notes (possible RLS or stale write).",
-    };
+    return failAndRestore("Cloud update did not persist outfit name/notes (possible RLS or stale write).");
   }
   return { ok: true };
 }
