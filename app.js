@@ -7636,7 +7636,7 @@
   }
 
   const HEADER_RECENT_SEARCHES_STORAGE_KEY = "timeless-wardrobe-header-recent-searches-v1";
-  const HEADER_RECENT_SEARCHES_MAX = 8;
+  const HEADER_RECENT_SEARCHES_MAX = 4;
 
   function readHeaderRecentSearches() {
     try {
