@@ -10208,7 +10208,12 @@ body.tw-outfit-drag-active * {
 }
 
 .styling-board-drawer .saved-card__footer {
-  gap: 0.2rem;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
 }
 
 .styling-board-drawer .saved-card__piece {
@@ -10296,7 +10301,6 @@ body.tw-outfit-drag-active * {
   }
 }
 
-.styling-board-drawer .saved-card__footer,
 .styling-board-drawer .saved-card__body {
   display: flex;
   flex-direction: column;
@@ -10306,6 +10310,10 @@ body.tw-outfit-drag-active * {
 
 .styling-board-drawer .saved-card__meta {
   margin: 0;
+  margin-left: auto;
+  flex: 0 1 auto;
+  text-align: right;
+  white-space: nowrap;
   font-size: 0.64rem;
   font-weight: 400;
   line-height: 1.35;
@@ -10317,8 +10325,10 @@ body.tw-outfit-drag-active * {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-start;
   gap: 0;
   margin: 0;
+  flex: 0 1 auto;
 }
 
 .styling-board-drawer .saved-card__ctrl {

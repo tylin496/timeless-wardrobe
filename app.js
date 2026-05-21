@@ -19752,7 +19752,7 @@
       delBtn.textContent = "Delete";
       delBtn.dataset.outfitDelete = outfit.id;
       act.append(viewBtn, editBtn, delBtn);
-      footer.append(meta, act);
+      footer.append(act, meta);
       card.append(title, flatlay, footer);
       li.appendChild(card);
       els.savedList.appendChild(li);
